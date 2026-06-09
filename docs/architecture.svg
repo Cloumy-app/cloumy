@@ -1,0 +1,300 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3z" fill="#94A3B8"/>
+    </marker>
+    <marker id="arr-p" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3z" fill="#8B5CF6"/>
+    </marker>
+    <filter id="sh" x="-2%" y="-4%" width="104%" height="112%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.07"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="800" fill="#F1F5F9"/>
+
+  <!-- ── TITLE ── -->
+  <rect width="1200" height="50" fill="#0F172A"/>
+  <text x="600" y="32" font-size="17" font-weight="700" fill="#F8FAFC" text-anchor="middle" letter-spacing="0.5">☁️  Cloumy — 시스템 아키텍처  (MVP · Phase 1)</text>
+
+  <!-- ════════════════════════════════════════ -->
+  <!--  1. CLIENT                               -->
+  <!-- ════════════════════════════════════════ -->
+  <rect x="16" y="58" width="1168" height="84" rx="10" fill="#EFF6FF" stroke="#3B82F6" stroke-width="1.5" filter="url(#sh)"/>
+  <rect x="28" y="67" width="70" height="20" rx="4" fill="#3B82F6"/>
+  <text x="63" y="81" font-size="9" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">CLIENT</text>
+
+  <!-- main box -->
+  <rect x="112" y="65" width="162" height="66" rx="8" fill="#fff" stroke="#BFDBFE" stroke-width="1.2"/>
+  <text x="193" y="85" font-size="12" font-weight="700" fill="#1D4ED8" text-anchor="middle">📱 React Native</text>
+  <text x="193" y="102" font-size="9.5" fill="#64748B" text-anchor="middle">Expo · TypeScript</text>
+  <text x="193" y="118" font-size="9.5" fill="#64748B" text-anchor="middle">iOS / Android</text>
+
+  <!-- chips row 1 -->
+  <rect x="290" y="72" width="128" height="22" rx="5" fill="#DBEAFE"/>
+  <text x="354" y="87" font-size="10" fill="#1E40AF" text-anchor="middle">react-native-maps</text>
+  <rect x="428" y="72" width="118" height="22" rx="5" fill="#DBEAFE"/>
+  <text x="487" y="87" font-size="10" fill="#1E40AF" text-anchor="middle">Socket.IO Client</text>
+  <rect x="556" y="72" width="120" height="22" rx="5" fill="#DBEAFE"/>
+  <text x="616" y="87" font-size="10" fill="#1E40AF" text-anchor="middle">Toss WebView</text>
+  <rect x="686" y="72" width="128" height="22" rx="5" fill="#DBEAFE"/>
+  <text x="750" y="87" font-size="10" fill="#1E40AF" text-anchor="middle">Google Maps SDK</text>
+
+  <!-- chips row 2 -->
+  <rect x="290" y="104" width="108" height="22" rx="5" fill="#DBEAFE"/>
+  <text x="344" y="119" font-size="10" fill="#1E40AF" text-anchor="middle">Expo Router</text>
+  <rect x="408" y="104" width="108" height="22" rx="5" fill="#DBEAFE"/>
+  <text x="462" y="119" font-size="10" fill="#1E40AF" text-anchor="middle">Zustand</text>
+  <rect x="526" y="104" width="118" height="22" rx="5" fill="#DBEAFE"/>
+  <text x="585" y="119" font-size="10" fill="#1E40AF" text-anchor="middle">TanStack Query</text>
+  <rect x="654" y="104" width="128" height="22" rx="5" fill="#DBEAFE"/>
+  <text x="718" y="119" font-size="10" fill="#1E40AF" text-anchor="middle">React Hook Form</text>
+
+  <!-- ── ARROW 1 ── -->
+  <line x1="600" y1="142" x2="600" y2="162" stroke="#94A3B8" stroke-width="2" marker-end="url(#arr)"/>
+  <rect x="486" y="146" width="228" height="14" rx="7" fill="#E2E8F0"/>
+  <text x="600" y="157" font-size="9.5" fill="#475569" text-anchor="middle">HTTPS REST · WebSocket</text>
+
+  <!-- ════════════════════════════════════════ -->
+  <!--  2. GATEWAY                              -->
+  <!-- ════════════════════════════════════════ -->
+  <rect x="16" y="165" width="1168" height="60" rx="10" fill="#F8FAFC" stroke="#94A3B8" stroke-width="1.5" filter="url(#sh)"/>
+  <rect x="28" y="174" width="76" height="20" rx="4" fill="#64748B"/>
+  <text x="66" y="188" font-size="9" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">GATEWAY</text>
+
+  <rect x="118" y="172" width="108" height="46" rx="7" fill="#fff" stroke="#CBD5E1" stroke-width="1.2"/>
+  <text x="172" y="192" font-size="12" font-weight="700" fill="#334155" text-anchor="middle">🔀 Nginx</text>
+  <text x="172" y="208" font-size="9.5" fill="#64748B" text-anchor="middle">API Gateway</text>
+
+  <rect x="240" y="182" width="105" height="22" rx="5" fill="#F1F5F9"/>
+  <text x="292" y="197" font-size="10" fill="#475569" text-anchor="middle">리버스 프록시</text>
+  <rect x="355" y="182" width="85" height="22" rx="5" fill="#F1F5F9"/>
+  <text x="397" y="197" font-size="10" fill="#475569" text-anchor="middle">SSL 종단</text>
+  <rect x="450" y="182" width="105" height="22" rx="5" fill="#F1F5F9"/>
+  <text x="502" y="197" font-size="10" fill="#475569" text-anchor="middle">로드밸런싱</text>
+  <rect x="565" y="182" width="95" height="22" rx="5" fill="#F1F5F9"/>
+  <text x="612" y="197" font-size="10" fill="#475569" text-anchor="middle">Rate Limiting</text>
+
+  <!-- ── ARROW 2 ── -->
+  <line x1="330" y1="225" x2="330" y2="244" stroke="#94A3B8" stroke-width="1.8" marker-end="url(#arr)"/>
+  <text x="345" y="240" font-size="9" fill="#94A3B8">REST</text>
+  <line x1="870" y1="225" x2="870" y2="244" stroke="#94A3B8" stroke-width="1.8" marker-end="url(#arr)"/>
+  <text x="885" y="240" font-size="9" fill="#94A3B8">WebSocket</text>
+
+  <!-- ════════════════════════════════════════ -->
+  <!--  3a. BACKEND                             -->
+  <!-- ════════════════════════════════════════ -->
+  <rect x="16" y="248" width="554" height="196" rx="10" fill="#F0FDF4" stroke="#22C55E" stroke-width="1.5" filter="url(#sh)"/>
+  <rect x="28" y="258" width="76" height="20" rx="4" fill="#16A34A"/>
+  <text x="66" y="272" font-size="9" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">BACKEND</text>
+
+  <rect x="118" y="256" width="168" height="40" rx="8" fill="#fff" stroke="#BBF7D0" stroke-width="1.2"/>
+  <text x="202" y="273" font-size="12" font-weight="700" fill="#15803D" text-anchor="middle">⚙️ Spring Boot 3.x</text>
+  <text x="202" y="288" font-size="9.5" fill="#64748B" text-anchor="middle">Java 21 · Gradle</text>
+
+  <!-- modules row 1 -->
+  <rect x="28" y="306" width="114" height="56" rx="7" fill="#fff" stroke="#BBF7D0" stroke-width="1.2"/>
+  <text x="85" y="326" font-size="11" font-weight="600" fill="#15803D" text-anchor="middle">🔐 Auth</text>
+  <text x="85" y="342" font-size="9.5" fill="#64748B" text-anchor="middle">JWT · OAuth 2.0</text>
+  <text x="85" y="356" font-size="8.5" fill="#94A3B8" text-anchor="middle">카카오·구글·애플</text>
+
+  <rect x="154" y="306" width="114" height="56" rx="7" fill="#fff" stroke="#BBF7D0" stroke-width="1.2"/>
+  <text x="211" y="326" font-size="11" font-weight="600" fill="#15803D" text-anchor="middle">🗺️ Trip</text>
+  <text x="211" y="342" font-size="9.5" fill="#64748B" text-anchor="middle">루트 · 일정 CRUD</text>
+  <text x="211" y="356" font-size="8.5" fill="#94A3B8" text-anchor="middle">PassValidation</text>
+
+  <rect x="280" y="306" width="114" height="56" rx="7" fill="#fff" stroke="#BBF7D0" stroke-width="1.2"/>
+  <text x="337" y="326" font-size="11" font-weight="600" fill="#15803D" text-anchor="middle">🔮 Community</text>
+  <text x="337" y="342" font-size="9.5" fill="#64748B" text-anchor="middle">Hidden Gems</text>
+  <text x="337" y="356" font-size="8.5" fill="#94A3B8" text-anchor="middle">GPS 인증 · 태그</text>
+
+  <rect x="406" y="306" width="114" height="56" rx="7" fill="#fff" stroke="#BBF7D0" stroke-width="1.2"/>
+  <text x="463" y="326" font-size="11" font-weight="600" fill="#15803D" text-anchor="middle">💳 Payment</text>
+  <text x="463" y="342" font-size="9.5" fill="#64748B" text-anchor="middle">토스페이먼츠</text>
+  <text x="463" y="356" font-size="8.5" fill="#94A3B8" text-anchor="middle">트립 패스</text>
+
+  <!-- modules row 2 -->
+  <rect x="28" y="372" width="114" height="56" rx="7" fill="#fff" stroke="#BBF7D0" stroke-width="1.2"/>
+  <text x="85" y="392" font-size="11" font-weight="600" fill="#15803D" text-anchor="middle">💰 Budget</text>
+  <text x="85" y="408" font-size="9.5" fill="#64748B" text-anchor="middle">예산 · 지출</text>
+  <text x="85" y="422" font-size="8.5" fill="#94A3B8" text-anchor="middle">자연어 파싱</text>
+
+  <rect x="154" y="372" width="250" height="56" rx="7" fill="#DCFCE7" stroke="#BBF7D0" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="279" y="393" font-size="9.5" fill="#166534" text-anchor="middle" font-weight="600">JPA + QueryDSL · Flyway</text>
+  <text x="279" y="409" font-size="9" fill="#4ADE80" text-anchor="middle">Spring Security · Redis Cache</text>
+  <text x="279" y="422" font-size="8.5" fill="#94A3B8" text-anchor="middle">GlobalExceptionHandler · @Async</text>
+
+  <!-- ── Internal HTTP Arrow ── -->
+  <line x1="570" y1="346" x2="630" y2="346" stroke="#8B5CF6" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arr-p)"/>
+  <rect x="556" y="332" width="88" height="13" rx="3" fill="#EDE9FE"/>
+  <text x="600" y="342" font-size="8.5" fill="#7C3AED" text-anchor="middle">X-Internal-Key</text>
+  <text x="600" y="358" font-size="8" fill="#8B5CF6" text-anchor="middle">HTTP (내부)</text>
+
+  <!-- ════════════════════════════════════════ -->
+  <!--  3b. AI SERVICE                          -->
+  <!-- ════════════════════════════════════════ -->
+  <rect x="630" y="248" width="554" height="196" rx="10" fill="#FFFBEB" stroke="#F59E0B" stroke-width="1.5" filter="url(#sh)"/>
+  <rect x="642" y="258" width="84" height="20" rx="4" fill="#D97706"/>
+  <text x="684" y="272" font-size="9" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">AI SERVICE</text>
+
+  <rect x="740" y="256" width="160" height="40" rx="8" fill="#fff" stroke="#FDE68A" stroke-width="1.2"/>
+  <text x="820" y="273" font-size="12" font-weight="700" fill="#B45309" text-anchor="middle">🤖 FastAPI</text>
+  <text x="820" y="288" font-size="9.5" fill="#64748B" text-anchor="middle">Python 3.11 · LangChain</text>
+
+  <!-- AI modules row 1 -->
+  <rect x="642" y="306" width="120" height="56" rx="7" fill="#fff" stroke="#FDE68A" stroke-width="1.2"/>
+  <text x="702" y="326" font-size="11" font-weight="600" fill="#B45309" text-anchor="middle">📚 RAG</text>
+  <text x="702" y="342" font-size="9.5" fill="#64748B" text-anchor="middle">pgvector 검색</text>
+  <text x="702" y="356" font-size="8.5" fill="#94A3B8" text-anchor="middle">PostGIS 반경검색</text>
+
+  <rect x="774" y="306" width="120" height="56" rx="7" fill="#fff" stroke="#FDE68A" stroke-width="1.2"/>
+  <text x="834" y="326" font-size="11" font-weight="600" fill="#B45309" text-anchor="middle">🗾 OR-Tools</text>
+  <text x="834" y="342" font-size="9.5" fill="#64748B" text-anchor="middle">TSP 동선최적화</text>
+  <text x="834" y="356" font-size="8.5" fill="#94A3B8" text-anchor="middle">앵커 고정</text>
+
+  <rect x="906" y="306" width="120" height="56" rx="7" fill="#fff" stroke="#FDE68A" stroke-width="1.2"/>
+  <text x="966" y="326" font-size="11" font-weight="600" fill="#B45309" text-anchor="middle">💬 LangChain</text>
+  <text x="966" y="342" font-size="9.5" fill="#64748B" text-anchor="middle">멀티턴 챗봇</text>
+  <text x="966" y="356" font-size="8.5" fill="#94A3B8" text-anchor="middle">Function Calling</text>
+
+  <rect x="1038" y="306" width="130" height="56" rx="7" fill="#fff" stroke="#FDE68A" stroke-width="1.2"/>
+  <text x="1103" y="326" font-size="11" font-weight="600" fill="#B45309" text-anchor="middle">🔢 Embedding</text>
+  <text x="1103" y="342" font-size="9.5" fill="#64748B" text-anchor="middle">text-embed-3-small</text>
+  <text x="1103" y="356" font-size="8.5" fill="#94A3B8" text-anchor="middle">OpenAI API</text>
+
+  <!-- AI row 2 -->
+  <rect x="642" y="372" width="252" height="56" rx="7" fill="#FEF3C7" stroke="#FDE68A" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="768" y="393" font-size="10" fill="#92400E" text-anchor="middle" font-weight="600">Claude API 모델 라우팅</text>
+  <text x="768" y="409" font-size="9" fill="#B45309" text-anchor="middle">Sonnet 4.6 (복잡 추론)</text>
+  <text x="768" y="422" font-size="8.5" fill="#94A3B8" text-anchor="middle">Haiku 4.5 (단순 · 비용↓)</text>
+
+  <rect x="906" y="372" width="252" height="56" rx="7" fill="#FEF3C7" stroke="#FDE68A" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="1032" y="393" font-size="10" fill="#92400E" text-anchor="middle" font-weight="600">스트리밍 · 캐싱</text>
+  <text x="1032" y="409" font-size="9" fill="#B45309" text-anchor="middle">WebSocket 스트리밍</text>
+  <text x="1032" y="422" font-size="8.5" fill="#94A3B8" text-anchor="middle">Redis 루트 캐시 TTL 24h</text>
+
+  <!-- ── ARROW 3 ── -->
+  <line x1="600" y1="444" x2="600" y2="462" stroke="#94A3B8" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- ════════════════════════════════════════ -->
+  <!--  4. DATA LAYER                           -->
+  <!-- ════════════════════════════════════════ -->
+  <rect x="16" y="466" width="1168" height="98" rx="10" fill="#FAF5FF" stroke="#A855F7" stroke-width="1.5" filter="url(#sh)"/>
+  <rect x="28" y="476" width="58" height="20" rx="4" fill="#9333EA"/>
+  <text x="57" y="490" font-size="9" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">DATA</text>
+
+  <rect x="106" y="474" width="210" height="78" rx="8" fill="#fff" stroke="#E9D5FF" stroke-width="1.2"/>
+  <text x="211" y="497" font-size="12" font-weight="700" fill="#7E22CE" text-anchor="middle">🐘 PostgreSQL</text>
+  <text x="211" y="513" font-size="9.5" fill="#64748B" text-anchor="middle">PostGIS · 지리 데이터</text>
+  <text x="211" y="528" font-size="9.5" fill="#64748B" text-anchor="middle">pgvector · 벡터 검색</text>
+  <text x="211" y="543" font-size="8.5" fill="#94A3B8" text-anchor="middle">Flyway 마이그레이션</text>
+
+  <rect x="328" y="474" width="182" height="78" rx="8" fill="#fff" stroke="#E9D5FF" stroke-width="1.2"/>
+  <text x="419" y="497" font-size="12" font-weight="700" fill="#7E22CE" text-anchor="middle">⚡ Redis</text>
+  <text x="419" y="513" font-size="9.5" fill="#64748B" text-anchor="middle">챗봇 세션 · 루트 캐시</text>
+  <text x="419" y="528" font-size="9.5" fill="#64748B" text-anchor="middle">JWT 블랙리스트</text>
+  <text x="419" y="543" font-size="8.5" fill="#94A3B8" text-anchor="middle">TTL 24h</text>
+
+  <rect x="522" y="474" width="158" height="78" rx="8" fill="#fff" stroke="#E9D5FF" stroke-width="1.2"/>
+  <text x="601" y="497" font-size="12" font-weight="700" fill="#7E22CE" text-anchor="middle">☁️ AWS S3</text>
+  <text x="601" y="513" font-size="9.5" fill="#64748B" text-anchor="middle">Hidden Gems 사진</text>
+  <text x="601" y="528" font-size="9.5" fill="#64748B" text-anchor="middle">사용자 이미지</text>
+
+  <rect x="692" y="474" width="192" height="78" rx="8" fill="#FAFAFA" stroke="#E9D5FF" stroke-width="1" stroke-dasharray="5,3"/>
+  <text x="788" y="495" font-size="11" font-weight="600" fill="#C4B5FD" text-anchor="middle">🔍 Elasticsearch</text>
+  <text x="788" y="511" font-size="9" fill="#94A3B8" text-anchor="middle">장소 전문 검색</text>
+  <text x="788" y="526" font-size="9" fill="#94A3B8" text-anchor="middle">Nori 한국어 형태소</text>
+  <rect x="728" y="536" width="120" height="12" rx="3" fill="#EDE9FE"/>
+  <text x="788" y="545" font-size="8" fill="#7C3AED" text-anchor="middle">Phase 1 후반 예정</text>
+
+  <rect x="896" y="474" width="272" height="78" rx="8" fill="#FAFAFA" stroke="#E9D5FF" stroke-width="1" stroke-dasharray="5,3"/>
+  <text x="1032" y="495" font-size="11" font-weight="600" fill="#C4B5FD" text-anchor="middle">📨 Kafka</text>
+  <text x="1032" y="511" font-size="9" fill="#94A3B8" text-anchor="middle">임베딩 생성 큐 · 비동기 파이프라인</text>
+  <text x="1032" y="526" font-size="9" fill="#94A3B8" text-anchor="middle">현재: Spring @Async로 대체</text>
+  <rect x="962" y="536" width="140" height="12" rx="3" fill="#EDE9FE"/>
+  <text x="1032" y="545" font-size="8" fill="#7C3AED" text-anchor="middle">Phase 2 예정</text>
+
+  <!-- ── ARROW 4 ── -->
+  <line x1="600" y1="564" x2="600" y2="582" stroke="#94A3B8" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- ════════════════════════════════════════ -->
+  <!--  5. EXTERNAL API                         -->
+  <!-- ════════════════════════════════════════ -->
+  <rect x="16" y="586" width="1168" height="92" rx="10" fill="#FFF1F2" stroke="#F43F5E" stroke-width="1.5" filter="url(#sh)"/>
+  <rect x="28" y="596" width="76" height="20" rx="4" fill="#E11D48"/>
+  <text x="66" y="610" font-size="9" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">EXTERNAL</text>
+
+  <rect x="120" y="594" width="155" height="76" rx="8" fill="#fff" stroke="#FECDD3" stroke-width="1.2"/>
+  <text x="197" y="617" font-size="11.5" font-weight="700" fill="#BE123C" text-anchor="middle">🤖 Claude API</text>
+  <text x="197" y="633" font-size="9.5" fill="#64748B" text-anchor="middle">Sonnet 4.6</text>
+  <text x="197" y="648" font-size="9.5" fill="#64748B" text-anchor="middle">Haiku 4.5</text>
+  <text x="197" y="661" font-size="8.5" fill="#94A3B8" text-anchor="middle">Anthropic</text>
+
+  <rect x="287" y="594" width="148" height="76" rx="8" fill="#fff" stroke="#FECDD3" stroke-width="1.2"/>
+  <text x="361" y="617" font-size="11.5" font-weight="700" fill="#BE123C" text-anchor="middle">🟡 카카오</text>
+  <text x="361" y="633" font-size="9.5" fill="#64748B" text-anchor="middle">OAuth 2.0</text>
+  <text x="361" y="648" font-size="9.5" fill="#64748B" text-anchor="middle">로컬 API</text>
+  <text x="361" y="661" font-size="8.5" fill="#94A3B8" text-anchor="middle">모빌리티 API</text>
+
+  <rect x="447" y="594" width="168" height="76" rx="8" fill="#fff" stroke="#FECDD3" stroke-width="1.2"/>
+  <text x="531" y="617" font-size="11.5" font-weight="700" fill="#BE123C" text-anchor="middle">📍 TourAPI</text>
+  <text x="531" y="633" font-size="9.5" fill="#64748B" text-anchor="middle">한국관광공사</text>
+  <text x="531" y="648" font-size="9.5" fill="#64748B" text-anchor="middle">KOPIS 공연 데이터</text>
+  <text x="531" y="661" font-size="8.5" fill="#94A3B8" text-anchor="middle">네이버 지역검색</text>
+
+  <rect x="627" y="594" width="158" height="76" rx="8" fill="#fff" stroke="#FECDD3" stroke-width="1.2"/>
+  <text x="706" y="617" font-size="11.5" font-weight="700" fill="#BE123C" text-anchor="middle">💳 토스페이먼츠</text>
+  <text x="706" y="633" font-size="9.5" fill="#64748B" text-anchor="middle">웹뷰 결제</text>
+  <text x="706" y="648" font-size="9.5" fill="#64748B" text-anchor="middle">서버 사이드 검증</text>
+  <text x="706" y="661" font-size="8.5" fill="#94A3B8" text-anchor="middle">인앱결제 수수료 우회</text>
+
+  <rect x="797" y="594" width="155" height="76" rx="8" fill="#fff" stroke="#FECDD3" stroke-width="1.2"/>
+  <text x="874" y="617" font-size="11.5" font-weight="700" fill="#BE123C" text-anchor="middle">🗺️ Google Maps</text>
+  <text x="874" y="633" font-size="9.5" fill="#64748B" text-anchor="middle">지도 렌더링</text>
+  <text x="874" y="648" font-size="9.5" fill="#64748B" text-anchor="middle">카카오맵 딥링크</text>
+  <text x="874" y="661" font-size="8.5" fill="#94A3B8" text-anchor="middle">내비게이션</text>
+
+  <rect x="964" y="594" width="204" height="76" rx="8" fill="#fff" stroke="#FECDD3" stroke-width="1.2"/>
+  <text x="1066" y="617" font-size="11.5" font-weight="700" fill="#BE123C" text-anchor="middle">🌤️ 기상청 / OpenAI</text>
+  <text x="1066" y="633" font-size="9.5" fill="#64748B" text-anchor="middle">날씨 API</text>
+  <text x="1066" y="648" font-size="9.5" fill="#64748B" text-anchor="middle">FCM 푸시 알림</text>
+  <text x="1066" y="661" font-size="8.5" fill="#94A3B8" text-anchor="middle">임베딩 text-embed-3</text>
+
+  <!-- ════════════════════════════════════════ -->
+  <!--  6. CI/CD & INFRA                        -->
+  <!-- ════════════════════════════════════════ -->
+  <rect x="16" y="692" width="1168" height="72" rx="10" fill="#F8FAFC" stroke="#64748B" stroke-width="1.5" filter="url(#sh)"/>
+  <rect x="28" y="702" width="62" height="20" rx="4" fill="#475569"/>
+  <text x="59" y="716" font-size="9" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">CI / CD</text>
+
+  <rect x="108" y="700" width="132" height="56" rx="8" fill="#fff" stroke="#CBD5E1" stroke-width="1.2"/>
+  <text x="174" y="722" font-size="11.5" font-weight="700" fill="#334155" text-anchor="middle">🐳 Docker</text>
+  <text x="174" y="738" font-size="9.5" fill="#64748B" text-anchor="middle">Compose · 컨테이너화</text>
+
+  <rect x="252" y="700" width="162" height="56" rx="8" fill="#fff" stroke="#CBD5E1" stroke-width="1.2"/>
+  <text x="333" y="722" font-size="11.5" font-weight="700" fill="#334155" text-anchor="middle">⚙️ GitHub Actions</text>
+  <text x="333" y="738" font-size="9.5" fill="#64748B" text-anchor="middle">CI/CD 파이프라인</text>
+
+  <rect x="426" y="700" width="158" height="56" rx="8" fill="#fff" stroke="#CBD5E1" stroke-width="1.2"/>
+  <text x="505" y="722" font-size="11.5" font-weight="700" fill="#334155" text-anchor="middle">☁️ AWS EC2</text>
+  <text x="505" y="738" font-size="9.5" fill="#64748B" text-anchor="middle">MVP · 단일 서버</text>
+
+  <line x1="584" y1="728" x2="598" y2="728" stroke="#94A3B8" stroke-width="1.5" marker-end="url(#arr)" stroke-dasharray="3,2"/>
+
+  <rect x="600" y="700" width="192" height="56" rx="8" fill="#F0FFF4" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="5,3"/>
+  <text x="696" y="722" font-size="11.5" font-weight="600" fill="#4ADE80" text-anchor="middle">🚀 ECS Fargate</text>
+  <text x="696" y="738" font-size="9.5" fill="#94A3B8" text-anchor="middle">Phase 2 · Auto Scaling</text>
+
+  <rect x="804" y="700" width="165" height="56" rx="8" fill="#FAFAFA" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="5,3"/>
+  <text x="886" y="722" font-size="11.5" font-weight="600" fill="#94A3B8" text-anchor="middle">📊 모니터링</text>
+  <text x="886" y="738" font-size="9.5" fill="#94A3B8" text-anchor="middle">Prometheus · Grafana</text>
+
+  <rect x="981" y="700" width="187" height="56" rx="8" fill="#fff" stroke="#CBD5E1" stroke-width="1.2"/>
+  <text x="1074" y="722" font-size="11.5" font-weight="700" fill="#334155" text-anchor="middle">🔔 FCM · AWS</text>
+  <text x="1074" y="738" font-size="9.5" fill="#64748B" text-anchor="middle">푸시 알림 · RDS (Phase 2)</text>
+
+  <!-- Footer -->
+  <text x="600" y="786" font-size="9" fill="#94A3B8" text-anchor="middle">점선 박스: 향후 도입 예정  ·  내부 서비스 통신은 X-Internal-Key 헤더 인증  ·  © 2026 Cloumy</text>
+</svg>
