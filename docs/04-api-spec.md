@@ -1,0 +1,376 @@
+# API 명세
+
+## 설계 원칙
+- **REST** 기반 (HTTPS JSON)
+- 챗봇 스트리밍은 **WebSocket** 사용
+- 그룹 실시간 동기화는 **WebSocket + Redis Pub/Sub**
+- Base URL: `https://api.cloumy.app/v1`
+- 모든 인증 필요 요청에 `Authorization: Bearer {accessToken}` 헤더 포함
+
+## 인증 방식
+
+### 소셜 로그인 플로우
+```
+1. 클라이언트 → 카카오/구글/애플 OAuth 인증 → OAuth Access Token 획득
+2. POST /auth/social → Cloumy JWT 발급
+3. 이후 모든 요청: Authorization: Bearer {accessToken}
+4. Access Token 만료(1시간) → POST /auth/refresh → 새 토큰 발급
+5. 로그아웃: POST /auth/logout → Refresh Token 블랙리스트 등록
+```
+
+## 에러 처리 규칙
+
+```json
+{
+  "code": "ROUTE_NOT_FOUND",
+  "message": "해당 루트를 찾을 수 없습니다.",
+  "status": 404
+}
+```
+
+| HTTP 상태 | 의미 |
+|-----------|------|
+| 200 | 성공 |
+| 201 | 생성 성공 |
+| 400 | 잘못된 요청 (유효성 검사 실패) |
+| 401 | 인증 필요 (토큰 없거나 만료) |
+| 403 | 권한 없음 |
+| 404 | 리소스 없음 |
+| 429 | Rate Limit 초과 (LLM 과호출 방지) |
+| 500 | 서버 내부 오류 |
+
+---
+
+## 엔드포인트 목록
+
+### 인증 (Auth)
+
+#### POST /auth/social
+소셜 로그인 후 Cloumy JWT 발급
+
+```json
+// 요청
+{
+  "provider": "kakao",
+  "oauthAccessToken": "kakao_oauth_token_here"
+}
+
+// 응답 201
+{
+  "accessToken": "eyJ...",
+  "refreshToken": "eyJ...",
+  "user": {
+    "id": "uuid",
+    "nickname": "여행자123",
+    "profileImageUrl": "https://..."
+  }
+}
+```
+
+#### POST /auth/refresh
+Access Token 갱신
+
+```json
+// 요청
+{ "refreshToken": "eyJ..." }
+
+// 응답 200
+{ "accessToken": "eyJ..." }
+```
+
+#### POST /auth/logout
+```json
+// 요청
+{ "refreshToken": "eyJ..." }
+// 응답 200
+```
+
+---
+
+### 루트 생성 (Route)
+
+#### POST /routes/generate
+AI 루트 생성 (스트리밍 응답)
+
+```json
+// 요청
+{
+  "destination": "부산",
+  "startDate": "2026-07-10",
+  "endDate": "2026-07-12",
+  "peopleCount": 2,
+  "tags": ["먹방", "힐링"],
+  "density": "normal",
+  "totalBudget": 300000,
+  "anchorPlaces": ["place-uuid-1"],
+  "includeHiddenGems": true
+}
+
+// 응답 200 (스트리밍 JSON, Day별 순차 반환)
+{
+  "routeId": "uuid",
+  "days": [
+    {
+      "dayNumber": 1,
+      "slots": [
+        {
+          "placeId": "uuid",
+          "placeName": "자갈치시장",
+          "startTime": "10:00",
+          "durationMinutes": 90,
+          "estimatedCost": 15000,
+          "transportToNext": "taxi",
+          "transportMinutes": 20,
+          "tips": "오전에 가면 싱싱한 회를 저렴하게 즐길 수 있습니다."
+        }
+      ]
+    }
+  ],
+  "totalEstimatedCost": 280000
+}
+```
+
+#### GET /routes/{routeId}
+루트 상세 조회
+
+#### PATCH /routes/{routeId}/slots/{slotId}/pin
+슬롯 고정/해제
+
+```json
+// 요청
+{ "isPinned": true }
+```
+
+#### POST /routes/{routeId}/slots/{slotId}/reshuffle
+슬롯 재추천 (대안 3개 반환)
+
+```json
+// 응답 200
+{
+  "alternatives": [
+    { "placeId": "uuid", "placeName": "광안리 카페", "estimatedCost": 8000, ... },
+    { "placeId": "uuid", "placeName": "민락수변공원", "estimatedCost": 0, ... },
+    { "placeId": "uuid", "placeName": "해운대 베이커리", "estimatedCost": 5000, ... }
+  ]
+}
+```
+
+#### DELETE /routes/{routeId}/slots/{slotId}
+슬롯 제거 (AI가 빈 슬롯 자동 채우기)
+
+#### GET /routes
+내 루트 목록
+
+```
+GET /routes?page=0&size=20
+```
+
+---
+
+### 챗봇 (Chatbot)
+
+#### WebSocket ws://api.cloumy.app/v1/chat
+
+연결 후 메시지 형식:
+
+```json
+// 클라이언트 → 서버
+{
+  "type": "message",
+  "content": "3박 4일 부산, 친구 2명, 먹방 위주로",
+  "routeId": "uuid (여행 중 컨텍스트용, 선택)",
+  "location": { "lat": 35.1796, "lng": 129.0756 }
+}
+
+// 서버 → 클라이언트 (스트리밍)
+{ "type": "chunk", "content": "3박 4일 부산 여행..." }
+{ "type": "chunk", "content": "Day 1은 자갈치시장..." }
+{ "type": "done", "metadata": { "expenseParsed": null, "routeGenerated": true } }
+```
+
+```json
+// 지출 자연어 파싱 예시
+// 입력: "기념품 12,000원 썼어"
+{ "type": "done", "metadata": { "expenseParsed": { "category": "기념품", "amount": 12000 } } }
+```
+
+---
+
+### 예산 & 지출 (Budget)
+
+#### GET /routes/{routeId}/budget
+예산 설정 및 지출 현황 조회
+
+```json
+// 응답 200
+{
+  "totalBudget": 300000,
+  "settings": {
+    "accommodationRatio": 0.35,
+    "foodRatio": 0.30,
+    "transportRatio": 0.20,
+    "activityRatio": 0.10,
+    "etcRatio": 0.05
+  },
+  "totalSpent": 180000,
+  "plannedSpent": 150000,
+  "unplannedSpent": 30000,
+  "remaining": 120000,
+  "byCategory": {
+    "숙박": { "planned": 105000, "actual": 105000 },
+    "식음료": { "planned": 90000, "actual": 62000 }
+  }
+}
+```
+
+#### PATCH /routes/{routeId}/budget
+예산 설정 업데이트
+
+#### POST /routes/{routeId}/expenses
+지출 추가
+
+```json
+// 요청
+{
+  "slotId": "uuid (없으면 비계획)",
+  "expenseType": "unplanned",
+  "category": "기념품",
+  "actualAmount": 12000,
+  "memo": "자갈치 마그넷"
+}
+```
+
+#### PATCH /routes/{routeId}/slots/{slotId}/expenses/{expenseId}
+계획 지출 완료 체크 / 금액 수정
+
+---
+
+### Hidden Gems (Community)
+
+#### GET /places/hidden-gems
+Hidden Gems 목록 (필터 지원)
+
+```
+GET /places/hidden-gems?tags=먹방,카페&lat=35.17&lng=129.07&radius=5000&page=0
+```
+
+#### POST /places/hidden-gems
+Hidden Gem 등록
+
+```json
+// 요청 (multipart/form-data)
+{
+  "placeName": "골목 비밀 국수집",
+  "location": { "lat": 35.1012, "lng": 129.0259 },
+  "address": "부산 중구 광복동",
+  "tags": ["먹방", "현지인픽", "웨이팅없음"],
+  "photo": "(이미지 파일)",
+  "gpsVerified": true
+}
+```
+
+#### GET /places/{placeId}
+장소 상세 조회
+
+---
+
+### 그룹 여행 (Group)
+
+#### POST /group-trips
+그룹 여행방 생성
+
+```json
+// 요청
+{ "routeId": "uuid" }
+
+// 응답 201
+{
+  "groupTripId": "uuid",
+  "inviteCode": "CLOUMY-ABC123",
+  "inviteUrl": "https://cloumy.app/join/CLOUMY-ABC123"
+}
+```
+
+#### POST /group-trips/join
+초대 코드로 참여
+
+```json
+// 요청
+{ "inviteCode": "CLOUMY-ABC123" }
+```
+
+#### WebSocket ws://api.cloumy.app/v1/group/{groupTripId}
+그룹 실시간 동기화
+
+```json
+// 슬롯 투표
+{ "type": "vote", "slotId": "uuid", "vote": "like" }
+
+// 서버 브로드캐스트
+{ "type": "slot_updated", "slotId": "uuid", "likes": 2, "dislikes": 1 }
+```
+
+---
+
+### 결제 (Payment)
+
+#### POST /payments/trips
+트립 패스 결제 시작
+
+```json
+// 요청
+{ "passType": "3night" }
+
+// 응답 200
+{
+  "orderId": "cloumy-order-uuid",
+  "amount": 4900,
+  "successUrl": "https://cloumy.app/payment/success",
+  "failUrl": "https://cloumy.app/payment/fail"
+}
+// → 클라이언트가 토스페이먼츠 웹뷰 오픈
+```
+
+#### POST /payments/trips/confirm
+결제 완료 서버 사이드 검증
+
+```json
+// 요청
+{ "paymentKey": "토스페이먼츠_결제키", "orderId": "cloumy-order-uuid", "amount": 4900 }
+
+// 응답 200
+{ "passType": "3night", "passExpiresAt": "2026-07-14T23:59:59Z" }
+```
+
+---
+
+### 장소 검색 (Places)
+
+#### GET /places/search
+장소 검색 (텍스트 + 위치 기반)
+
+```
+GET /places/search?q=광안리&lat=35.15&lng=129.11&radius=3000&tags=힐링
+```
+
+```json
+// 응답 200
+{
+  "places": [
+    {
+      "id": "uuid",
+      "name": "광안리해수욕장",
+      "location": { "lat": 35.153, "lng": 129.118 },
+      "categoryTags": ["힐링", "뷰맛집"],
+      "isHiddenGem": false,
+      "rarityScore": 15
+    }
+  ],
+  "total": 23
+}
+```
+
+## API 버전 관리
+- URL 경로 버전 관리: `/v1/`, `/v2/`
+- Major 변경(하위 호환 불가) 시 버전 업
+- 구 버전은 6개월 유지 후 Deprecation 공지

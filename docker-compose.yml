@@ -1,0 +1,36 @@
+# 로컬 개발 전용 — DB + Redis만 실행 (운영은 docker-compose.prod.yml)
+services:
+  postgres:
+    build:
+      context: ./db
+      dockerfile: Dockerfile
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: cloumy
+      POSTGRES_USER: cloumy
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cloumy"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_data:
