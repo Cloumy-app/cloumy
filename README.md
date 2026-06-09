@@ -51,63 +51,125 @@
 
 ## 아키텍처
 
+### 레이어 구성
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <b>📱 클라이언트</b><br/><br/>
+      <img src="https://skillicons.dev/icons?i=react,ts,expo&theme=light" height="40"/><br/>
+      <sub>React Native · Expo · TypeScript</sub>
+    </td>
+    <td align="center" width="33%">
+      <b>🔀 API Gateway</b><br/><br/>
+      <img src="https://skillicons.dev/icons?i=nginx&theme=light" height="40"/><br/>
+      <sub>Nginx · 리버스 프록시 · HTTPS</sub>
+    </td>
+    <td align="center" width="33%">
+      <b>🚀 인프라 / CI·CD</b><br/><br/>
+      <img src="https://skillicons.dev/icons?i=docker,githubactions,aws&theme=light" height="40"/><br/>
+      <sub>Docker · GitHub Actions · AWS</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <b>⚙️ 백엔드</b><br/><br/>
+      <img src="https://skillicons.dev/icons?i=spring,java&theme=light" height="40"/><br/>
+      <sub>Spring Boot 3.x · Java 21</sub>
+    </td>
+    <td align="center">
+      <b>🤖 AI 서비스</b><br/><br/>
+      <img src="https://skillicons.dev/icons?i=python,fastapi&theme=light" height="40"/><br/>
+      <sub>FastAPI · LangChain · OR-Tools · Claude</sub>
+    </td>
+    <td align="center">
+      <b>🗄️ 데이터</b><br/><br/>
+      <img src="https://skillicons.dev/icons?i=postgres,redis,aws&theme=light" height="40"/><br/>
+      <sub>PostgreSQL + pgvector + PostGIS · Redis · S3</sub>
+    </td>
+  </tr>
+</table>
+
+<br/>
+
+### 전체 흐름
+
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '13px', 'primaryColor': '#f8f9fa', 'primaryBorderColor': '#dee2e6'}}}%%
 graph TB
-    subgraph Client["📱 클라이언트"]
-        RN["React Native + Expo<br/>(iOS / Android)"]
+    subgraph CLIENT["📱  클라이언트  —  React Native + Expo"]
+        RN["iOS / Android\nreact-native-maps · Socket.IO · Toss WebView"]
     end
 
-    subgraph Gateway["🔀 API Gateway"]
-        NGINX["Nginx<br/>리버스 프록시 · HTTPS 종단"]
+    subgraph GATEWAY["🔀  Nginx  —  API Gateway"]
+        NG["리버스 프록시 · HTTPS 종단 · 라우팅"]
     end
 
-    subgraph Backend["⚙️ Spring Boot 백엔드"]
-        AUTH["Auth 모듈<br/>JWT · 소셜 로그인"]
-        TRIP["Trip 모듈<br/>루트 · 일정 CRUD"]
-        COMMUNITY["Community 모듈<br/>Hidden Gems · 피드"]
-        BUDGET["Budget 모듈<br/>예산 · 지출 추적"]
-        PAYMENT["Payment 모듈<br/>트립 패스 · 결제"]
+    subgraph BACKEND["⚙️  Spring Boot 3.x  —  Java 21"]
+        direction LR
+        AUTH["🔐 Auth\nJWT · 소셜 로그인"]
+        TRIP["🗺️ Trip\n루트 · 일정 CRUD"]
+        COMMUNITY["🔮 Community\nHidden Gems · 피드"]
+        BUDGET["💰 Budget\n예산 · 지출 추적"]
+        PAYMENT["💳 Payment\n트립 패스 · 결제"]
     end
 
-    subgraph AI["🤖 AI 서비스 (FastAPI)"]
-        RAG["RAG 파이프라인<br/>pgvector 유사도 검색"]
-        TSP["OR-Tools TSP<br/>동선 최적화"]
-        CHAT["LangChain 챗봇<br/>멀티턴 · Function Calling"]
-        EMBED["임베딩 생성<br/>text-embedding-3-small"]
+    subgraph AISERVICE["🤖  FastAPI  —  Python 3.11"]
+        direction LR
+        RAG["📚 RAG\npgvector 유사도 검색"]
+        TSP["🗾 OR-Tools TSP\n동선 최적화"]
+        CHAT["💬 LangChain\n멀티턴 · Function Calling"]
+        EMBED["🔢 Embedding\ntext-embedding-3-small"]
     end
 
-    subgraph Data["🗄️ 데이터"]
-        PG[("PostgreSQL<br/>+ PostGIS + pgvector")]
-        REDIS[("Redis<br/>세션 · 캐시 · JWT 블랙리스트")]
-        S3["AWS S3<br/>사진 · 이미지"]
+    subgraph DATA["🗄️  데이터 레이어"]
+        direction LR
+        PG[("🐘 PostgreSQL\n+ PostGIS + pgvector")]
+        REDIS[("⚡ Redis\n세션 · 캐시 · 블랙리스트")]
+        S3["☁️ AWS S3\n사진 · 이미지"]
     end
 
-    subgraph External["🌐 외부 API"]
-        CLAUDE["Claude API<br/>Sonnet 4.6 · Haiku 4.5"]
-        KAKAO["카카오<br/>OAuth · 로컬 API"]
-        TOUR["TourAPI / KOPIS<br/>장소 · 공연 데이터"]
-        TOSS["토스페이먼츠<br/>결제"]
-        GMAP["Google Maps<br/>지도 렌더링"]
+    subgraph EXTERNAL["🌐  외부 API"]
+        direction LR
+        CLAUDE["🤖 Claude API\nSonnet 4.6 · Haiku 4.5"]
+        KAKAO["🟡 카카오\nOAuth · 로컬 API"]
+        TOUR["📍 TourAPI / KOPIS\n장소 · 공연 데이터"]
+        TOSS["💳 토스페이먼츠\n결제"]
+        GMAP["🗺️ Google Maps\n지도 렌더링"]
     end
 
-    RN -->|HTTPS| NGINX
-    NGINX -->|REST| Backend
-    NGINX -->|WebSocket| AI
+    RN -->|"HTTPS REST / WebSocket"| NG
+    NG -->|REST| BACKEND
+    NG -->|WebSocket| AISERVICE
 
-    Backend -->|HTTP 내부 통신| AI
-    Backend --- PG
-    Backend --- REDIS
-    Backend --- S3
+    BACKEND -->|"HTTP (X-Internal-Key)"| AISERVICE
+    BACKEND --- PG
+    BACKEND --- REDIS
+    BACKEND --- S3
 
-    AI --- PG
-    AI --- REDIS
-    AI -->|LLM 호출| CLAUDE
-    AI -->|임베딩| EMBED
+    AISERVICE --- PG
+    AISERVICE --- REDIS
+    AISERVICE -->|LLM 호출| CLAUDE
+    AISERVICE --- EMBED
 
-    Backend -->|OAuth| KAKAO
-    Backend -->|데이터 수집| TOUR
-    Backend -->|결제 검증| TOSS
+    BACKEND -->|OAuth| KAKAO
+    BACKEND -->|데이터 수집| TOUR
+    BACKEND -->|결제 검증| TOSS
     RN -->|지도 렌더링| GMAP
+
+    classDef clientStyle fill:#EBF5FB,stroke:#2E86C1,color:#1A5276,rx:8
+    classDef gatewayStyle fill:#F2F3F4,stroke:#717D7E,color:#2C3E50,rx:8
+    classDef backendStyle fill:#EAFAF1,stroke:#1E8449,color:#145A32,rx:8
+    classDef aiStyle fill:#FEF9E7,stroke:#D4AC0D,color:#7D6608,rx:8
+    classDef dataStyle fill:#F5EEF8,stroke:#7D3C98,color:#4A235A,rx:8
+    classDef externalStyle fill:#FDEDEC,stroke:#C0392B,color:#7B241C,rx:8
+
+    class RN clientStyle
+    class NG gatewayStyle
+    class AUTH,TRIP,COMMUNITY,BUDGET,PAYMENT backendStyle
+    class RAG,TSP,CHAT,EMBED aiStyle
+    class PG,REDIS,S3 dataStyle
+    class CLAUDE,KAKAO,TOUR,TOSS,GMAP externalStyle
 ```
 
 ### 서비스 간 통신
