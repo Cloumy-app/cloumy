@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-spring:
+    name: Spring 린트 & 테스트
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 21 설정
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: gradle
+
+      - name: gradlew 실행 권한 부여
+        run: chmod +x gradlew
+
+      - name: Checkstyle 린트
+        run: ./gradlew checkstyleMain checkstyleTest --no-daemon
+
+      - name: Spring 테스트
+        run: ./gradlew test --no-daemon
+
+  test-fastapi:
+    name: FastAPI 린트 & 테스트
+    runs-on: ubuntu-latest
+    # ai/requirements.txt가 존재할 때만 실행 (FastAPI 구현 전 CI 오류 방지)
+    if: hashFiles('ai/requirements.txt') != ''
+    defaults:
+      run:
+        working-directory: ai
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python 3.11 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: 의존성 설치
+        run: pip install -r requirements.txt flake8 pytest
+
+      - name: flake8 린트
+        run: flake8 app/ --max-line-length=120
+
+      - name: pytest 테스트
+        run: pytest
