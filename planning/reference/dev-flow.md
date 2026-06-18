@@ -251,38 +251,65 @@ Redis → 모든 Spring 인스턴스에 broadcast → 해당 그룹 WebSocket �
 
 ## 6. 환경 변수 전체 목록
 
-### FastAPI (.env)
+> 환경 변수는 서비스별로 분리 관리. 자세한 발급 안내는 각 `.env.example` 주석 참고.
+
+### FastAPI (`ai/.env`)
 ```bash
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...
+# DB — asyncpg 포맷
 POSTGRES_URL=postgresql+asyncpg://cloumy:password@localhost:5432/cloumy
+
+# Redis
 REDIS_URL=redis://localhost:6379/0
-GOOGLE_MAPS_API_KEY=...
-KAKAO_REST_API_KEY=...
-WEATHER_API_KEY=...          # 공공데이터포털 인증키
-INTERNAL_API_KEY=...         # Spring ↔ FastAPI 내부 통신 키
+
+# AI 모델
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...          # text-embedding-3-small 임베딩 생성용
+
+# 외부 API
+KAKAO_REST_API_KEY=...         # Kakao Local API (장소 검색, 보충)
+GOOGLE_MAPS_API_KEY=...        # Distance Matrix API (OR-Tools TSP)
+OPENWEATHERMAP_API_KEY=...     # 날씨 예보 (국내·해외 통합, 무료 1,000콜/일)
+TOURAPI_KEY=...                # 한국관광공사 (장소 시드 데이터, 무료)
+NAVER_SEARCH_CLIENT_ID=...     # 네이버 블로그 검색 (트렌딩 장소, Phase 1 후반)
+NAVER_SEARCH_CLIENT_SECRET=...
+
+# 내부 통신
+INTERNAL_API_KEY=...           # Spring → FastAPI X-Internal-Key 헤더
 ```
 
-### Spring Boot (application.yml)
-```yaml
-anthropic:
-  api-key: ${ANTHROPIC_API_KEY}
-kakao:
-  rest-api-key: ${KAKAO_REST_API_KEY}
-  oauth-client-id: ${KAKAO_OAUTH_CLIENT_ID}
-spring:
-  datasource:
-    url: ${POSTGRES_URL}
-  data:
-    redis:
-      url: ${REDIS_URL}
-ai-service:
-  base-url: http://cloumy-ai:8000
-  internal-key: ${INTERNAL_API_KEY}
-toss:
-  secret-key: ${TOSS_PAYMENTS_SECRET_KEY}
-google:
-  maps-api-key: ${GOOGLE_MAPS_API_KEY}
+### Spring Boot (루트 `.env`)
+```bash
+# DB — JDBC 포맷 (application.yml → ${POSTGRES_JDBC_URL})
+POSTGRES_USER=cloumy
+POSTGRES_PASSWORD=...
+POSTGRES_JDBC_URL=jdbc:postgresql://localhost:5432/cloumy
+
+# Redis (Spring Boot 는 host/port 분리)
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# JWT
+JWT_SECRET=...
+JWT_ACCESS_TTL=3600
+JWT_REFRESH_TTL=1209600
+
+# 소셜 로그인 OAuth
+KAKAO_CLIENT_ID=...            # REST API 키 (OAuth + Kakao Local API 공용)
+KAKAO_CLIENT_SECRET=...
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+APPLE_CLIENT_ID / APPLE_TEAM_ID / APPLE_KEY_ID / APPLE_PRIVATE_KEY=...
+NAVER_CLIENT_ID / NAVER_CLIENT_SECRET=...
+
+# 외부 API (Spring 에서도 직접 호출하는 경우)
+KAKAO_REST_API_KEY=...         # KAKAO_CLIENT_ID 와 동일한 값
+GOOGLE_MAPS_API_KEY=...
+
+# 결제
+TOSS_PAYMENTS_SECRET_KEY=...
+
+# 내부 통신
+INTERNAL_API_KEY=...
 ```
 
 ---

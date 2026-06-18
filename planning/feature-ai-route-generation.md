@@ -18,15 +18,16 @@ created: 2026-06-08
 ### 정확한 동작 범위
 
 **[입력 — 3단계 플로우]**
-- Step 1: 목적지 입력 (국내 20개 도시 자동완성)
-- Step 2: 날짜(시작/종료) + 인원 수
-- Step 3: 여행 스타일 태그 + 예산(원) + 앵커 장소(선택) + Hidden Gems 포함 여부
+- Step 1: 목적지 선택 — MVP: 5개 핵심 여행지 (제주, 부산, 서울, 경주, 강릉) / 베타 출시 전: 국내 20개 도시 확장
+- Step 2: 날짜(시작/종료) + 그룹 구성(혼자/커플/친구들/가족) + 예산 수준(가성비/중간/프리미엄)
+  - ※ 가족 그룹은 MVP에서 단일 옵션으로 처리, 이후 '부모님과 함께 / 아이와 함께' 세분화 예정
+- Step 3: 여행 스타일 태그(체크박스 복수 선택) + [선택] 교통수단(대중교통/렌터카/도보) / 숙소 위치(동선 최적화 기준점) / 하루 활동량(여유/보통/빡빡) + 앵커 장소(선택) + Hidden Gems 포함 여부
 
 **[AI 처리 — FastAPI + LangChain + RAG]**
 1. LangChain → Haiku: 검색 키워드 생성 ("부산 먹방 해산물" 등)
 2. RAG Retrieval: pgvector 유사도 검색(OpenAI 임베딩) + PostGIS 반경 검색 + 태그 필터 병렬 실행 → 후보 50~100개
 3. 카카오 로컬 API: 후보 20개 미만 시 실시간 보충
-4. 기상청 API: 여행 날짜 강수확률 조회 → 실외/실내 가중치 조정 (graceful fallback)
+4. OpenWeatherMap API: 여행 날짜 강수확률 조회 → 실외/실내 가중치 조정 (graceful fallback, 국내·해외 통합)
 5. OR-Tools TSP: 앵커 장소 고정 + 나머지 동선 최적화 (Google Maps Distance Matrix 활용)
 6. LangChain → Claude Sonnet 4.6: Day별 루트 스트리밍 생성 (Prompt Caching 적용)
 7. 환각 방지: LLM 출력 place_id DB 재검증 → 없는 ID는 pgvector 유사도로 자동 교체
@@ -80,7 +81,7 @@ X-Internal-Key: {INTERNAL_API_KEY}
 | 트립 패스 없는 사용자 | 생성은 정상 수행, 저장 단계에서 403 반환 |
 | 예산 미입력 | 예산 필터 스킵, 예상 비용 합산만 제공 |
 | 동일 조건 재요청 | Redis 캐시 반환 (TTL 24시간) |
-| 우천 예보 포함 날짜 | 기상청 API → 실외 장소 가중치 하향 (API 장애 시 스킵) |
+| 우천 예보 포함 날짜 | OpenWeatherMap API → 실외 장소 가중치 하향 (API 장애 시 graceful fallback) |
 | FastAPI 장애 | 1차 Redis 캐시 → 2차 DB 유사 루트 쿼리 → 3차 503 반환 |
 | Rate Limit 초과 | 429 반환 (Spring Cloud Gateway, 사용자당 1분 3회) |
 
@@ -89,7 +90,7 @@ X-Internal-Key: {INTERNAL_API_KEY}
 | 항목 | 결정 |
 |------|------|
 | 스트리밍 프록시 방식 | SSE (Spring WebFlux Flux<ServerSentEvent>) |
-| 기상청 API MVP 포함 여부 | Week 7~8 포함, graceful fallback 필수 |
+| 날씨 API | OpenWeatherMap (국내·해외 통합, 무료 티어) — Week 7~8 포함, graceful fallback 필수 |
 | Redis 캐시 키 설계 | `{destination}:{nights}:{sorted_tags}:{density}` (예산·앵커 제외) |
 | 루트 생성 실패 폴백 | Redis 캐시 → DB 유사 루트 추천 → 503 |
 
@@ -122,7 +123,7 @@ X-Internal-Key: {INTERNAL_API_KEY}
 | `app/services/rag_service.py` | RAG Retrieval — pgvector 유사도 + PostGIS 반경 + 태그 필터 병렬 검색 |
 | `app/services/tsp_service.py` | OR-Tools TSP 동선 최적화 (Google Maps Distance Matrix 활용) |
 | `app/services/model_router.py` | LangChain + Haiku↔Sonnet 라우팅, Prompt Caching 적용 |
-| `app/services/weather_service.py` | 기상청 단기/중기예보 조회, WGS84 → 격자 변환 |
+| `app/services/weather_service.py` | OpenWeatherMap 날씨 예보 조회 (국내·해외 통합, graceful fallback) |
 | `app/services/fallback_service.py` | Redis 캐시 1차 → DB 유사 루트 2차 폴백 |
 | `app/services/place_validator.py` | LLM 출력 place_id 재검증 + 유사 장소 교체 |
 | `app/prompts/route_gen.txt` | 루트 생성 시스템 프롬프트 (Prompt Caching 대상) |
