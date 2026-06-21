@@ -3,6 +3,7 @@ name: CI
 on:
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   test-spring:
@@ -34,8 +35,6 @@ jobs:
   test-fastapi:
     name: FastAPI 린트 & 테스트
     runs-on: ubuntu-latest
-    # ai/requirements.txt가 존재할 때만 실행 (FastAPI 구현 전 CI 오류 방지)
-    if: hashFiles('ai/requirements.txt') != ''
     defaults:
       run:
         working-directory: ai
@@ -43,17 +42,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: requirements.txt 존재 확인
+        id: check
+        run: |
+          if [ -f requirements.txt ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "ai/requirements.txt 없음 — FastAPI 구현 전 단계. 이후 스텝 스킵."
+          fi
+
       - name: Python 3.11 설정
+        if: steps.check.outputs.exists == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: pip
 
       - name: 의존성 설치
+        if: steps.check.outputs.exists == 'true'
         run: pip install -r requirements.txt flake8 pytest
 
       - name: flake8 린트
+        if: steps.check.outputs.exists == 'true'
         run: flake8 app/ --max-line-length=120
 
       - name: pytest 테스트
+        if: steps.check.outputs.exists == 'true'
         run: pytest
