@@ -6,6 +6,8 @@ from fastapi.responses import JSONResponse
 
 from app.config.database import create_pool
 from app.config.settings import settings
+from app.routes import route_gen
+from app.services.route_service import close_ai_clients
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -18,9 +20,10 @@ async def lifespan(app: FastAPI):
     app.state.db = await create_pool(settings.asyncpg_url)
     logger.info("DB 커넥션 풀 준비 완료")
     yield
-    # 앱 종료 — 풀 반환
+    # 앱 종료 — DB 풀 및 AI 클라이언트 반환
     await app.state.db.close()
-    logger.info("DB 커넥션 풀 종료")
+    await close_ai_clients()
+    logger.info("DB 커넥션 풀 및 AI 클라이언트 종료")
 
 
 app = FastAPI(
@@ -45,6 +48,9 @@ async def internal_key_middleware(request: Request, call_next):
         )
 
     return await call_next(request)
+
+
+app.include_router(route_gen.router)
 
 
 @app.get("/health")
