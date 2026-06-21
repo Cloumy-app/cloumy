@@ -64,9 +64,9 @@ jobs:
         run: pip install -r requirements.txt flake8 pytest
 
       - name: flake8 린트
-        if: steps.check.outputs.exists == 'true'
+        if: steps.check.outputs.exists == 'true' && hashFiles('app/**/*.py') != ''
         run: flake8 app/ --max-line-length=120
 
       - name: pytest 테스트
-        if: steps.check.outputs.exists == 'true'
+        if: steps.check.outputs.exists == 'true' && hashFiles('tests/**/*.py') != ''
         run: pytest
