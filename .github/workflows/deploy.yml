@@ -6,8 +6,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/cloumy-backend
-  AI_IMAGE: ghcr.io/${{ github.repository_owner }}/cloumy-ai
+  BACKEND_IMAGE: ghcr.io/cloumy-app/cloumy-backend
+  AI_IMAGE: ghcr.io/cloumy-app/cloumy-ai
 
 jobs:
   build-and-push:
