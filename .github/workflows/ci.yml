@@ -3,6 +3,7 @@ name: CI
 on:
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   test-spring:
@@ -26,7 +27,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Checkstyle 린트
-        run: ./gradlew checkstyleMain checkstyleTest --no-daemon --info --stacktrace
+        run: ./gradlew checkstyleMain checkstyleTest --no-daemon
 
       - name: Spring 테스트
         run: ./gradlew test --no-daemon
