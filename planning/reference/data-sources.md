@@ -137,38 +137,41 @@ GET https://dapi.kakao.com/v2/local/geo/coord2address.json?x=129.07&y=35.17
 
 ---
 
-## 3. 기상청 API (단기예보 조회 서비스)
+## 3. OpenWeatherMap API
 
 **역할**: 여행 날짜의 날씨 예보 → 실외/실내 장소 가중치 조정  
-**비용**: 공공 API, 무료  
-**기준 키**: 공공데이터포털 API 키
+**비용**: 무료 티어 일 1,000콜 (MVP 충분), 초과 시 월 $40~  
+**기준 키**: `OPENWEATHERMAP_API_KEY` (openweathermap.org → My API Keys)  
+**선택 이유**: 국내·해외 통합 (기상청 API는 국내 전용), REST API 단순, 무료 한도 충분
 
 ### 사용 엔드포인트
 
 ```
-POST /getVilageFcst  (단기예보 — 3일 이내)
-POST /getMidFcst     (중기예보 — 4~10일)
+GET /data/2.5/forecast      (5일 3시간 단위 예보)
+GET /data/2.5/weather       (현재 날씨)
 ```
 
-### 요청 파라미터
-```
-serviceKey  = 공공데이터포털 인증키
-numOfRows   = 전체 예보 행 수
-pageNo      = 1
-dataType    = JSON
-base_date   = 20260710  (조회 기준일)
-base_time   = 0500
-nx          = 98        (격자 X — 부산 기준)
-ny          = 76        (격자 Y — 부산 기준)
+### 요청 예시
+```http
+GET https://api.openweathermap.org/data/2.5/forecast
+  ?lat=35.1796
+  &lon=129.0756
+  &appid={OPENWEATHERMAP_API_KEY}
+  &units=metric
+  &lang=kr
+  &cnt=40               # 5일 × 8회 (3시간 간격)
 ```
 
-### 좌표 변환 (WGS84 → 기상청 격자)
-기상청은 위경도 아닌 독자적 격자(nx, ny) 사용 → 변환 공식 필요  
-```python
-# ai/services/weather_service.py
-def latlon_to_grid(lat: float, lon: float) -> tuple[int, int]:
-    # 기상청 제공 Lambert Conformal Conic 변환 공식 적용
-    ...
+### 응답 핵심 필드
+```json
+{
+  "list": [{
+    "dt": 1720598400,
+    "pop": 0.64,            // 강수 확률 (0~1)
+    "weather": [{"main": "Rain", "description": "보통 비"}],
+    "main": {"temp": 27.3}
+  }]
+}
 ```
 
 ### Cloumy 활용 방식
@@ -177,17 +180,17 @@ def latlon_to_grid(lat: float, lon: float) -> tuple[int, int]:
 weather_forecast = await get_weather(destination, travel_dates)
 
 for slot_candidate in candidates:
-    if weather_forecast.rain_probability > 60:
-        if slot_candidate.tags contains ['야외', '해변', '등산']:
+    if weather_forecast.rain_probability > 0.6:  # 강수확률 60% 이상
+        if '야외' in slot_candidate.tags or '해변' in slot_candidate.tags:
             slot_candidate.score *= 0.3   # 가중치 하향
-        if slot_candidate.tags contains ['실내', '박물관', '카페']:
+        if '실내' in slot_candidate.tags or '박물관' in slot_candidate.tags:
             slot_candidate.score *= 1.5   # 가중치 상향
 ```
 
 ### MVP 포함 여부 결정
 > ✅ **포함** — 단 조건부:  
 > - Week 5~6에 루트 생성 MVP 완성 후, Week 7~8에 날씨 연동 추가  
-> - 기상청 API 장애 시 날씨 필터 없이 정상 생성 (graceful fallback)
+> - API 장애 시 날씨 필터 없이 정상 생성 (graceful fallback 필수)
 
 ---
 
@@ -298,7 +301,7 @@ OpenAI Embedding (BackgroundTasks)
   → RAG 후보 20개 미만 → 키워드 검색으로 즉시 보충
   → 챗봇 현위치 검색
 
-기상청 API
-  → 여행 날짜 예보 조회 (Day별 강수확률)
+OpenWeatherMap API
+  → 여행 날짜 예보 조회 (Day별 강수확률, 국내·해외 통합)
   → 장소 가중치 조정
 ```

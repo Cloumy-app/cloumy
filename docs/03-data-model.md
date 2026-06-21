@@ -48,6 +48,16 @@ group_trips
 | rarity_score | FLOAT | - | 희소성 점수 0~100 |
 | review_count | INTEGER | - | 카카오 플레이스 리뷰 수 |
 | is_hidden_gem | BOOLEAN | ✅ | Hidden Gem 배지 여부 |
+| is_active | BOOLEAN | ✅ | 활성 여부 (폐업 처리용, 기본값 true) |
+| avg_duration_minutes | INTEGER | - | 평균 체류 시간 (분) |
+| business_hours | JSONB | - | 요일별 영업시간 |
+| time_tags | TEXT[] | - | 시간 속성 태그 ['야간가능', '오전전용'] |
+| cost_tags | TEXT[] | - | 비용 속성 태그 ['1만원이하', '3~5만원'] |
+| companion_tags | TEXT[] | - | 동행 태그 ['2인추천', '단체가능'] |
+| access_tags | TEXT[] | - | 접근성 태그 ['주차가능', '대중교통접근'] |
+| trend_score | FLOAT | - | 트렌딩 가중치 (SNS/유튜브 기반, Phase 2) |
+| trend_updated_at | TIMESTAMP | - | 마지막 트렌드 갱신 시각 |
+| trend_source | TEXT[] | - | 트렌드 출처 ['naver_blog', 'youtube'] |
 | embedding | vector(1536) | - | pgvector 임베딩 |
 | created_at | TIMESTAMP | ✅ | |
 
@@ -63,10 +73,14 @@ group_trips
 | start_date | DATE | ✅ | 출발일 |
 | end_date | DATE | ✅ | 귀환일 |
 | nights | INTEGER | ✅ | 박 수 |
-| people_count | INTEGER | ✅ | 인원 수 |
-| total_budget | INTEGER | - | 총 예산 (원) |
+| participant_count | INTEGER | - | 인원 수 (선택, 미래 N빵/초대 기능 대비) |
+| group_type | VARCHAR | ✅ | 'solo' \| 'couple' \| 'friends' \| 'family' |
+| budget_level | VARCHAR | ✅ | 'budget' \| 'mid' \| 'premium' (AI 장소 필터링용) |
+| total_budget | INTEGER | - | 총 예산 (원, 예산 관리 기능용) |
 | tags | TEXT[] | - | 여행 스타일 태그 |
 | density | VARCHAR | - | 'relaxed' \| 'normal' \| 'packed' |
+| transport_mode | VARCHAR | - | 'transit' \| 'car' \| 'walk' |
+| accommodation_area | VARCHAR | - | 숙소 위치 (동선 최적화 기준점) |
 | is_public | BOOLEAN | ✅ | 커뮤니티 공유 여부 |
 | save_count | INTEGER | ✅ | 저장 수 (기본값 0) |
 | created_at | TIMESTAMP | ✅ | |
@@ -224,10 +238,14 @@ interface Route {
   startDate: string; // "YYYY-MM-DD"
   endDate: string;
   nights: number;
-  peopleCount: number;
-  totalBudget?: number;
+  participantCount?: number; // 미래 N빵/초대 기능 대비, 입력 폼에서는 수집 안 함
+  groupType: 'solo' | 'couple' | 'friends' | 'family';
+  budgetLevel: 'budget' | 'mid' | 'premium';
+  totalBudget?: number; // 예산 관리 기능용 (원)
   tags: string[];
   density: 'relaxed' | 'normal' | 'packed';
+  transportMode?: 'transit' | 'car' | 'walk';
+  accommodationArea?: string;
   days: { dayNumber: number; slots: RouteSlot[] }[];
   isPublic: boolean;
   saveCount: number;

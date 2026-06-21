@@ -5,7 +5,7 @@ spring:
   application:
     name: cloumy-backend
   datasource:
-    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/cloumy}
+    url: ${POSTGRES_JDBC_URL:jdbc:postgresql://localhost:5432/cloumy}
     username: ${POSTGRES_USER:cloumy}
     password: ${POSTGRES_PASSWORD:cloumy}
     driver-class-name: org.postgresql.Driver

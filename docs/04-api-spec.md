@@ -98,10 +98,12 @@ AI 루트 생성 (스트리밍 응답)
   "destination": "부산",
   "startDate": "2026-07-10",
   "endDate": "2026-07-12",
-  "peopleCount": 2,
+  "groupType": "friends",
   "tags": ["먹방", "힐링"],
+  "budgetLevel": "mid",
   "density": "normal",
-  "totalBudget": 300000,
+  "transportMode": "transit",
+  "accommodationArea": "해운대",
   "anchorPlaces": ["place-uuid-1"],
   "includeHiddenGems": true
 }
