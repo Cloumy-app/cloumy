@@ -8,10 +8,12 @@ users
   │     ├── route_slots (1:N) — 루트의 일정 슬롯
   │     └── expenses (1:N) — 루트의 지출 내역
   ├── payments (1:N) — 트립 패스 결제
+  ├── bookmarks (1:N) — 사용자가 저장한 장소
   └── user_levels (1:1) — Hidden Gems 레벨
 
 places
   ├── route_slots (N:M) — 슬롯에 배치된 장소
+  ├── bookmarks (1:N) — 장소를 저장한 북마크
   └── hidden_gems (1:1, 선택) — Hidden Gem으로 등록된 장소
 
 group_trips
@@ -30,7 +32,7 @@ group_trips
 | oauth_id | VARCHAR | ✅ | 소셜 로그인 식별자 |
 | nickname | VARCHAR | ✅ | 표시 이름 |
 | profile_image_url | VARCHAR | - | 프로필 이미지 |
-| pass_type | VARCHAR | - | 'none' \| 'day' \| '3night' \| '4night' |
+| pass_type | VARCHAR | - | 'none' \| 'domestic_day' \| 'domestic_3night' \| 'overseas_day' \| 'overseas_4night' |
 | pass_expires_at | TIMESTAMP | - | 트립 패스 만료 시각 |
 | is_beta_tester | BOOLEAN | ✅ | 베타 테스터 여부 (레전드 배지) |
 | created_at | TIMESTAMP | ✅ | |
@@ -67,7 +69,7 @@ group_trips
 |------|------|------|------|
 | id | UUID | ✅ | PK |
 | user_id | UUID | ✅ | FK → users |
-| group_trip_id | UUID | - | FK → group_trips (그룹 모드) |
+| group_trip_id | UUID | - | FK → group_trips (그룹 모드, Phase 2) |
 | title | VARCHAR | ✅ | 여행 제목 |
 | destination | VARCHAR | ✅ | 목적지 |
 | start_date | DATE | ✅ | 출발일 |
@@ -83,7 +85,8 @@ group_trips
 | accommodation_area | VARCHAR | - | 숙소 위치 (동선 최적화 기준점) |
 | is_public | BOOLEAN | ✅ | 커뮤니티 공유 여부 |
 | save_count | INTEGER | ✅ | 저장 수 (기본값 0) |
-| created_at | TIMESTAMP | ✅ | |
+| created_at | TIMESTAMPTZ | ✅ | |
+| updated_at | TIMESTAMPTZ | ✅ | fn_set_updated_at() 트리거 자동 갱신 |
 
 ### route_slots
 
@@ -130,6 +133,30 @@ group_trips
 | activity_ratio | FLOAT | ✅ | 입장료 비율 (기본 0.10) |
 | etc_ratio | FLOAT | ✅ | 기타 비율 (기본 0.05) |
 
+### bookmarks
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| id | UUID | ✅ | PK |
+| user_id | UUID | ✅ | FK → users |
+| place_id | UUID | ✅ | FK → places |
+| created_at | TIMESTAMP | ✅ | |
+
+> **UNIQUE (user_id, place_id)** — 동일 장소 중복 북마크 방지
+
+**장소 피드 API** (Spring 구현은 별도 태스크):
+```
+GET    /v1/places?destination=부산&category=맛집  — 목적지별 장소 피드
+GET    /v1/places/{id}                            — 장소 상세 (이름·주소·영업시간·위치·카테고리)
+POST   /v1/places/{id}/bookmark                  — 북마크 추가
+DELETE /v1/places/{id}/bookmark                  — 북마크 해제
+GET    /v1/users/me/bookmarks                    — 내 북마크 목록
+```
+
+**초기 데이터 전략**: TourAPI seed (5개 도시) 완료 후 피드 활성화. seed 전에는 루트 생성 Step 3에서 카카오 실시간 검색으로 anchor 선택 → places 테이블 자동 upsert.
+
+---
+
 ### hidden_gems
 
 | 필드 | 타입 | 필수 | 설명 |
@@ -149,7 +176,7 @@ group_trips
 |------|------|------|------|
 | id | UUID | ✅ | PK |
 | user_id | UUID | ✅ | FK → users |
-| pass_type | VARCHAR | ✅ | 'day' \| '3night' \| '4night' |
+| pass_type | VARCHAR | ✅ | 'domestic_day' \| 'domestic_3night' \| 'overseas_day' \| 'overseas_4night' — ※ 가격은 추후 확정 |
 | amount | INTEGER | ✅ | 결제 금액 |
 | payment_key | VARCHAR | ✅ | 토스페이먼츠 결제 키 |
 | status | VARCHAR | ✅ | 'pending' \| 'success' \| 'fail' |
@@ -179,21 +206,40 @@ group_trips
 ## 인덱스 전략
 
 ```sql
--- 위치 기반 검색 (PostGIS)
+-- 위치 기반 검색 (PostGIS, ST_DWithin 단위 = 미터)
 CREATE INDEX idx_places_location ON places USING GIST(location);
 
--- 태그 필터 검색
-CREATE INDEX idx_places_category_tags ON places USING GIN(category_tags);
+-- 태그 필터 검색 (@> 연산자, GIN)
+CREATE INDEX idx_places_category_tags  ON places USING GIN(category_tags);
+CREATE INDEX idx_places_time_tags      ON places USING GIN(time_tags);
+CREATE INDEX idx_places_cost_tags      ON places USING GIN(cost_tags);
+CREATE INDEX idx_places_companion_tags ON places USING GIN(companion_tags);
+CREATE INDEX idx_places_access_tags    ON places USING GIN(access_tags);
 
--- Hidden Gems 희소성 정렬
+-- Hidden Gems 희소성 정렬 (부분 인덱스)
 CREATE INDEX idx_places_rarity ON places(rarity_score DESC) WHERE is_hidden_gem = true;
 
+-- 트렌딩 정렬 (활성 장소만, 부분 인덱스)
+CREATE INDEX idx_places_trend ON places(trend_score DESC NULLS LAST) WHERE is_active = true;
+
+-- pgvector 코사인 유사도 검색 (시드 데이터 적재 후 생성, lists=100 기준 26만건)
+CREATE INDEX idx_places_embedding ON places USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+
 -- 루트 조회
-CREATE INDEX idx_routes_user ON routes(user_id, created_at DESC);
+CREATE INDEX idx_routes_user   ON routes(user_id, created_at DESC);
+CREATE INDEX idx_routes_public ON routes(created_at DESC) WHERE is_public = true;
+
+-- 루트 슬롯 조회 (day별 정렬)
 CREATE INDEX idx_route_slots_route ON route_slots(route_id, day_number, order_index);
+CREATE INDEX idx_route_slots_place ON route_slots(place_id);
+
+-- 북마크 조회
+CREATE INDEX idx_bookmarks_user  ON bookmarks(user_id, created_at DESC);
+CREATE INDEX idx_bookmarks_place ON bookmarks(place_id);
 
 -- 지출 조회
 CREATE INDEX idx_expenses_route ON expenses(route_id, created_at DESC);
+CREATE INDEX idx_expenses_user  ON expenses(user_id, created_at DESC);
 
 -- 결제 상태
 CREATE INDEX idx_payments_user_status ON payments(user_id, status);
@@ -209,10 +255,21 @@ interface Place {
   location: { lat: number; lng: number };
   address?: string;
   categoryTags: string[];
+  timeTags: string[];
+  costTags: string[];
+  companionTags: string[];
+  accessTags: string[];
   source: 'tourapi' | 'kakao' | 'hidden_gem';
-  rarityScore?: number;
-  isHiddenGem: boolean;
+  avgDurationMinutes?: number;
+  businessHours?: Record<string, string>;
   reviewCount?: number;
+  isActive: boolean;
+  isHiddenGem: boolean;
+  rarityScore?: number;
+  trendScore?: number;
+  trendUpdatedAt?: string;
+  trendSource: string[];
+  createdAt: string;
 }
 
 // 루트 슬롯
@@ -264,8 +321,8 @@ interface Expense {
   createdAt: string;
 }
 
-// 트립 패스
-type PassType = 'none' | 'day' | '3night' | '4night';
+// 트립 패스 (가격은 추후 확정)
+type PassType = 'none' | 'domestic_day' | 'domestic_3night' | 'overseas_day' | 'overseas_4night';
 
 // 챗봇 메시지
 interface ChatMessage {

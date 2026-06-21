@@ -44,10 +44,11 @@ Hidden Gems 콜드스타트 방지 + 핵심 가정 사전 검증
 - [ ] React Native + Expo 프로젝트 초기화
 
 **DB 설정**
-- [ ] PostgreSQL + PostGIS + pgvector 설치 및 설정
-- [ ] 핵심 테이블 스키마 마이그레이션 (Flyway)
-  - users, places, routes, route_slots, expenses, payments
-- [ ] 인덱스 생성 (PostGIS GiST, GIN 등)
+- [x] PostgreSQL + PostGIS + pgvector 설치 및 설정
+- [x] 핵심 테이블 스키마 마이그레이션 (Flyway) — V1~V5 완료 (2026-06-21)
+  - users(V1), places(V2), routes+bookmarks(V3), route_slots+expenses+budget_settings(V4)
+  - payments, group_trips, group_members, hidden_gems — Phase 2/3에서 추가 예정
+- [x] 인덱스 생성 (PostGIS GiST, GIN 5종, ivfflat, 부분 인덱스 등 총 29개)
 
 **API 키 및 환경 변수**
 - [ ] Anthropic API 키 발급 (Claude Sonnet 4.6 / Haiku 4.5)
@@ -91,7 +92,7 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성
 - [ ] 루트 생성 시스템 프롬프트 작성 + Prompt Caching 적용
 - [ ] 기본 루트 생성 API 동작 확인
 
-### Week 7~8: OR-Tools TSP + Pin & Reshuffle
+### Week 7~8: OR-Tools TSP + 슬롯 대안 추천
 
 - [ ] OR-Tools TSP 동선 최적화 구현
   - 앵커 장소 고정 로직
@@ -102,7 +103,9 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성
   - 방문 순서 번호 핀
   - Day 탭 필터
 - [ ] 타임라인 뷰 (하단 슬라이드업)
-- [ ] Pin & Reshuffle API 구현 (Haiku)
+- [ ] 슬롯 대안 추천 API 구현 `POST /ai/routes/slots/{slot_id}/alternatives` (Haiku)
+  - 슬롯 단위 대안 3개 추천 → 사용자 선택 → 인접 이동시간만 재계산
+  - is_pinned=true 슬롯은 대안 추천 불가
 - [ ] 슬롯 📌🔄❌ 액션 UI 구현
 - [ ] 환각 방지 검증 (place_id 재조회)
 
@@ -111,7 +114,7 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성
 - [ ] 스트리밍 응답 (WebSocket, Day별 순차)
 - [ ] 응답 속도 최적화 (Redis 루트 캐시)
 - [ ] 예산 초과 장소 처리 (소프트/하드 초과)
-- [ ] Hidden Gems 토글 (루트 생성 Step 3)
+- [ ] 방문 빈도 질문 UI (루트 생성 Step 3) — "얼마나 자주 가세요?" → Hidden Gems 비율 제어 (Hidden Gems 기능 자체는 연기)
 - [ ] 장소 카드 팝업 (사진, 체류 시간, 예상 비용, Hidden Gem 여부)
 - [ ] 카카오맵 딥링크 내비 연동
 - [ ] 단위 테스트 작성 (루트 생성 핵심 로직)
@@ -127,7 +130,7 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성
 - [ ] Function Calling 도구 구현
   - search_nearby_places, record_expense, get_remaining_budget, suggest_alternatives
 - [ ] 챗봇 스트리밍 WebSocket 구현
-- [ ] 여행 중 현위치 기반 장소 추천 (기상청 API 연동)
+- [ ] 여행 중 현위치 기반 장소 추천 (OpenWeatherMap API 연동)
 - [ ] 예산 자연어 파싱 (Haiku, "기념품 12,000원 썼어" → 자동 분류)
 - [ ] 챗봇 UI 구현 (ChatBubble, 스트리밍 애니메이션)
 - [ ] 지출 파싱 확인 팝업 UI
@@ -144,6 +147,9 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성
 - [ ] 예산 초과 시 챗봇 저가 대안 자동 제안
 
 ### Week 13~14: Hidden Gems + 태그 커뮤니티
+
+> ⚠️ **자금 확보 후 진행 (모두의 창업 지원금 이후 — 현재 연기)**
+> DB 테이블/컬럼은 유지, 로직만 비활성화. 해외 피벗 시 우선 적용.
 
 - [ ] Hidden Gem 장소 등록 API (GPS 인증 **반경 100m** 검증, S3 사진 업로드)
 - [ ] 서버 사이드 GPS 좌표 검증 (PostGIS, 반경 100m 이내만 인정)
