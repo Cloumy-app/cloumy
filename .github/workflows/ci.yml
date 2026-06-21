@@ -27,7 +27,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Checkstyle 린트
-        run: ./gradlew checkstyleMain checkstyleTest --no-daemon
+        run: ./gradlew checkstyleMain checkstyleTest --no-daemon --stacktrace 2>&1 | tail -100
 
       - name: Spring 테스트
         run: ./gradlew test --no-daemon
