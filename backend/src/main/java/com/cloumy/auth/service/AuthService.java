@@ -5,7 +5,11 @@ import com.cloumy.auth.dto.RefreshRequest;
 import com.cloumy.auth.dto.SocialLoginRequest;
 import com.cloumy.auth.dto.SocialLoginResponse;
 import com.cloumy.auth.entity.User;
-import com.cloumy.auth.oauth.*;
+import com.cloumy.auth.oauth.AppleOAuthClient;
+import com.cloumy.auth.oauth.GoogleOAuthClient;
+import com.cloumy.auth.oauth.KakaoOAuthClient;
+import com.cloumy.auth.oauth.NaverOAuthClient;
+import com.cloumy.auth.oauth.OAuthUserInfo;
 import com.cloumy.auth.repository.UserRepository;
 import com.cloumy.auth.security.JwtTokenProvider;
 import com.cloumy.common.config.AppProperties;
@@ -97,7 +101,8 @@ public class AuthService {
             case "google" -> googleOAuthClient.fetchUserInfo(oauthToken);
             case "apple"  -> appleOAuthClient.fetchUserInfo(oauthToken);
             case "naver"  -> naverOAuthClient.fetchUserInfo(oauthToken);
-            default -> throw new BusinessException(ErrorCode.INVALID_INPUT, "지원하지 않는 소셜 로그인입니다: " + provider);
+            default -> throw new BusinessException(
+                    ErrorCode.INVALID_INPUT, "지원하지 않는 소셜 로그인입니다: " + provider);
         };
     }
 }

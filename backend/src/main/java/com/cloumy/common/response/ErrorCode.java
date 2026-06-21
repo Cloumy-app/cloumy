@@ -16,7 +16,8 @@ public enum ErrorCode {
 
     // OAuth
     OAUTH_PROVIDER_ERROR(HttpStatus.BAD_GATEWAY, "OAUTH_ERROR", "소셜 로그인 처리에 실패했습니다"),
-    OAUTH_USER_INFO_FAILED(HttpStatus.BAD_GATEWAY, "OAUTH_USER_INFO_FAILED", "사용자 정보 조회에 실패했습니다"),
+    OAUTH_USER_INFO_FAILED(HttpStatus.BAD_GATEWAY, "OAUTH_USER_INFO_FAILED",
+            "사용자 정보 조회에 실패했습니다"),
 
     // 사용자
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "사용자를 찾을 수 없습니다"),
@@ -31,7 +32,8 @@ public enum ErrorCode {
 
     // 장소
     PLACE_NOT_FOUND(HttpStatus.NOT_FOUND, "PLACE_NOT_FOUND", "장소를 찾을 수 없습니다"),
-    GPS_VERIFICATION_FAILED(HttpStatus.BAD_REQUEST, "GPS_VERIFICATION_FAILED", "GPS 인증에 실패했습니다. 100m 이내에 위치해야 합니다"),
+    GPS_VERIFICATION_FAILED(HttpStatus.BAD_REQUEST, "GPS_VERIFICATION_FAILED",
+            "GPS 인증에 실패했습니다. 100m 이내에 위치해야 합니다"),
 
     // 공통
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "INVALID_INPUT", "잘못된 입력값입니다"),

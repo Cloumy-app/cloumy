@@ -65,7 +65,7 @@ dependencies {
 
 checkstyle {
     toolVersion = '10.18.1'
-    configFile = file('config/checkstyle/checkstyle.xml')
+    configDirectory = file('config/checkstyle')
 }
 
 tasks.named('test') {
