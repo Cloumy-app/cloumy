@@ -21,8 +21,13 @@ public class AppProperties {
         this.oauth = oauth;
     }
 
-    public Jwt getJwt() { return jwt; }
-    public OAuth getOauth() { return oauth; }
+    public Jwt getJwt() {
+        return jwt;
+    }
+
+    public OAuth getOauth() {
+        return oauth;
+    }
 
     // --- JWT ---
 
