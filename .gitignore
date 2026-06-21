@@ -21,6 +21,7 @@ target/
 *.class
 *.jar
 *.war
+!backend/gradle/wrapper/gradle-wrapper.jar
 .gradle/
 build/
 out/
