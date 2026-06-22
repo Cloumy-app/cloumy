@@ -14,6 +14,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -66,8 +67,14 @@ public class AiServiceClient {
                     .timeout(Duration.ofSeconds(120))
                     .build();
 
-            httpClient.send(request, HttpResponse.BodyHandlers.ofLines())
-                    .body()
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofLines());
+            if (response.statusCode() >= 400) {
+                String errorBody = response.body().collect(Collectors.joining("\n"));
+                log.error("FastAPI 오류 응답: status={}, body={}", response.statusCode(), errorBody);
+                onError.accept(new RuntimeException("FastAPI 오류: " + response.statusCode()));
+                return;
+            }
+            response.body()
                     .filter(line -> !line.isBlank())
                     .forEach(onLine);
 
