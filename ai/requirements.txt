@@ -23,7 +23,7 @@ redis==5.2.1
 httpx==0.28.1
 
 # Route Optimization
-ortools==9.11.4210
+ortools==9.15.6755
 
 # Scripts
 python-dotenv==1.0.1
