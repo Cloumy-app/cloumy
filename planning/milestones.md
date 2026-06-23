@@ -38,7 +38,7 @@ Hidden Gems 콜드스타트 방지 + 핵심 가정 사전 검증
 **프로젝트 초기화**
 - [ ] GitHub 레포지토리 생성 (cloumy-app, cloumy-backend, cloumy-ai)
 - [ ] GitHub Actions CI/CD 파이프라인 설정
-- [ ] Docker Compose 로컬 환경 구성 (PostgreSQL + PostGIS + pgvector, Redis)
+- [x] Docker Compose 로컬 환경 구성 (PostgreSQL + PostGIS + pgvector, Redis)
 - [ ] Spring Boot 프로젝트 초기화 (Gradle, 의존성)
 - [ ] FastAPI 프로젝트 초기화 (requirements.txt)
 - [ ] React Native + Expo 프로젝트 초기화
@@ -51,13 +51,13 @@ Hidden Gems 콜드스타트 방지 + 핵심 가정 사전 검증
 - [x] 인덱스 생성 (PostGIS GiST, GIN 5종, ivfflat, 부분 인덱스 등 총 29개)
 
 **API 키 및 환경 변수**
-- [ ] Anthropic API 키 발급 (Claude Sonnet 4.6 / Haiku 4.5)
-- [ ] OpenAI API 키 발급 (임베딩용 — text-embedding-3-small)
-- [ ] Google Maps Platform 키 발급
-- [ ] 카카오 개발자 앱 생성 (OAuth, 로컬 API, 모빌리티 API)
-- [ ] TourAPI 키 발급 (한국관광공사, 무료)
+- [x] Anthropic API 키 발급 (Claude Sonnet 4.6 / Haiku 4.5)
+- [x] OpenAI API 키 발급 (임베딩용 — text-embedding-3-small)
+- [x] Google Maps Platform 키 발급
+- [x] 카카오 개발자 앱 생성 (OAuth, 로컬 API, 모빌리티 API)
+- [x] TourAPI 키 발급 (한국관광공사, 무료)
 - [ ] KOPIS Open API 키 발급 (공연예술통합전산망, 무료)
-- [ ] OpenWeatherMap API 키 발급 (무료 티어, 일 1,000콜 — 국내·해외 통합, 기상청 대체)
+- [x] OpenWeatherMap API 키 발급 (무료 티어, 일 1,000콜 — 국내·해외 통합, 기상청 대체)
 - [ ] 네이버 블로그 검색 API 키 발급 (트렌딩 장소 파이프라인용, 무료)
 - [ ] AWS S3 버킷 생성
 - [ ] FCM 프로젝트 설정

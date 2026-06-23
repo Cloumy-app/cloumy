@@ -1,5 +1,47 @@
-# 로컬 개발 전용 — DB + Redis만 실행 (운영은 docker-compose.prod.yml)
+# 로컬 개발 전용 — DB + Redis + Spring + FastAPI 전체 스택
+# 빠른 개발 시: docker compose up -d postgres redis 후 앱은 직접 실행
 services:
+  spring:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    env_file: .env
+    environment:
+      POSTGRES_JDBC_URL: jdbc:postgresql://postgres:5432/cloumy
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      FASTAPI_URL: http://fastapi:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      fastapi:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - cloumy-network
+
+  fastapi:
+    build:
+      context: ./ai
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file: ai/.env
+    environment:
+      POSTGRES_URL: postgresql+asyncpg://cloumy:${POSTGRES_PASSWORD:-password}@postgres:5432/cloumy
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - cloumy-network
+
   postgres:
     build:
       context: ./db
@@ -19,6 +61,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - cloumy-network
 
   redis:
     image: redis:7-alpine
@@ -31,6 +75,12 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - cloumy-network
 
 volumes:
   postgres_data:
+
+networks:
+  cloumy-network:
+    driver: bridge

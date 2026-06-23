@@ -100,9 +100,9 @@
 
 | 구간 | 프로토콜 | 비고 |
 |------|----------|------|
-| 클라이언트 ↔ Spring | HTTPS REST | 일반 API 요청 |
-| 클라이언트 ↔ FastAPI | WebSocket | 챗봇 스트리밍, 루트 생성 스트리밍 |
-| Spring ↔ FastAPI | HTTP (내부) | `X-Internal-Key` 헤더 인증 |
+| 클라이언트 ↔ Spring | HTTPS REST + SSE | 일반 API 요청 + 루트 생성 스트리밍 프록시 |
+| Spring ↔ FastAPI | HTTP ndjson (내부) | `X-Internal-Key` 헤더 인증, SSE 스트리밍 프록시 |
+| 클라이언트 ↔ Spring (챗봇) | WebSocket | 챗봇 스트리밍 (Phase 2) |
 | 그룹 여행 동기화 | WebSocket + Redis Pub/Sub | 실시간 일정 공유 |
 
 ### MVP → MSA 전환 전략
@@ -151,8 +151,7 @@ cloumy/
 │       ├── services/          # RAG · TSP · 챗봇
 │       ├── models/            # Pydantic 모델
 │       └── config/            # 환경 설정
-├── db/                        # PostgreSQL 초기화 스크립트
-├── nginx/                     # Reverse Proxy 설정
+├── db/                        # PostgreSQL 초기화 스크립트 · nginx.conf (리버스 프록시)
 ├── docs/                      # 기획서 · API 명세 · 데이터 모델
 ├── planning/                  # 마일스톤 · 우선순위
 ├── docker-compose.yml
@@ -178,17 +177,21 @@ git clone https://github.com/dlwldn30/cloumy.git
 cd cloumy
 
 # 2. 환경 변수 설정
-cp .env.example .env
-# .env 파일을 열어 필요한 API 키 입력
+cp .env.example .env          # Spring 환경 변수
+cp ai/.env.example ai/.env   # FastAPI 환경 변수
+# 각 .env 파일을 열어 API 키 입력
 
-# 3. DB · Redis 실행
-make up
+# 3. 전체 스택 실행 (DB + Redis + Spring + FastAPI 빌드 포함)
+make up   # 첫 실행 시 빌드 3~5분 소요
 
-# 4. 백엔드 실행
-cd backend
-gradle bootRun
+# ── 개발 모드 (코드 반복 수정 시 권장) ──────────────────────
+# DB·Redis만 Docker로 올리고 앱은 직접 실행
+docker compose up -d postgres redis
 
-# 5. AI 서비스 실행
+# Spring (백엔드)
+cd backend && ./gradlew bootRun
+
+# FastAPI (AI 서비스)
 cd ai
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
@@ -209,7 +212,7 @@ uvicorn app.main:app --reload
 | `KAKAO_REST_API_KEY` | 카카오 로컬 API · OAuth | ✅ |
 | `GOOGLE_MAPS_API_KEY` | 지도 렌더링 | 지도 기능 시 |
 | `TOSS_PAYMENTS_SECRET_KEY` | 결제 | 결제 기능 시 |
-| `WEATHER_API_KEY` | 기상청 API | 챗봇 날씨 연동 시 |
+| `OPENWEATHERMAP_API_KEY` | OpenWeatherMap (날씨) | 챗봇 날씨 연동 시 |
 
 ---
 
@@ -234,18 +237,20 @@ AI 루트 생성·저장은 **트립 패스** 결제 후 사용 가능합니다.
 - [x] Spring Boot 프로젝트 초기화
 - [x] JWT + OAuth 2.0 인증 구현
 - [x] 트립 패스 검증 로직
-- [ ] GitHub Actions CI/CD
-- [ ] FastAPI 프로젝트 초기화
+- [x] GitHub Actions CI/CD
+- [x] FastAPI 프로젝트 초기화
 - [ ] React Native + Expo 초기화
-- [ ] DB 스키마 마이그레이션 (Flyway)
+- [x] DB 스키마 마이그레이션 (Flyway, V1~V5)
 
 ### Phase 1 — 데이터 파이프라인 + AI 루트 생성 (Week 3~10)
-- [ ] TourAPI / 카카오 로컬 / KOPIS 데이터 수집기
+- [x] TourAPI 데이터 수집기 (20,363건) — 2026-06-21
+- [ ] 카카오 로컬 / KOPIS 데이터 수집기
 - [ ] OpenAI 임베딩 생성 → pgvector 저장
-- [ ] RAG 파이프라인 (pgvector 유사도 검색)
+- [x] LangChain LCEL + PostgisTagRetriever Phase A — 2026-06-21
+- [x] Spring SSE 스트리밍 프록시 (루트 생성) — 2026-06-22
+- [ ] RAG 파이프라인 Phase B (PgvectorRetriever 교체)
 - [ ] OR-Tools TSP 동선 최적화
-- [ ] 루트 생성 스트리밍 (WebSocket)
-- [ ] Pin & Reshuffle
+- [ ] 슬롯 대안 추천 (🔄)
 - [ ] 지도 시각화 (react-native-maps)
 
 ### Phase 2 — AI 챗봇 + 예산 관리 (Week 9~14)
