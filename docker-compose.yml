@@ -13,6 +13,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       FASTAPI_URL: http://fastapi:8000
+      SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
+      SPRING_FLYWAY_BASELINE_VERSION: "5"
     depends_on:
       postgres:
         condition: service_healthy
