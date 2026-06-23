@@ -25,18 +25,21 @@ cloumy-ai/
 ├── app/
 │   ├── main.py
 │   ├── routes/
-│   │   ├── route_gen.py       # POST /ai/routes/generate
-│   │   ├── reshuffle.py       # POST /ai/routes/reshuffle
-│   │   ├── chatbot.py         # WebSocket /ai/chat
-│   │   ├── embedding.py       # POST /ai/embeddings (내부용)
-│   │   └── scoring.py         # POST /ai/places/rarity-score
+│   │   ├── route_gen.py          # POST /ai/routes/generate
+│   │   ├── slot_alternatives.py  # POST /ai/routes/slots/{slot_id}/alternatives
+│   │   ├── chatbot.py            # WebSocket /ai/chat
+│   │   ├── embedding.py          # POST /ai/embeddings (내부용)
+│   │   └── scoring.py            # POST /ai/places/rarity-score
 │   │
 │   ├── services/
-│   │   ├── rag_service.py     # pgvector 검색
-│   │   ├── tsp_service.py     # OR-Tools 동선 최적화
-│   │   ├── model_router.py    # Haiku ↔ Sonnet 라우팅
-│   │   ├── expense_parser.py  # 자연어 지출 파싱
-│   │   └── rarity_scorer.py  # 희소성 점수 계산
+│   │   ├── rag_service.py      # pgvector 검색 + 카테고리 쿼터 보장
+│   │   ├── tsp_service.py      # OR-Tools 동선 최적화
+│   │   ├── model_router.py     # Haiku ↔ Sonnet 라우팅
+│   │   ├── weather_service.py  # OpenWeatherMap 날씨 예보 (graceful fallback)
+│   │   ├── fallback_service.py # Redis 1차 → DB 유사 루트 2차 폴백
+│   │   ├── place_validator.py  # LLM 출력 place_id 재검증 + 유사 장소 교체
+│   │   ├── expense_parser.py   # 자연어 지출 파싱
+│   │   └── rarity_scorer.py   # 희소성 점수 계산
 │   │
 │   ├── prompts/
 │   │   ├── route_gen.txt      # 루트 생성 시스템 프롬프트 (캐시됨)
@@ -57,57 +60,60 @@ cloumy-ai/
 | 기능 | 모델 | 이유 |
 |------|------|------|
 | AI 루트 생성 | Claude Sonnet 4.6 | 복잡한 JSON 구조 출력, 긴 장소 목록 처리 안정적 |
-| Pin & Reshuffle | Claude Haiku 4.5 | 단순 슬롯 재정렬 → 저비용 충분 |
+| 슬롯 대안 추천 | Claude Haiku 4.5 | 슬롯 단위 대안 3개 검색 → 저비용 충분 |
 | 챗봇 단순 질문 | Claude Haiku 4.5 | 빠른 응답 (현지 추천, 거리 안내 등) |
 | 챗봇 복잡 플래닝 | Claude Sonnet 4.6 | 멀티턴 컨텍스트 + Function Calling |
 | 예산 자연어 파싱 | Claude Haiku 4.5 | 금액·카테고리 추출 단순 작업 |
 | 검색 쿼리 생성 | Claude Haiku 4.5 | 입력값 → 검색 키워드 변환 |
 
-## AI 루트 생성 RAG 파이프라인
+## AI 루트 생성 LCEL 파이프라인
+
+### Phase A — PostgisTagRetriever (현재)
 
 ```python
-# 전체 흐름
+# Phase A 전체 흐름 (실제 구현 — ai/app/services/route_service.py)
 
-# 1. 검색 쿼리 생성 (Haiku)
-search_keywords = await generate_search_keywords(user_input)
-# 예: "부산 먹방 해산물", "부산 힐링 해변"
+# 1. Haiku LCEL: themes → category_tags 키워드 추출
+tag_chain = tag_prompt | ChatAnthropic(model="claude-haiku-4-5") | JsonOutputParser()
+tags = await tag_chain.ainvoke({"themes": user_input.themes})
 
-# 2. 장소 검색 (멀티소스 병렬)
-candidates = await asyncio.gather(
-    pgvector_similarity_search(keywords, limit=30),   # 의미 기반
-    postgis_radius_search(destination, radius_km=20), # 위치 기반
-    filter_by_tags(user_tags),                        # 태그 필터
-    get_hidden_gems(include=user_input.include_hidden_gems),
+# 2. PostgisTagRetriever: ST_DWithin + category_tags && (embedding 없음)
+retriever = PostgisTagRetriever(db=db, city_coords=CITY_CENTERS[city], tags=tags)
+candidates = await retriever.ainvoke("")
+
+# 3. Sonnet 스트리밍 — Anthropic SDK 직접 사용 (LCEL astream 아님)
+#    이유: LangChain ChatAnthropic의 cache_control 안정성 문제로 SDK 직접 사용
+async with _anthropic.messages.stream(
+    model="claude-sonnet-4-6",
+    system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
+    messages=[{"role": "user", "content": f"후보 장소: {candidates}\n요청: {request}"}],
+    max_tokens=4096,
+) as stream:
+    async for text in stream.text_stream:
+        yield text  # ndjson 한 줄씩
+```
+
+### Phase B — PgvectorRetriever로 업그레이드 (앱 확인 후)
+
+```python
+# Phase B — Retriever만 교체, 나머지 체인 동일
+
+# 1. Haiku LCEL: themes → 검색 쿼리 생성 (동일)
+# 2. PgvectorRetriever: embedding <=> query_vec 유사도 검색
+retriever = PgvectorRetriever(db=db, city_coords=CITY_CENTERS[city])
+# → 멀티소스 병렬: pgvector 30개 + PostGIS 20개 + tag fallback
+
+# 3. Sonnet LCEL 체인 (동일 — 변경 없음)
+route_chain = (
+    {"context": retriever, "request": RunnablePassthrough()}  # ← 이것만 변경
+    | route_prompt | sonnet_llm | StrOutputParser()
 )
-# 후보 50~100개 수집
 
-# 3. 필터링
-filtered = filter_places(
-    candidates,
-    budget=user_input.total_budget,
-    exclude_visited=user_visited_history,
-    weather=current_weather,           # 우천 시 실외 하향
-)
-# 최종 후보 20~30개
+# 4. 동선 최적화 (Phase B 추가)
+optimized_slots = tsp_optimize(candidates, anchor_places=..., density=...)  # OR-Tools TSP
 
-# 4. 동선 최적화 (OR-Tools TSP)
-optimized_slots = tsp_optimize(
-    filtered,
-    anchor_places=user_input.anchor_places,
-    density=user_input.density,        # relaxed/normal/packed
-)
-
-# 5. 루트 생성 (Sonnet 4.6, 스트리밍)
-route = await generate_route_with_llm(
-    slots=optimized_slots,
-    user_input=user_input,
-    stream=True,                       # Day별 순차 스트리밍
-)
-
-# 6. 환각 방지 검증
+# 5. 환각 방지 검증 (Phase C)
 validated_route = await validate_place_ids(route, db)
-# LLM 출력 place_id를 실제 DB에서 재조회
-# 존재하지 않는 ID → 유사 장소로 자동 교체
 ```
 
 ## Prompt Caching 전략 (비용 핵심)
@@ -245,7 +251,7 @@ def calculate_rarity_score(kakao_review_count: int, naver_review_count: int, tou
 |------|------|------|
 | 첫 루트 생성 | 5~10초 | Sonnet 스트리밍, Day 1 먼저 표시 |
 | 캐시 히트 | 1초 이내 | Redis 캐시 |
-| Pin & Reshuffle | 2~3초 | Haiku + 부분 재계산 |
+| 슬롯 대안 추천 (🔄) | 2~3초 | Haiku + 인접 슬롯 이동시간만 재계산 |
 | 챗봇 단순 | 1~2초 | Haiku |
 | 챗봇 루트 수정 | 3~5초 | Sonnet 스트리밍 |
 
@@ -267,19 +273,25 @@ def calculate_rarity_score(kakao_review_count: int, naver_review_count: int, tou
 
 ```bash
 ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...          # 임베딩 전용
+OPENAI_API_KEY=sk-...               # 임베딩 전용
 POSTGRES_URL=postgresql://...
 REDIS_URL=redis://...
-GOOGLE_MAPS_API_KEY=...        # 좌표 검증용
+GOOGLE_MAPS_API_KEY=...             # 좌표 검증용
+KAKAO_REST_API_KEY=...              # 카카오 로컬 API (배치 + 실시간 보충)
+OPENWEATHERMAP_API_KEY=...
+TOURAPI_KEY=...
+NAVER_SEARCH_CLIENT_ID=...          # 네이버 블로그 검색 (trend_score 갱신)
+NAVER_SEARCH_CLIENT_SECRET=...
 ```
 
 ## AI 기능 개발 권장 순서
 
 ```
-Week 1~2:  FastAPI 뼈대 + Claude API 연결 + 모델 라우팅 설계
-Week 3~4:  TourAPI + 카카오 로컬 API 수집기 + 데이터 파이프라인
-Week 5~6:  pgvector 임베딩 → RAG 파이프라인 → 루트 생성 MVP
-Week 7~8:  OR-Tools TSP 동선 최적화 + Pin & Reshuffle
+Week 1~2:  FastAPI 뼈대 + Claude API 연결 ✅ 완료
+Week 3~4:  루트 생성 Phase A (LangChain LCEL + PostgisTagRetriever) + Spring SSE 프록시
+Week 5:    앱에서 결과 확인 + 품질 평가
+Week 6~7:  카카오 로컬 수집기 + KOPIS + OpenAI 임베딩 배치 (20,363건)
+Week 7~8:  루트 생성 Phase B (PgvectorRetriever 교체) + OR-Tools TSP
 Week 9~12: 챗봇 (Function Calling + 멀티턴 + Redis 세션 + 지출 파싱)
 Week 13~14: 희소성 점수 알고리즘 + Hidden Gems 연동
 ```

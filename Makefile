@@ -1,8 +1,12 @@
-.PHONY: up down build logs ps clean
+.PHONY: up down build logs ps clean db-only
 
-# 로컬 개발 환경 (DB + Redis만)
+# 전체 스택 (DB + Redis + Spring + FastAPI)
 up:
-	docker compose up -d
+	docker compose up -d --build
+
+# 개발 모드 — DB·Redis만 올리고 Spring/FastAPI는 직접 실행
+db-only:
+	docker compose up -d postgres redis
 
 down:
 	docker compose down

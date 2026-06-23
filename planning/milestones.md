@@ -38,7 +38,7 @@ Hidden Gems 콜드스타트 방지 + 핵심 가정 사전 검증
 **프로젝트 초기화**
 - [ ] GitHub 레포지토리 생성 (cloumy-app, cloumy-backend, cloumy-ai)
 - [ ] GitHub Actions CI/CD 파이프라인 설정
-- [ ] Docker Compose 로컬 환경 구성 (PostgreSQL + PostGIS + pgvector, Redis)
+- [x] Docker Compose 로컬 환경 구성 (PostgreSQL + PostGIS + pgvector, Redis)
 - [ ] Spring Boot 프로젝트 초기화 (Gradle, 의존성)
 - [ ] FastAPI 프로젝트 초기화 (requirements.txt)
 - [ ] React Native + Expo 프로젝트 초기화
@@ -51,13 +51,13 @@ Hidden Gems 콜드스타트 방지 + 핵심 가정 사전 검증
 - [x] 인덱스 생성 (PostGIS GiST, GIN 5종, ivfflat, 부분 인덱스 등 총 29개)
 
 **API 키 및 환경 변수**
-- [ ] Anthropic API 키 발급 (Claude Sonnet 4.6 / Haiku 4.5)
-- [ ] OpenAI API 키 발급 (임베딩용 — text-embedding-3-small)
-- [ ] Google Maps Platform 키 발급
-- [ ] 카카오 개발자 앱 생성 (OAuth, 로컬 API, 모빌리티 API)
-- [ ] TourAPI 키 발급 (한국관광공사, 무료)
+- [x] Anthropic API 키 발급 (Claude Sonnet 4.6 / Haiku 4.5)
+- [x] OpenAI API 키 발급 (임베딩용 — text-embedding-3-small)
+- [x] Google Maps Platform 키 발급
+- [x] 카카오 개발자 앱 생성 (OAuth, 로컬 API, 모빌리티 API)
+- [x] TourAPI 키 발급 (한국관광공사, 무료)
 - [ ] KOPIS Open API 키 발급 (공연예술통합전산망, 무료)
-- [ ] OpenWeatherMap API 키 발급 (무료 티어, 일 1,000콜 — 국내·해외 통합, 기상청 대체)
+- [x] OpenWeatherMap API 키 발급 (무료 티어, 일 1,000콜 — 국내·해외 통합, 기상청 대체)
 - [ ] 네이버 블로그 검색 API 키 발급 (트렌딩 장소 파이프라인용, 무료)
 - [ ] AWS S3 버킷 생성
 - [ ] FCM 프로젝트 설정
@@ -65,34 +65,48 @@ Hidden Gems 콜드스타트 방지 + 핵심 가정 사전 검증
 
 ---
 
-## Phase 1: 데이터 파이프라인 + AI 루트 생성 (Week 3~10)
+## Phase 1: AI 루트 생성 + 데이터 파이프라인 (Week 3~10)
 
 ### 목표
-Cloumy의 핵심 가치 — AI 루트 생성 완성
+Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 개선)
 
-### Week 3~4: 데이터 파이프라인
+### Week 3~4: AI 루트 생성 Phase A (LangChain LCEL + PostGIS 태그 MVP)
 
-- [ ] TourAPI 수집기 구현 (Spring @Scheduled, 1일 1회 — 26만건)
+> **전략**: embedding 없이 즉시 구현 → 앱에서 확인 → Phase B에서 Retriever만 교체
+
+- [x] FastAPI `models/schemas.py` — `RouteGenRequest` Pydantic 모델
+- [x] FastAPI `services/retrievers.py` — `PostgisTagRetriever(BaseRetriever)`: `ST_DWithin + category_tags &&`
+- [x] FastAPI `services/route_service.py` — CITY_CENTERS 하드코딩 + Haiku LCEL 태그 추출 + Sonnet SDK 스트리밍 (cache_control 안정성으로 LCEL 대신 직접 사용)
+- [x] FastAPI `routes/route_gen.py` — `POST /ai/routes/generate` StreamingResponse (ndjson)
+- [x] FastAPI `main.py` 수정 — `include_router` 추가
+- [x] Spring `Route.java` 엔티티 + `RouteRepository.java` (2026-06-22, `trip/entity/`)
+- [x] Spring `AiServiceClient.java` — Java 21 HttpClient blocking + 가상 스레드 (2026-06-22, WebClient 아님)
+- [x] Spring `RouteController.java` — `POST /v1/routes/generate` MVC SseEmitter + 가상 스레드 (2026-06-22)
+- [x] `application.yml` — `app.fastapi.url`, `app.internal-api-key` 추가 (2026-06-22)
+
+### Week 5: 앱 확인 + 품질 평가
+
+- [ ] 앱에서 SSE 스트리밍 실제 확인
+- [ ] 루트 결과 품질 평가 (카테고리 다양성, 동선 합리성)
+- [ ] Phase B 진행 여부 결정 (품질 충분하면 Phase C 품질 개선으로 바로 이동 가능)
+
+### Week 6~7: 데이터 파이프라인 보강 + Phase B 준비
+
 - [ ] 카카오 로컬 API 수집기 구현 (3일 1회)
   - ⚠️ 현재 일 10만건 무료, 2026년 말 이후 건당 50원 전환 예정 — 쿼터 관리 필요
 - [ ] KOPIS Open API 수집기 구현 (공연·콘서트·뮤지컬 일정, 1일 1회)
 - [ ] 중복 장소 병합 로직 (PostGIS 반경 100m)
 - [ ] 카테고리 태그 변환 테이블 구현
 - [ ] 좌표 검증 (PostGIS 행정구역 포함 여부)
-- [ ] 장소 데이터 초기 시딩 — MVP: 5개 핵심 여행지 (제주, 부산, 서울, 경주, 강릉) / 베타 출시 전: 국내 20개 도시 확장
-- [ ] OpenAI 임베딩 생성 → pgvector 저장 (@Async)
+- [ ] OpenAI 임베딩 배치 생성 (20,363건 × text-embedding-3-small, ~$2~3)
 
-### Week 5~6: RAG 파이프라인 + 루트 생성 MVP
+### Week 7~8: AI 루트 생성 Phase B (pgvector Retriever 교체) + OR-Tools TSP
 
-- [ ] FastAPI 뼈대 + Claude API 연결
-- [ ] 모델 라우팅 설계 (Haiku ↔ Sonnet)
-- [ ] pgvector 유사도 검색 구현
-- [ ] PostGIS 반경 검색 구현
-- [ ] 태그 필터 검색 구현
-- [ ] 루트 생성 시스템 프롬프트 작성 + Prompt Caching 적용
-- [ ] 기본 루트 생성 API 동작 확인
+- [ ] `retrievers.py`에 `PgvectorRetriever` 추가 (embedding `<=>` 유사도)
+- [ ] `route_service.py`에서 Retriever 한 줄 교체 (나머지 체인 동일)
+- [ ] 멀티소스 병렬: pgvector 30개 + PostGIS 20개 + tag fallback
 
-### Week 7~8: OR-Tools TSP + 슬롯 대안 추천
+### Week 8~9: OR-Tools TSP + 슬롯 대안 추천
 
 - [ ] OR-Tools TSP 동선 최적화 구현
   - 앵커 장소 고정 로직
@@ -109,7 +123,7 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성
 - [ ] 슬롯 📌🔄❌ 액션 UI 구현
 - [ ] 환각 방지 검증 (place_id 재조회)
 
-### Week 9~10: 루트 생성 완성도 향상
+### Week 10~11: 루트 생성 완성도 향상
 
 - [ ] 스트리밍 응답 (WebSocket, Day별 순차)
 - [ ] 응답 속도 최적화 (Redis 루트 캐시)

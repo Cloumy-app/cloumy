@@ -276,19 +276,76 @@ messages = [
 
 ---
 
+## 9. 네이버 블로그 검색 API (트렌딩 장소)
+
+**역할**: `places.trend_score` 주기적 갱신 — 핫플·유행 장소 RAG 가중치 반영  
+**비용**: 무료 (하루 25,000콜)  
+**키**: `NAVER_SEARCH_CLIENT_ID` / `NAVER_SEARCH_CLIENT_SECRET` (`ai/.env`)  
+**수집 주기**: 배치, 주 1회  
+**파이프라인 파일**: `scripts/collect_naver_trend.py`
+
+### 사용 엔드포인트
+
+```http
+GET https://openapi.naver.com/v1/search/blog.json
+X-Naver-Client-Id: {NAVER_SEARCH_CLIENT_ID}
+X-Naver-Client-Secret: {NAVER_SEARCH_CLIENT_SECRET}
+
+파라미터:
+  query   = "부산 핫플"   # 목적지 + 키워드 조합
+  display = 100
+  sort    = date          # 최신순 → 최근 트렌드 반영
+```
+
+### trend_score 계산
+
+```python
+# 키워드 예시: "#{목적지} 맛집", "#{목적지} 카페", "#{목적지} 핫플"
+blog_count = naver_blog_search(f"{destination} {place_name}").total_count
+kakao_review_count = place.review_count  # 카카오 로컬 API 수집 시 저장
+
+# 가중 합산
+raw_score = blog_count * 0.6 + kakao_review_count * 0.4
+
+# 전체 장소 분포에서 백분위 정규화 (0~100)
+trend_score = get_percentile(raw_score, all_places_scores)
+
+# 업데이트
+place.trend_score = trend_score
+place.trend_updated_at = now()
+place.trend_source = ['naver_blog', 'kakao']
+```
+
+### RAG 가중치 연동
+
+| 사용자 태그 선택 | trend_weight | 비고 |
+|----------------|-------------|------|
+| 🔥 핫플·트렌딩 | 0.4 | 최근 블로그 언급 많은 장소 우선 |
+| 🏡 현지인 로컬 | 0.1 | 트렌딩 하향, 덜 알려진 장소 우선 |
+| 미선택 (기본값) | 0.25 | 균형 |
+
+> ※ trend_weight는 Hidden Gems 비율(방문빈도 질문)과 독립적으로 동작
+
+---
+
 ## 8. 데이터 수집 파이프라인 전체 흐름
 
 ```
 [Week 3~4 배치 작업]
 
-TourAPI
-  → 도시별 areaBasedList 전체 수집
-  → 상세 정보 (detailCommon) 병렬 요청 (rate limit: 1000/일)
-  → places 테이블 INSERT
+TourAPI + 카카오 로컬 API (동시 적재 — 두 소스 항상 혼합)
+  TourAPI:
+    → 도시별 areaBasedList 전체 수집
+    → 상세 정보 (detailCommon) 병렬 요청 (rate limit: 1000/일)
+    → places 테이블 INSERT (source='tourapi')
+  카카오 로컬 API:
+    → 카테고리별 키워드 검색 (FD6 음식점, CE7 카페, AT4 관광명소)
+    → TourAPI와 독립적으로 places 테이블 INSERT (source='kakao')
+    → 좌표 정확도 검증 (TourAPI 좌표 이상 시 카카오 좌표로 교정)
 
-카카오 로컬 API
-  → TourAPI 미수집 장소 보강 (핫플, 최신 맛집)
-  → 좌표 정확도 검증 (TourAPI 좌표 이상 시 카카오 좌표로 교정)
+네이버 블로그 검색 API (배치, 주 1회)
+  → "#{목적지} 맛집", "#{목적지} 카페", "#{목적지} 핫플" 검색
+  → 블로그 게시물 수 + 카카오 리뷰 수 → trend_score 계산 및 갱신
 
 OpenAI Embedding (BackgroundTasks)
   → places 테이블 신규 행마다 비동기 임베딩 생성
@@ -298,7 +355,8 @@ OpenAI Embedding (BackgroundTasks)
 [실시간 — 루트 생성 요청 시]
 
 카카오 로컬 API
-  → RAG 후보 20개 미만 → 키워드 검색으로 즉시 보충
+  → 카테고리별 최소 쿼터 미달 시만 실시간 보충 (기존 "총 20개 미만" 조건 폐기)
+    쿼터 기준 (normal): 식당·카페 2개 + 관광·체험 2개 + 기타 1개
   → 챗봇 현위치 검색
 
 OpenWeatherMap API

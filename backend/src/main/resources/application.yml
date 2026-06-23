@@ -66,3 +66,6 @@ app:
       client-id: ${NAVER_CLIENT_ID:}
       client-secret: ${NAVER_CLIENT_SECRET:}
       redirect-uri: ${NAVER_REDIRECT_URI:http://localhost:8080/auth/callback/naver}
+  fastapi:
+    url: ${FASTAPI_URL:http://localhost:8000}
+  internal-api-key: ${INTERNAL_API_KEY}

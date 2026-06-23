@@ -5,7 +5,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./db/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
     depends_on:
       - spring
@@ -28,7 +28,7 @@ services:
 
   fastapi:
     image: ghcr.io/cloumy/ai:${IMAGE_TAG:-latest}
-    env_file: .env
+    env_file: ai/.env
     depends_on:
       postgres:
         condition: service_healthy
