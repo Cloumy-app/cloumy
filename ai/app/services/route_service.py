@@ -11,6 +11,7 @@ from app.config.settings import settings
 from app.models.schemas import RouteGenRequest
 from app.services.place_validator import validate_route_slot
 from app.services.retrievers import PostgisTagRetriever
+from app.services.tsp_service import reorder_slots
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +142,12 @@ async def stream_route(
     # 환각 방지 2단계용 ID→이름 조회 테이블
     candidate_lookup = {doc.metadata["id"]: doc.metadata["name"] for doc in candidates}
 
+    # TSP 동선 최적화용 ID→좌표 조회 테이블
+    coord_lookup: dict[str, tuple[float, float]] = {
+        doc.metadata["id"]: (float(doc.metadata["lat"]), float(doc.metadata["lng"]))
+        for doc in candidates
+    }
+
     # 4. 후보 장소 목록 텍스트 구성
     candidates_text = "\n".join(
         f"[{i + 1}] id={doc.metadata['id']} | {doc.page_content}"
@@ -194,7 +201,11 @@ async def stream_route(
         logger.error("Sonnet 스트리밍 오류: %s", e)
         raise
 
-    # 스트리밍 완료 후 Redis에 저장 (TTL 24h)
+    # 스트리밍 완료 후 TSP 동선 최적화 (캐시에는 최적화된 순서 저장)
+    if collected:
+        collected = reorder_slots(collected, coord_lookup)
+
+    # Redis 캐시 저장 (TTL 24h)
     if redis is not None and collected:
         try:
             await redis.setex(_cache_key(request), 86400, "".join(collected))
