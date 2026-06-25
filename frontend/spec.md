@@ -11,7 +11,7 @@
 | 서버 상태 | TanStack Query | 캐싱, stale-while-revalidate |
 | 지도 | react-native-maps (Google Maps) | Day별 경로 폴리라인, 핀 클러스터링 |
 | 실시간 | socket.io-client | 챗봇 스트리밍, 그룹 동기화 |
-| UI 컴포넌트 | Tamagui | 크로스플랫폼 성능 최적화 |
+| UI 컴포넌트 | NativeWind v4 + Tailwind v3 | 와이어프레임 Tailwind 클래스 직접 이식 가능 |
 | 폼 | React Hook Form + Zod | 루트 생성 Step 입력, 예산 폼 |
 | 결제 | react-native-webview | 토스페이먼츠 웹뷰 |
 | 차트 | Victory Native | 예산 도넛 차트, 지출 리포트 |
