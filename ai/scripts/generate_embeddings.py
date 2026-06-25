@@ -14,6 +14,8 @@ import os
 import tempfile
 from pathlib import Path
 
+BATCH_ID_FILE = Path("/tmp/embeddings_batch_id.txt")  # 재시작 시 기존 배치 재사용
+
 import asyncpg
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
@@ -83,19 +85,33 @@ async def main() -> None:
             upload = await client.files.create(file=f, purpose="batch")
         log.info("업로드 완료: file_id=%s", upload.id)
 
-        # 4. 배치 생성
-        batch = await client.batches.create(
-            input_file_id=upload.id,
-            endpoint="/v1/embeddings",
-            completion_window="24h",
-        )
-        log.info("배치 생성: batch_id=%s status=%s", batch.id, batch.status)
+        # 4. 배치 생성 (이미 생성된 배치 ID가 있으면 재사용)
+        if BATCH_ID_FILE.exists():
+            saved_id = BATCH_ID_FILE.read_text().strip()
+            log.info("기존 배치 재사용: %s", saved_id)
+            batch = await client.batches.retrieve(saved_id)
+        else:
+            batch = await client.batches.create(
+                input_file_id=upload.id,
+                endpoint="/v1/embeddings",
+                completion_window="24h",
+            )
+            BATCH_ID_FILE.write_text(batch.id)
+            log.info("배치 생성: batch_id=%s status=%s", batch.id, batch.status)
 
-        # 5. 폴링 (60초 간격)
+        # 5. 폴링 (60초 간격, 네트워크 오류 시 최대 3회 재시도)
         while batch.status not in ("completed", "failed", "expired", "cancelled"):
             log.info("배치 처리 중: %s — 60초 후 재확인...", batch.status)
             await asyncio.sleep(60)
-            batch = await client.batches.retrieve(batch.id)
+            for attempt in range(3):
+                try:
+                    batch = await client.batches.retrieve(batch.id)
+                    break
+                except Exception as e:
+                    if attempt == 2:
+                        raise
+                    log.warning("폴링 오류 (재시도 %d/3): %s", attempt + 1, e)
+                    await asyncio.sleep(10)
             log.info(
                 "  request_counts: total=%s completed=%s failed=%s",
                 batch.request_counts.total if batch.request_counts else "?",
@@ -151,6 +167,7 @@ async def main() -> None:
             log.warning("여전히 임베딩 없는 장소: %d건 → python -m scripts.generate_embeddings 재실행", remaining)
         else:
             log.info("모든 장소 임베딩 완료!")
+        BATCH_ID_FILE.unlink(missing_ok=True)
 
     finally:
         await pool.close()
