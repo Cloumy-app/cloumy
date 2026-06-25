@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.config.database import create_pool
+from app.config.redis import create_redis
 from app.config.settings import settings
 from app.routes import route_gen
 from app.services.route_service import close_ai_clients
@@ -18,10 +19,12 @@ async def lifespan(app: FastAPI):
     # 앱 시작 — DB 풀 생성 후 app.state에 저장 (라우터에서 request.app.state.db로 접근)
     logger.info("DB 커넥션 풀 생성 중...")
     app.state.db = await create_pool(settings.asyncpg_url)
+    app.state.redis = create_redis(settings.redis_url)
     logger.info("DB 커넥션 풀 준비 완료")
     yield
     # 앱 종료 — DB 풀 및 AI 클라이언트 반환
     await app.state.db.close()
+    await app.state.redis.aclose()
     await close_ai_clients()
     logger.info("DB 커넥션 풀 및 AI 클라이언트 종료")
 

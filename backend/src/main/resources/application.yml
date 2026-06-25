@@ -4,6 +4,9 @@ server:
 spring:
   application:
     name: cloumy-backend
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
   datasource:
     url: ${POSTGRES_JDBC_URL:jdbc:postgresql://localhost:5432/cloumy}
     username: ${POSTGRES_USER:cloumy}

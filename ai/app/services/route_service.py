@@ -9,6 +9,7 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from app.config.settings import settings
 from app.models.schemas import RouteGenRequest
+from app.services.place_validator import validate_route_slot
 from app.services.retrievers import PostgisTagRetriever
 
 logger = logging.getLogger(__name__)
@@ -67,7 +68,7 @@ ROUTE_GEN_SYSTEM_PROMPT = """당신은 한국 여행 전문 플래너입니다. 
 
 async def close_ai_clients() -> None:
     """lifespan 종료 시 호출 — httpx AsyncClient 정상 종료."""
-    await _anthropic.aclose()
+    await _anthropic.close()
     await _haiku.aclose()
 
 
@@ -95,10 +96,29 @@ async def _extract_tags(request: RouteGenRequest) -> list[str]:
         return []
 
 
+def _cache_key(req: RouteGenRequest) -> str:
+    themes = ":".join(sorted(req.themes))
+    return f"route:{req.city}:{req.nights}:{req.group_type}:{req.budget_level}:{themes}"
+
+
 async def stream_route(
     request: RouteGenRequest,
     db: asyncpg.Pool,
+    redis=None,
 ) -> AsyncGenerator[str, None]:
+    # 캐시 히트 시 Redis에서 즉시 반환
+    if redis is not None:
+        try:
+            cached = await redis.get(_cache_key(request))
+            if cached:
+                logger.info("캐시 히트: %s", _cache_key(request))
+                for line in cached.split("\n"):
+                    if line.strip():
+                        yield line + "\n"
+                return
+        except Exception as e:
+            logger.warning("Redis GET 오류 — 캐시 미스로 처리: %s", e)
+
     # 1. Haiku로 테마 → 태그 추출
     tags = await _extract_tags(request)
     logger.info("태그 추출: city=%s tags=%s", request.city, tags)
@@ -118,6 +138,9 @@ async def stream_route(
         yield '{"error": "후보 장소 없음", "city": "' + request.city + '"}\n'
         return
 
+    # 환각 방지 2단계용 ID→이름 조회 테이블
+    candidate_lookup = {doc.metadata["id"]: doc.metadata["name"] for doc in candidates}
+
     # 4. 후보 장소 목록 텍스트 구성
     candidates_text = "\n".join(
         f"[{i + 1}] id={doc.metadata['id']} | {doc.page_content}"
@@ -133,6 +156,7 @@ async def stream_route(
 
     # 5. Sonnet 스트리밍 (Prompt Caching으로 시스템 프롬프트 입력 비용 ~90% 절감)
     buffer = ""
+    collected: list[str] = []
     try:
         async with _anthropic.messages.stream(
             model="claude-sonnet-4-6",
@@ -153,12 +177,27 @@ async def stream_route(
                     line, buffer = buffer.split("\n", 1)
                     line = line.strip()
                     if line:
-                        yield line + "\n"
+                        validated = await validate_route_slot(line, candidate_lookup)
+                        if validated is not None:
+                            collected.append(validated)
+                            yield validated
             # 버퍼 잔여분 처리
             if buffer.strip():
-                yield buffer.strip() + "\n"
+                validated = await validate_route_slot(buffer.strip(), candidate_lookup)
+                if validated is not None:
+                    collected.append(validated)
+                    yield validated
     except GeneratorExit:
         logger.info("클라이언트 연결 종료 — 스트리밍 정상 중단")
+        return  # 부분 수집 데이터가 캐싱되지 않도록 명시적 종료
     except Exception as e:
         logger.error("Sonnet 스트리밍 오류: %s", e)
         raise
+
+    # 스트리밍 완료 후 Redis에 저장 (TTL 24h)
+    if redis is not None and collected:
+        try:
+            await redis.setex(_cache_key(request), 86400, "".join(collected))
+            logger.info("캐시 저장: key=%s lines=%d", _cache_key(request), len(collected))
+        except Exception as e:
+            logger.warning("Redis SET 오류 — 저장 건너뜀: %s", e)

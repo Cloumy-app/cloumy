@@ -22,10 +22,11 @@ async def generate_route(req: RouteGenRequest, request: Request):
         )
 
     db = request.app.state.db
+    redis = getattr(request.app.state, "redis", None)
 
     async def _generate():
         # gen 참조 보관 → GeneratorExit 시 명시적 aclose()로 Anthropic HTTP 연결 보장
-        gen = stream_route(req, db)
+        gen = stream_route(req, db, redis)
         try:
             async for chunk in gen:
                 yield chunk
