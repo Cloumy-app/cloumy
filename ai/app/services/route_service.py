@@ -3,14 +3,12 @@ from typing import AsyncGenerator
 
 import asyncpg
 from anthropic import AsyncAnthropic
-from langchain_anthropic import ChatAnthropic
-from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.prompts import ChatPromptTemplate
+from openai import AsyncOpenAI
 
 from app.config.settings import settings
 from app.models.schemas import RouteGenRequest
 from app.services.place_validator import validate_route_slot
-from app.services.retrievers import PostgisTagRetriever
+from app.services.retrievers import PostgisTagRetriever, PgvectorRetriever
 from app.services.tsp_service import reorder_slots
 
 logger = logging.getLogger(__name__)
@@ -32,25 +30,11 @@ CITY_CENTERS: dict[str, tuple[float, float]] = {
     "거제": (128.6211, 34.8800),
 }
 
-# Haiku LCEL 체인 — themes → category_tags 추출
-_TAG_PROMPT = ChatPromptTemplate.from_messages([
-    (
-        "system",
-        "사용자 여행 테마를 places.category_tags 형식의 한국어 태그 배열로 변환하세요.\n"
-        "반드시 JSON 배열만 반환하세요. 예시: [\"#먹방\", \"#해산물\", \"#현지인픽\"]\n"
-        "절대 객체로 감싸지 마세요. 테마가 없으면 빈 배열 []을 반환하세요.",
-    ),
-    ("user", "테마: {themes}\n도시: {city}\n여행 유형: {group_type}"),
-])
-_haiku = ChatAnthropic(
-    model="claude-haiku-4-5-20251001",
-    max_tokens=256,
-    anthropic_api_key=settings.anthropic_api_key,
-)
-_tag_chain = _TAG_PROMPT | _haiku | JsonOutputParser()
-
 # Anthropic SDK 클라이언트 — Sonnet 스트리밍 (Prompt Caching 안정적 적용)
 _anthropic = AsyncAnthropic(api_key=settings.anthropic_api_key)
+
+# OpenAI 클라이언트 — PgvectorRetriever 쿼리 임베딩용
+_openai = AsyncOpenAI(api_key=settings.openai_api_key)
 
 ROUTE_GEN_SYSTEM_PROMPT = """당신은 한국 여행 전문 플래너입니다. 후보 장소 목록을 바탕으로 Day별 최적 여행 루트를 생성합니다.
 
@@ -70,31 +54,7 @@ ROUTE_GEN_SYSTEM_PROMPT = """당신은 한국 여행 전문 플래너입니다. 
 async def close_ai_clients() -> None:
     """lifespan 종료 시 호출 — httpx AsyncClient 정상 종료."""
     await _anthropic.close()
-    await _haiku.aclose()
-
-
-async def _extract_tags(request: RouteGenRequest) -> list[str]:
-    if not request.themes:
-        return []
-    try:
-        result = await _tag_chain.ainvoke({
-            "themes": ", ".join(request.themes),
-            "city": request.city,
-            "group_type": request.group_type,
-        })
-        # 정상 케이스: ["#먹방", "#해산물"]
-        if isinstance(result, list):
-            return [str(t) for t in result]
-        # Haiku가 {"tags": [...]} 등 dict로 감싸 반환한 경우
-        if isinstance(result, dict):
-            for v in result.values():
-                if isinstance(v, list):
-                    logger.info("태그 추출 — dict 응답에서 배열 추출: key=%s", list(result.keys()))
-                    return [str(t) for t in v]
-        return []
-    except Exception as e:
-        logger.warning("태그 추출 실패 — 빈 배열 폴백: %s", e)
-        return []
+    await _openai.close()
 
 
 def _cache_key(req: RouteGenRequest) -> str:
@@ -120,17 +80,26 @@ async def stream_route(
         except Exception as e:
             logger.warning("Redis GET 오류 — 캐시 미스로 처리: %s", e)
 
-    # 1. Haiku로 테마 → 태그 추출
-    tags = await _extract_tags(request)
-    logger.info("태그 추출: city=%s tags=%s", request.city, tags)
+    # 1. 임베딩 쿼리 텍스트 구성 — 도시 + 테마를 자연어로 조합
+    query_text = f"{request.city} {' '.join(request.themes)}" if request.themes else request.city
+    logger.info("pgvector 쿼리: %s", query_text)
 
-    # 2. PostgisTagRetriever로 후보 장소 조회
-    retriever = PostgisTagRetriever(
-        db=db,
-        city_coords=CITY_CENTERS[request.city],
-        tags=tags,
-    )
-    candidates = await retriever.ainvoke("")
+    # 2. PgvectorRetriever로 유사도 기반 후보 장소 조회
+    # OpenAI API 오류 시 PostgisTagRetriever로 폴백
+    try:
+        retriever = PgvectorRetriever(
+            db=db,
+            openai_client=_openai,
+            city_coords=CITY_CENTERS[request.city],
+        )
+        candidates = await retriever.ainvoke(query_text)
+    except Exception as e:
+        logger.warning("PgvectorRetriever 오류 — PostgisTagRetriever 폴백: %s", e)
+        candidates = await PostgisTagRetriever(
+            db=db,
+            city_coords=CITY_CENTERS[request.city],
+            tags=[],
+        ).ainvoke("")
     logger.info("후보 장소 %d건", len(candidates))
 
     # 3. 후보 장소 0건 조기 차단 — Sonnet 호출 및 환각 방지
