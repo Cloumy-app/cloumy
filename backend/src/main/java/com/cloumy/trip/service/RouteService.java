@@ -2,9 +2,12 @@ package com.cloumy.trip.service;
 
 import com.cloumy.payment.service.PassValidationService;
 import com.cloumy.trip.dto.RouteGenRequest;
+import com.cloumy.trip.dto.RouteListResponse;
 import com.cloumy.trip.entity.Route;
 import com.cloumy.trip.repository.RouteRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,6 +20,15 @@ public class RouteService {
 
     private final PassValidationService passValidationService;
     private final RouteRepository routeRepository;
+
+    public Page<RouteListResponse> getMyRoutes(UUID userId, Pageable pageable) {
+        return routeRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable)
+                .map(r -> new RouteListResponse(
+                        r.getId(), r.getTitle(), r.getDestination(),
+                        r.getStartDate(), r.getEndDate(), r.getNights(),
+                        r.getCreatedAt()
+                ));
+    }
 
     @Transactional
     public Route createRoute(RouteGenRequest req, UUID userId) {
@@ -32,8 +44,8 @@ public class RouteService {
                 .startDate(req.startDate())
                 .endDate(req.endDate())
                 .nights(req.nights())
-                .groupType(req.groupType())
-                .budgetLevel(req.budgetLevel())
+                .groupType(req.groupType().toLowerCase())
+                .budgetLevel(req.budgetLevel().toLowerCase())
                 .tags(tags)
                 .build();
 
