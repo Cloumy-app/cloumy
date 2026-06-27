@@ -38,6 +38,7 @@ public class SecurityConfig {
                         .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers(
                                 "/v1/auth/**",
+                                "/v1/dev/**",   // @Profile("dev") 전용 — prod에서는 컨트롤러 빈 자체가 없어 404
                                 "/actuator/health",
                                 "/error"
                         ).permitAll()

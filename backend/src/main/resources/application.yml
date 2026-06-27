@@ -36,6 +36,8 @@ spring:
   jackson:
     default-property-inclusion: non_null
     time-zone: Asia/Seoul
+    serialization:
+      write-dates-as-timestamps: false
 
 management:
   endpoints:

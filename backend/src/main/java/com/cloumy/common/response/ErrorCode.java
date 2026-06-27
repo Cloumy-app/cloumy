@@ -26,6 +26,10 @@ public enum ErrorCode {
     ROUTE_NOT_FOUND(HttpStatus.NOT_FOUND, "ROUTE_NOT_FOUND", "루트를 찾을 수 없습니다"),
     ROUTE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "ROUTE_ACCESS_DENIED", "루트에 접근 권한이 없습니다"),
 
+    // 슬롯
+    SLOT_NOT_FOUND(HttpStatus.NOT_FOUND, "SLOT_NOT_FOUND", "슬롯을 찾을 수 없습니다"),
+    SLOT_PINNED(HttpStatus.BAD_REQUEST, "SLOT_PINNED", "고정된 슬롯은 삭제할 수 없습니다"),
+
     // 결제/패스
     PASS_REQUIRED(HttpStatus.PAYMENT_REQUIRED, "PASS_REQUIRED", "트립 패스가 필요한 기능입니다"),
     PASS_EXPIRED(HttpStatus.PAYMENT_REQUIRED, "PASS_EXPIRED", "트립 패스가 만료되었습니다"),
