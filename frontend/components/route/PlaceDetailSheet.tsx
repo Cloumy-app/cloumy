@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { View, Text, TouchableOpacity, Modal, ActivityIndicator, Linking, Platform } from 'react-native';
 import { X, MapPin, Clock, Gem, Navigation } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
@@ -9,16 +8,21 @@ interface PlaceDetailSheetProps {
   onClose: () => void;
 }
 
-async function openKakaoMap(lat: number, lng: number, name: string) {
-  const kakaoUrl = `kakaomap://look?p=${lat},${lng}`;
-  const webFallback = `https://map.kakao.com/link/map/${encodeURIComponent(name)},${lat},${lng}`;
+async function openGoogleMaps(lat: number, lng: number) {
+  const appUrl = Platform.select({
+    ios: `comgooglemaps://?q=${lat},${lng}&zoom=15`,
+    android: `geo:${lat},${lng}?q=${lat},${lng}`,
+  });
+  const webUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
-  const canOpen = await Linking.canOpenURL(kakaoUrl);
-  if (canOpen) {
-    await Linking.openURL(kakaoUrl);
-  } else {
-    await Linking.openURL(webFallback);
+  if (appUrl) {
+    const canOpen = await Linking.canOpenURL(appUrl);
+    if (canOpen) {
+      await Linking.openURL(appUrl);
+      return;
+    }
   }
+  await Linking.openURL(webUrl);
 }
 
 export function PlaceDetailSheet({ placeId, onClose }: PlaceDetailSheetProps) {
@@ -95,14 +99,14 @@ export function PlaceDetailSheet({ placeId, onClose }: PlaceDetailSheetProps) {
               </View>
             )}
 
-            {/* 카카오맵 딥링크 버튼 */}
+            {/* 구글 지도 딥링크 버튼 */}
             <TouchableOpacity
-              onPress={() => openKakaoMap(place.lat, place.lng, place.name)}
-              className="flex-row items-center justify-center gap-2 bg-yellow-400 rounded-2xl py-4"
+              onPress={() => openGoogleMaps(place.lat, place.lng)}
+              className="flex-row items-center justify-center gap-2 bg-blue-500 rounded-2xl py-4"
               activeOpacity={0.85}
             >
-              <Navigation size={18} color="#1e1e1e" />
-              <Text className="font-bold text-slate-900 text-base">카카오맵에서 길찾기</Text>
+              <Navigation size={18} color="#ffffff" />
+              <Text className="font-bold text-white text-base">구글 지도에서 길찾기</Text>
             </TouchableOpacity>
           </View>
         ) : (
