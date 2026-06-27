@@ -1,6 +1,8 @@
 package com.cloumy.trip.service;
 
 import com.cloumy.trip.dto.RouteGenRequest;
+import com.cloumy.trip.dto.SlotAlternativeResponse;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +46,48 @@ public class AiServiceClient {
                 req.destination(), req.nights(), req.groupType(), req.budgetLevel(), themes);
     }
 
+    public record NearbySlotDto(String name, double lat, double lng) {}
+
+    private record SlotAlternativesReq(
+            String slot_id,
+            String place_name,
+            String destination,
+            List<String> tags,
+            String budget_level,
+            List<NearbySlotDto> nearby_slots
+    ) {}
+
+    public List<SlotAlternativeResponse> getSlotAlternatives(
+            String slotId, String placeName, String destination,
+            List<String> tags, String budgetLevel,
+            List<NearbySlotDto> nearbySlots
+    ) {
+        try {
+            SlotAlternativesReq req = new SlotAlternativesReq(
+                    slotId, placeName, destination, tags, budgetLevel, nearbySlots);
+            String body = objectMapper.writeValueAsString(req);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(fastapiUrl + "/ai/routes/slots/alternatives"))
+                    .header("Content-Type", "application/json")
+                    .header("X-Internal-Key", internalApiKey)
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .timeout(Duration.ofSeconds(30))
+                    .build();
+
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 400) {
+                log.error("FastAPI 슬롯 대안 오류: status={}", response.statusCode());
+                return List.of();
+            }
+            return objectMapper.readValue(
+                    response.body(), new TypeReference<List<SlotAlternativeResponse>>() {});
+        } catch (Exception e) {
+            log.error("슬롯 대안 요청 실패: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
     private record FastApiRequest(
             String city,
             int nights,
@@ -80,8 +124,8 @@ public class AiServiceClient {
             FastApiRequest fastApiReq = new FastApiRequest(
                     req.destination(),
                     req.nights(),
-                    req.groupType(),
-                    req.budgetLevel(),
+                    req.groupType().toLowerCase(),
+                    req.budgetLevel().toLowerCase(),
                     req.tags() != null ? req.tags() : List.of()
             );
 
