@@ -1,14 +1,15 @@
 import { create } from 'zustand';
-import { MMKV } from 'react-native-mmkv';
+import { createMMKV } from 'react-native-mmkv';
 import type { User, PassType } from '@/types';
 
-const storage = new MMKV({ id: 'auth' });
+const storage = createMMKV({ id: 'auth' });
 
 interface AuthStore {
   user: User | null;
   accessToken: string | null;
   refreshToken: string | null;
   passType: PassType;
+  isHydrated: boolean;
   setUser: (user: User) => void;
   setTokens: (access: string, refresh: string) => void;
   logout: () => void;
@@ -20,6 +21,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
   accessToken: null,
   refreshToken: null,
   passType: 'free',
+  isHydrated: false,
 
   setUser: (user) => set({ user }),
 
@@ -38,6 +40,6 @@ export const useAuthStore = create<AuthStore>((set) => ({
   loadFromStorage: () => {
     const access = storage.getString('accessToken') ?? null;
     const refresh = storage.getString('refreshToken') ?? null;
-    set({ accessToken: access, refreshToken: refresh });
+    set({ accessToken: access, refreshToken: refresh, isHydrated: true });
   },
 }));

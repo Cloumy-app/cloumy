@@ -24,6 +24,42 @@ export interface Route {
   createdAt: string;
 }
 
+export interface RouteListItem {
+  id: string;
+  title: string;
+  destination: string;
+  startDate: string;
+  endDate: string;
+  nights: number;
+  createdAt: string;
+}
+
+export interface SlotWithCoords {
+  id: string;
+  dayNumber: number;
+  orderIndex: number;
+  pinned: boolean;
+  startTime: string | null;
+  durationMinutes: number | null;
+  estimatedCost: number | null;
+  transportToNext: string | null;
+  transportMinutes: number | null;
+  tips: string | null;
+  placeName: string;
+  address: string | null;
+  lat: number;
+  lng: number;
+  avgDurationMinutes: number | null;
+}
+
+export interface SlotAlternative {
+  placeName: string;
+  reason: string;
+  estimatedCost: number;
+  lat: number;
+  lng: number;
+}
+
 export interface RouteGenRequest {
   destination: string;
   startDate: string;

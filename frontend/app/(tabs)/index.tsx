@@ -1,7 +1,11 @@
-import { View, Text, ScrollView, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, MapPin, Sparkles, Navigation, Calendar } from 'lucide-react-native';
 import { router } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
+import { getMyRoutes } from '@/lib/api/routes';
+import { useAuthStore } from '@/stores/useAuthStore';
+import type { RouteListItem } from '@/types';
 
 const QUICK_ACTIONS = [
   { icon: MapPin, label: '장소', color: '#f43f5e', bg: '#fff1f2' },
@@ -10,26 +14,113 @@ const QUICK_ACTIONS = [
   { icon: Search, label: '탐색', color: '#10b981', bg: '#ecfdf5' },
 ];
 
+const RECOMMENDED_CITIES = [
+  { id: '1', title: '도쿄 미식 탐방', emoji: '🗼', bg: '#e0f2fe' },
+  { id: '2', title: '파리 예술 여행', emoji: '🗺️', bg: '#fce7f3' },
+  { id: '3', title: '방콕 로컬 맛집', emoji: '🌴', bg: '#dcfce7' },
+  { id: '4', title: '제주 힐링 코스', emoji: '🏔️', bg: '#fef9c3' },
+];
+
+function calcDDay(startDate: string): string {
+  const diff = Math.ceil(
+    (new Date(startDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+  );
+  if (diff < 0) return '여행 중';
+  if (diff === 0) return 'D-Day';
+  return `D-${diff}`;
+}
+
+function formatDateRange(start: string, end: string): string {
+  const s = new Date(start);
+  const e = new Date(end);
+  return `${s.getMonth() + 1}.${s.getDate()} - ${e.getMonth() + 1}.${e.getDate()}`;
+}
+
+function UpcomingTripCard({ route }: { route: RouteListItem }) {
+  const dday = calcDDay(route.startDate);
+  return (
+    <TouchableOpacity
+      className="bg-slate-800 rounded-3xl overflow-hidden"
+      onPress={() => router.push(`/route/${route.id}` as never)}
+      activeOpacity={0.9}
+    >
+      <View className="p-5">
+        <View className="flex-row gap-2 mb-3">
+          <View className="bg-white/20 px-3 py-1 rounded-full">
+            <Text className="text-white text-xs font-bold">{dday}</Text>
+          </View>
+          <View className="bg-sky-500 px-3 py-1 rounded-full flex-row items-center gap-1">
+            <Sparkles size={10} color="#ffffff" />
+            <Text className="text-white text-xs font-bold">AI 맞춤형</Text>
+          </View>
+        </View>
+        <Text className="text-white text-2xl font-bold mb-2">{route.title}</Text>
+        <View className="flex-row items-center gap-2">
+          <Calendar size={14} color="rgba(255,255,255,0.8)" />
+          <Text className="text-white/80 text-sm font-medium">
+            {formatDateRange(route.startDate, route.endDate)} • {route.destination}
+          </Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function EmptyTripCard() {
+  return (
+    <TouchableOpacity
+      className="bg-slate-800 rounded-3xl p-5"
+      onPress={() => router.push('/route/create/step-1' as never)}
+      activeOpacity={0.9}
+    >
+      <View className="flex-row gap-2 mb-3">
+        <View className="bg-white/20 px-3 py-1 rounded-full">
+          <Text className="text-white text-xs font-bold">새 여행</Text>
+        </View>
+      </View>
+      <Text className="text-white text-2xl font-bold mb-2">새 여행 계획 만들기</Text>
+      <View className="flex-row items-center gap-2">
+        <Sparkles size={14} color="rgba(255,255,255,0.8)" />
+        <Text className="text-white/80 text-sm font-medium">
+          AI가 최적의 루트를 생성해드립니다
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 export default function HomeScreen() {
+  const user = useAuthStore((s) => s.user);
+  const { data, isLoading } = useQuery({
+    queryKey: ['routes', 'list'],
+    queryFn: () => getMyRoutes(0, 5),
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const upcomingRoute = data?.content[0] ?? null;
+  const initial = user?.nickname?.charAt(0).toUpperCase() ?? 'C';
+
   return (
     <SafeAreaView className="flex-1 bg-white">
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        {/* 상단 그라디언트 영역 */}
+        {/* 상단 헤더 */}
         <View className="pt-4 pb-6 px-6 bg-sky-100">
           <View className="flex-row justify-between items-center mb-6">
             <View>
-              <Text className="text-sky-800 font-medium text-sm mb-1">좋은 하루예요, 여행자님</Text>
+              <Text className="text-sky-800 font-medium text-sm mb-1">
+                좋은 하루예요, {user?.nickname ?? '여행자'}님
+              </Text>
               <Text className="text-3xl font-bold text-slate-800">어디로 떠나볼까요?</Text>
             </View>
             <View className="w-12 h-12 rounded-full bg-sky-200 items-center justify-center">
-              <Text className="text-sky-600 font-bold text-lg">C</Text>
+              <Text className="text-sky-600 font-bold text-lg">{initial}</Text>
             </View>
           </View>
 
-          {/* AI 루트 생성 입력창 */}
+          {/* AI 검색창 */}
           <TouchableOpacity
             className="flex-row items-center bg-white rounded-3xl px-4 py-3 shadow-sm"
-            onPress={() => router.push('/route/create/step-1')}
+            onPress={() => router.push('/route/create/step-1' as never)}
             activeOpacity={0.8}
           >
             <Search size={20} color="#38bdf8" />
@@ -42,9 +133,9 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        <View className="px-6 pt-6 space-y-8">
+        <View className="px-6 pt-6">
           {/* 빠른 액션 */}
-          <View className="flex-row justify-between">
+          <View className="flex-row justify-between mb-8">
             {QUICK_ACTIONS.map((action, i) => (
               <View key={i} className="items-center gap-2">
                 <View
@@ -59,35 +150,45 @@ export default function HomeScreen() {
           </View>
 
           {/* 다가오는 여행 */}
-          <View className="mt-6">
+          <View className="mb-8">
             <View className="flex-row justify-between items-center mb-4">
               <Text className="text-lg font-bold text-slate-800">다가오는 여행</Text>
-              <TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push('/route/create/step-1' as never)}>
                 <Text className="text-sky-500 text-sm font-bold">전체보기</Text>
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity
-              className="bg-slate-800 rounded-3xl p-5 overflow-hidden"
-              onPress={() => router.push('/route/create/step-1')}
-              activeOpacity={0.9}
-            >
-              <View className="flex-row gap-2 mb-3">
-                <View className="bg-white/20 px-3 py-1 rounded-full">
-                  <Text className="text-white text-xs font-bold">AI 맞춤형</Text>
-                </View>
+            {isLoading ? (
+              <View className="bg-slate-100 rounded-3xl p-8 items-center">
+                <ActivityIndicator size="small" color="#0ea5e9" />
               </View>
-              <Text className="text-white text-2xl font-bold mb-2">새 여행 계획 만들기</Text>
-              <View className="flex-row items-center gap-2">
-                <Sparkles size={14} color="#ffffff" />
-                <Text className="text-white/80 text-sm font-medium">
-                  AI가 최적의 루트를 생성해드립니다
-                </Text>
-              </View>
-            </TouchableOpacity>
+            ) : upcomingRoute ? (
+              <UpcomingTripCard route={upcomingRoute} />
+            ) : (
+              <EmptyTripCard />
+            )}
           </View>
 
-          {/* 하단 여백 */}
+          {/* 당신을 위한 추천 */}
+          <View className="mb-8">
+            <Text className="text-lg font-bold text-slate-800 mb-4">당신을 위한 추천</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-6 px-6">
+              {RECOMMENDED_CITIES.map((city) => (
+                <TouchableOpacity
+                  key={city.id}
+                  className="mr-3 w-36 h-44 rounded-3xl items-center justify-center"
+                  style={{ backgroundColor: city.bg }}
+                  activeOpacity={0.8}
+                >
+                  <Text className="text-5xl mb-3">{city.emoji}</Text>
+                  <Text className="text-slate-700 font-bold text-sm text-center px-3">
+                    {city.title}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
           <View className="h-6" />
         </View>
       </ScrollView>
