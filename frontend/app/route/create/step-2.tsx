@@ -1,14 +1,10 @@
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, Sparkles } from 'lucide-react-native';
-import { useState, useRef } from 'react';
-import { streamRoute } from '@/lib/api/routes';
-import { useRouteStore } from '@/stores/useRouteStore';
-import type { RouteSlot } from '@/types';
+import { ChevronLeft } from 'lucide-react-native';
 
 const THEMES = ['맛집', '카페', '관광', '자연', '쇼핑', '문화', '액티비티', '힐링', '야경'];
 const BUDGET_LEVELS = [
@@ -38,54 +34,15 @@ export default function RouteCreateStep2() {
     defaultValues: { tags: [], budgetLevel: 'mid' },
   });
 
-  const [isGenerating, setIsGenerating] = useState(false);
-  const stopStreamRef = useRef<(() => void) | null>(null);
-  const hasNavigatedRef = useRef(false);
-  const { appendStreamingSlot, finalizeRoute, setIsStreaming, reset } = useRouteStore();
-
-  const onGenerate = (data: Step2Form) => {
-    const nights = Number(params.nights ?? 2);
-    const today = new Date();
-    const startDate = today.toISOString().split('T')[0];
-    const endDate = new Date(today.getTime() + nights * 86400000).toISOString().split('T')[0];
-
-    reset();
-    hasNavigatedRef.current = false;
-    setIsGenerating(true);
-    setIsStreaming(true);
-
-    let routeId = '';
-
-    stopStreamRef.current = streamRoute(
-      {
-        destination: params.destination ?? '서울',
-        startDate,
-        endDate,
-        groupType: (params.groupType ?? 'friends') as 'friends',
+  const onNext = (data: Step2Form) => {
+    router.push({
+      pathname: '/route/create/step-3',
+      params: {
+        ...params,
+        tags: JSON.stringify(data.tags),
         budgetLevel: data.budgetLevel,
-        tags: data.tags,
       },
-      (slot: RouteSlot) => {
-        appendStreamingSlot(slot);
-      },
-      (id: string) => {
-        if (hasNavigatedRef.current) return;
-        hasNavigatedRef.current = true;
-        routeId = id;
-        router.replace({
-          pathname: '/route/[routeId]',
-          params: { routeId: id },
-        });
-      },
-      () => {
-        finalizeRoute(routeId, params.destination ?? '서울', startDate, endDate);
-        setIsGenerating(false);
-      },
-      () => {
-        setIsGenerating(false);
-        setIsStreaming(false);
-      },
-    );
+    });
   };
 
   return (
@@ -96,7 +53,7 @@ export default function RouteCreateStep2() {
           <ChevronLeft size={24} color="#475569" />
         </TouchableOpacity>
         <View className="flex-1">
-          <Text className="text-xs text-sky-500 font-bold mb-0.5">STEP 2 / 2</Text>
+          <Text className="text-xs text-sky-500 font-bold mb-0.5">STEP 2 / 3</Text>
           <Text className="text-xl font-bold text-slate-800">어떤 여행을 원하세요?</Text>
         </View>
       </View>
@@ -185,24 +142,14 @@ export default function RouteCreateStep2() {
         <View className="h-4" />
       </ScrollView>
 
-      {/* 생성 버튼 */}
+      {/* 다음 버튼 */}
       <View className="px-6 pb-8">
         <TouchableOpacity
-          onPress={handleSubmit(onGenerate)}
-          disabled={isGenerating}
-          className={`py-4 rounded-2xl items-center flex-row justify-center gap-2 ${
-            isGenerating ? 'bg-sky-300' : 'bg-sky-500'
-          }`}
+          onPress={handleSubmit(onNext)}
+          className="bg-sky-500 py-4 rounded-2xl items-center"
           activeOpacity={0.9}
         >
-          {isGenerating ? (
-            <ActivityIndicator color="#ffffff" size="small" />
-          ) : (
-            <Sparkles size={20} color="#ffffff" />
-          )}
-          <Text className="text-white font-bold text-base">
-            {isGenerating ? 'AI가 루트를 생성 중...' : 'AI 루트 생성하기'}
-          </Text>
+          <Text className="text-white font-bold text-base">다음 단계</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

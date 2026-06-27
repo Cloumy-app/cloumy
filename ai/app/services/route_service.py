@@ -48,7 +48,8 @@ ROUTE_GEN_SYSTEM_PROMPT = """당신은 한국 여행 전문 플래너입니다. 
 - place_id는 반드시 후보 목록의 실제 id 값만 사용 (임의 생성 금지)
 - tip은 실용적인 현지 정보 (영업시간, 주차, 대기시간 등)
 - JSON 문자열 내 개행은 반드시 \\n으로 이스케이프 (리터럴 개행문자 금지)
-- JSON 외 다른 텍스트 출력 금지 — 오직 JSON 줄만"""
+- JSON 외 다른 텍스트 출력 금지 — 오직 JSON 줄만
+- hidden_gem 비율 목표가 주어지면 후보 목록의 is_hidden_gem=true 장소 비율을 해당 목표에 맞출 것"""
 
 
 async def close_ai_clients() -> None:
@@ -59,7 +60,8 @@ async def close_ai_clients() -> None:
 
 def _cache_key(req: RouteGenRequest) -> str:
     themes = ":".join(sorted(req.themes))
-    return f"route:{req.city}:{req.nights}:{req.group_type}:{req.budget_level}:{themes}"
+    ratio = req.hidden_gem_ratio if req.hidden_gem_ratio is not None else 0.2
+    return f"route:{req.city}:{req.nights}:{req.group_type}:{req.budget_level}:{themes}:{ratio:.1f}"
 
 
 async def stream_route(
@@ -122,9 +124,12 @@ async def stream_route(
         f"[{i + 1}] id={doc.metadata['id']} | {doc.page_content}"
         for i, doc in enumerate(candidates)
     )
+    ratio = request.hidden_gem_ratio if request.hidden_gem_ratio is not None else 0.2
+    ratio_desc = "관광지 위주" if ratio < 0.3 else ("혼합" if ratio < 0.7 else "숨은 명소 위주")
     user_message = (
         f"도시: {request.city} | {request.nights}박{request.nights + 1}일 | "
-        f"여행 유형: {request.group_type} | 예산 수준: {request.budget_level}\n\n"
+        f"여행 유형: {request.group_type} | 예산 수준: {request.budget_level}\n"
+        f"Hidden Gem 비율 목표: {ratio:.0%} ({ratio_desc})\n\n"
         f"후보 장소 ({len(candidates)}곳):\n{candidates_text}\n\n"
         f"{request.nights}박{request.nights + 1}일 루트를 생성하세요. "
         "각 슬롯을 JSON 한 줄씩 스트리밍 출력하세요."
