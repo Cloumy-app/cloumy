@@ -13,6 +13,7 @@ interface SlotCardProps {
   onPin: () => void;
   onRemove: () => void;
   onReplaceWithAlternative?: (alt: SlotAlternative) => void;
+  onTap?: () => void;
 }
 
 export function SlotCard({
@@ -24,6 +25,7 @@ export function SlotCard({
   onPin,
   onRemove,
   onReplaceWithAlternative,
+  onTap,
 }: SlotCardProps) {
   const [alternatives, setAlternatives] = useState<SlotAlternative[]>([]);
   const [loadingAlts, setLoadingAlts] = useState(false);
@@ -66,7 +68,9 @@ export function SlotCard({
         <View className="absolute left-[19px] top-12 bottom-[-16px] w-[2px] bg-slate-100 z-0" />
       )}
 
-      <View
+      <TouchableOpacity
+        activeOpacity={onTap ? 0.75 : 1}
+        onPress={onTap}
         className={`flex-row gap-3 p-4 rounded-2xl border-2 ${
           pinned ? 'border-sky-500 bg-blue-50/30' : 'border-transparent bg-slate-50'
         }`}
@@ -172,7 +176,7 @@ export function SlotCard({
             </View>
           )}
         </View>
-      </View>
+      </TouchableOpacity>
     </View>
   );
 }

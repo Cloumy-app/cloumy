@@ -36,6 +36,7 @@ export interface RouteListItem {
 
 export interface SlotWithCoords {
   id: string;
+  placeId: string;
   dayNumber: number;
   orderIndex: number;
   pinned: boolean;
@@ -50,6 +51,16 @@ export interface SlotWithCoords {
   lat: number;
   lng: number;
   avgDurationMinutes: number | null;
+}
+
+export interface PlaceDetail {
+  id: string;
+  name: string;
+  address: string | null;
+  lat: number;
+  lng: number;
+  avgDurationMinutes: number | null;
+  isHiddenGem: boolean;
 }
 
 export interface SlotAlternative {

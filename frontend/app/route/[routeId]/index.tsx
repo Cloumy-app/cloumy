@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -8,11 +9,13 @@ import { useRouteStore } from '@/stores/useRouteStore';
 import { TripMap } from '@/components/map/TripMap';
 import { DayTabs } from '@/components/route/DayTabs';
 import { SlotCard } from '@/components/route/SlotCard';
+import { PlaceDetailSheet } from '@/components/route/PlaceDetailSheet';
 import type { SlotAlternative, SlotWithCoords } from '@/types';
 
 export default function RouteResultScreen() {
   const { routeId } = useLocalSearchParams<{ routeId: string }>();
   const queryClient = useQueryClient();
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
 
   const { currentRoute, streamingSlots, isStreaming, selectedDay, setSelectedDay, toggleSlotPin, removeSlot } =
     useRouteStore();
@@ -166,6 +169,7 @@ export default function RouteResultScreen() {
                 onPin={() => handlePin(apiSlot.id)}
                 onRemove={() => handleDelete(apiSlot.id)}
                 onReplaceWithAlternative={(alt) => handleReplaceWithAlternative(apiSlot.id, alt)}
+                onTap={() => setSelectedPlaceId(apiSlot.placeId)}
               />
             ))
           )
@@ -189,6 +193,11 @@ export default function RouteResultScreen() {
           </View>
         )}
       </ScrollView>
+
+      <PlaceDetailSheet
+        placeId={selectedPlaceId}
+        onClose={() => setSelectedPlaceId(null)}
+      />
     </SafeAreaView>
   );
 }

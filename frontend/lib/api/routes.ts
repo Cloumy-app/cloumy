@@ -1,6 +1,6 @@
 import EventSource from 'react-native-sse';
 import { API_BASE, getAuthHeaders } from './client';
-import type { RouteGenRequest, RouteListItem, RouteSlot, SlotAlternative, SlotWithCoords } from '@/types';
+import type { PlaceDetail, RouteGenRequest, RouteListItem, RouteSlot, SlotAlternative, SlotWithCoords } from '@/types';
 
 interface SpringPage<T> {
   content: T[];
@@ -42,6 +42,15 @@ export async function deleteRouteSlot(routeId: string, slotId: string): Promise<
     headers: getAuthHeaders(),
   });
   if (!res.ok) throw new Error(`${res.status}`);
+}
+
+export async function getPlaceDetail(placeId: string): Promise<PlaceDetail> {
+  const res = await fetch(`${API_BASE}/v1/places/${placeId}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+  const body: { data: PlaceDetail } = await res.json();
+  return body.data;
 }
 
 export async function getSlotAlternatives(
