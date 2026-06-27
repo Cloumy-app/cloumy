@@ -16,6 +16,7 @@ export default function RouteResultScreen() {
   const { routeId } = useLocalSearchParams<{ routeId: string }>();
   const queryClient = useQueryClient();
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
+  const [focusedSlotId, setFocusedSlotId] = useState<string | null>(null);
 
   const { currentRoute, streamingSlots, isStreaming, selectedDay, setSelectedDay, toggleSlotPin, removeSlot } =
     useRouteStore();
@@ -103,7 +104,7 @@ export default function RouteResultScreen() {
 
       {/* 지도 — 스트리밍 완료 + lat/lng 있을 때 */}
       {!isStreaming && hasApiSlots && (
-        <TripMap slots={apiSlots} selectedDay={selectedDay} height={260} />
+        <TripMap slots={apiSlots} selectedDay={selectedDay} height={260} focusedSlotId={focusedSlotId ?? undefined} />
       )}
 
       {/* 스트리밍 배너 */}
@@ -169,7 +170,10 @@ export default function RouteResultScreen() {
                 onPin={() => handlePin(apiSlot.id)}
                 onRemove={() => handleDelete(apiSlot.id)}
                 onReplaceWithAlternative={(alt) => handleReplaceWithAlternative(apiSlot.id, alt)}
-                onTap={() => setSelectedPlaceId(apiSlot.placeId)}
+                onTap={() => {
+                  setFocusedSlotId(apiSlot.id);
+                  setSelectedPlaceId(apiSlot.placeId);
+                }}
               />
             ))
           )
