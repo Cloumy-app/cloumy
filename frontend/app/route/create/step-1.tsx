@@ -17,13 +17,15 @@ const NIGHTS_OPTIONS = [1, 2, 3, 4, 5];
 
 const step1Schema = z.object({
   destination: z.string().min(1, '목적지를 선택해주세요'),
-  startDate: z.string().min(1, '출발일을 입력해주세요'),
-  endDate: z.string().min(1, '도착일을 입력해주세요'),
   groupType: z.enum(['solo', 'couple', 'friends', 'family']),
   nights: z.number().min(1).max(5),
 });
 
 type Step1Form = z.infer<typeof step1Schema>;
+
+function toDateStr(d: Date): string {
+  return d.toISOString().split('T')[0];
+}
 
 export default function RouteCreateStep1() {
   const { control, handleSubmit, formState: { errors } } = useForm<Step1Form>({
@@ -32,15 +34,17 @@ export default function RouteCreateStep1() {
       destination: '',
       groupType: 'friends',
       nights: 2,
-      startDate: '',
-      endDate: '',
     },
   });
 
   const onNext = (data: Step1Form) => {
+    const startDate = toDateStr(new Date());
+    const end = new Date();
+    end.setDate(end.getDate() + data.nights);
+    const endDate = toDateStr(end);
     router.push({
       pathname: '/route/create/step-2',
-      params: data,
+      params: { ...data, startDate, endDate },
     });
   };
 

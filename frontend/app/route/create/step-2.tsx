@@ -40,7 +40,8 @@ export default function RouteCreateStep2() {
 
   const [isGenerating, setIsGenerating] = useState(false);
   const stopStreamRef = useRef<(() => void) | null>(null);
-  const { appendStreamingSlot, finalizeRoute, setIsStreaming } = useRouteStore();
+  const hasNavigatedRef = useRef(false);
+  const { appendStreamingSlot, finalizeRoute, setIsStreaming, reset } = useRouteStore();
 
   const onGenerate = (data: Step2Form) => {
     const nights = Number(params.nights ?? 2);
@@ -48,6 +49,8 @@ export default function RouteCreateStep2() {
     const startDate = today.toISOString().split('T')[0];
     const endDate = new Date(today.getTime() + nights * 86400000).toISOString().split('T')[0];
 
+    reset();
+    hasNavigatedRef.current = false;
     setIsGenerating(true);
     setIsStreaming(true);
 
@@ -66,8 +69,9 @@ export default function RouteCreateStep2() {
         appendStreamingSlot(slot);
       },
       (id: string) => {
+        if (hasNavigatedRef.current) return;
+        hasNavigatedRef.current = true;
         routeId = id;
-        // 루트 ID 수신 즉시 결과 화면으로 이동
         router.replace({
           pathname: '/route/[routeId]',
           params: { routeId: id },

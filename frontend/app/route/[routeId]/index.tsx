@@ -2,31 +2,88 @@ import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { ChevronLeft, Settings2, Sparkles } from 'lucide-react-native';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getRouteSlots, toggleSlotPin as apiToggleSlotPin, deleteRouteSlot } from '@/lib/api/routes';
 import { useRouteStore } from '@/stores/useRouteStore';
+import { TripMap } from '@/components/map/TripMap';
+import { DayTabs } from '@/components/route/DayTabs';
 import { SlotCard } from '@/components/route/SlotCard';
+import type { SlotAlternative, SlotWithCoords } from '@/types';
 
 export default function RouteResultScreen() {
   const { routeId } = useLocalSearchParams<{ routeId: string }>();
+  const queryClient = useQueryClient();
+
   const { currentRoute, streamingSlots, isStreaming, selectedDay, setSelectedDay, toggleSlotPin, removeSlot } =
     useRouteStore();
 
-  const slots = currentRoute?.slots ?? streamingSlots;
-  const days = [...new Set(slots.map((s) => s.day))].sort();
-  const currentDaySlots = slots.filter((s) => s.day === selectedDay);
+  // 스트리밍 완료 후 API에서 슬롯 로드 (lat/lng 포함)
+  const { data: apiSlots, isLoading: slotsLoading } = useQuery({
+    queryKey: ['route-slots', routeId],
+    queryFn: () => getRouteSlots(routeId!),
+    enabled: !!routeId && !isStreaming,
+    staleTime: 1000 * 60 * 5,
+  });
 
-  const totalBudget = currentDaySlots.reduce((sum, s) => sum + (s.budget_estimate ?? 0), 0);
+  const hasApiSlots = apiSlots && apiSlots.length > 0;
+  const streamSlots = currentRoute?.slots ?? streamingSlots;
+
+  const days = hasApiSlots
+    ? [...new Set(apiSlots.map((s) => s.dayNumber))].sort()
+    : [...new Set(streamSlots.map((s) => s.day))].sort();
+
+  const currentDayApiSlots: SlotWithCoords[] = hasApiSlots
+    ? apiSlots.filter((s) => s.dayNumber === selectedDay)
+    : [];
+
+  const currentDayStreamSlots = streamSlots.filter((s) => s.day === selectedDay);
+  const destination = currentRoute?.destination ?? '';
+
+  const handleReplaceWithAlternative = (slotId: string, alt: SlotAlternative) => {
+    queryClient.setQueryData<SlotWithCoords[]>(['route-slots', routeId], (prev) =>
+      prev?.map((s) =>
+        s.id === slotId
+          ? { ...s, placeName: alt.placeName, lat: alt.lat, lng: alt.lng, estimatedCost: alt.estimatedCost, tips: alt.reason }
+          : s,
+      ),
+    );
+  };
+
+  const handlePin = async (slotId: string) => {
+    if (!routeId) return;
+    try {
+      const updated = await apiToggleSlotPin(routeId, slotId);
+      queryClient.setQueryData<SlotWithCoords[]>(['route-slots', routeId], (prev) =>
+        prev?.map((s) => (s.id === slotId ? { ...s, pinned: updated.pinned } : s)),
+      );
+    } catch {
+      // 핀 토글 실패 시 무시 (서버 상태 유지)
+    }
+  };
+
+  const handleDelete = async (slotId: string) => {
+    if (!routeId) return;
+    try {
+      await deleteRouteSlot(routeId, slotId);
+      queryClient.setQueryData<SlotWithCoords[]>(['route-slots', routeId], (prev) =>
+        prev?.filter((s) => s.id !== slotId),
+      );
+    } catch {
+      // 삭제 실패 시 무시
+    }
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-white">
       {/* 헤더 */}
-      <View className="flex-row justify-between items-center px-6 py-4">
+      <View className="flex-row justify-between items-center px-6 py-3">
         <TouchableOpacity onPress={() => router.back()}>
           <ChevronLeft size={24} color="#475569" />
         </TouchableOpacity>
         <View className="items-center">
           <View className="flex-row items-center gap-1">
             <Text className="font-bold text-slate-800 text-base">
-              {currentRoute?.destination ?? '루트 생성 중'}
+              {destination || '루트 생성 중'}
             </Text>
             {isStreaming && <Sparkles size={14} color="#0ea5e9" />}
           </View>
@@ -41,16 +98,29 @@ export default function RouteResultScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 스트리밍 중 안내 배너 */}
+      {/* 지도 — 스트리밍 완료 + lat/lng 있을 때 */}
+      {!isStreaming && hasApiSlots && (
+        <TripMap slots={apiSlots} selectedDay={selectedDay} height={260} />
+      )}
+
+      {/* 스트리밍 배너 */}
       {isStreaming && (
-        <View className="mx-6 mb-3 bg-sky-50 border border-sky-200 rounded-xl px-4 py-2.5 flex-row items-center gap-2">
+        <View className="mx-6 mb-2 bg-sky-50 border border-sky-200 rounded-xl px-4 py-2.5 flex-row items-center gap-2">
           <ActivityIndicator size="small" color="#0ea5e9" />
           <Text className="text-sky-700 text-sm font-medium">AI가 루트를 생성하고 있어요...</Text>
         </View>
       )}
 
-      {/* Day 탭 */}
-      {days.length > 0 && (
+      {slotsLoading && !isStreaming && (
+        <View className="flex-row justify-center py-3">
+          <ActivityIndicator size="small" color="#0ea5e9" />
+        </View>
+      )}
+
+      {/* DayTabs */}
+      {hasApiSlots ? (
+        <DayTabs slots={apiSlots} selectedDay={selectedDay} onSelectDay={setSelectedDay} />
+      ) : days.length > 0 ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -62,9 +132,7 @@ export default function RouteResultScreen() {
               key={day}
               onPress={() => setSelectedDay(day)}
               className={`px-4 py-2 rounded-full border ${
-                selectedDay === day
-                  ? 'bg-sky-500 border-sky-500'
-                  : 'bg-white border-slate-200'
+                selectedDay === day ? 'bg-sky-500 border-sky-500' : 'bg-white border-slate-200'
               }`}
             >
               <Text className={`font-bold text-sm ${selectedDay === day ? 'text-white' : 'text-slate-600'}`}>
@@ -73,41 +141,42 @@ export default function RouteResultScreen() {
             </TouchableOpacity>
           ))}
         </ScrollView>
-      )}
+      ) : null}
 
-      {/* 예상 예산 */}
-      {currentDaySlots.length > 0 && (
-        <View className="mx-6 mb-3 flex-row justify-between items-center">
-          <Text className="text-sm font-bold text-slate-700">{selectedDay}일차 타임라인</Text>
-          <View className="bg-sky-50 px-3 py-1 rounded-full">
-            <Text className="text-sky-600 text-xs font-bold">
-              예상 {totalBudget.toLocaleString()}원
-            </Text>
-          </View>
-        </View>
-      )}
-
-      {/* 슬롯 목록 */}
+      {/* 타임라인 */}
       <ScrollView
         className="flex-1 px-6"
         showsVerticalScrollIndicator={false}
-        contentContainerClassName="gap-4 pb-8"
+        contentContainerClassName="gap-4 pb-8 pt-2"
       >
-        {currentDaySlots.length === 0 && !isStreaming ? (
-          <View className="items-center justify-center py-20">
-            <Text className="text-slate-400 font-medium">슬롯이 없습니다</Text>
-          </View>
+        {hasApiSlots ? (
+          currentDayApiSlots.length === 0 ? (
+            <View className="items-center justify-center py-16">
+              <Text className="text-slate-400 font-medium">이 날 슬롯이 없습니다</Text>
+            </View>
+          ) : (
+            currentDayApiSlots.map((apiSlot, i) => (
+              <SlotCard
+                key={apiSlot.id}
+                slot={null}
+                apiSlot={apiSlot}
+                index={i}
+                isLast={i === currentDayApiSlots.length - 1}
+                routeId={routeId}
+                onPin={() => handlePin(apiSlot.id)}
+                onRemove={() => handleDelete(apiSlot.id)}
+                onReplaceWithAlternative={(alt) => handleReplaceWithAlternative(apiSlot.id, alt)}
+              />
+            ))
+          )
         ) : (
-          currentDaySlots.map((slot, i) => (
+          currentDayStreamSlots.map((slot, i) => (
             <SlotCard
               key={`${slot.day}-${slot.order}`}
               slot={slot}
               index={i}
-              isLast={i === currentDaySlots.length - 1}
+              isLast={i === currentDayStreamSlots.length - 1}
               onPin={() => toggleSlotPin(slot.day, slot.order)}
-              onReshuffle={() => {
-                // TODO: 리셔플 API 연동
-              }}
               onRemove={() => removeSlot(slot.day, slot.order)}
             />
           ))
