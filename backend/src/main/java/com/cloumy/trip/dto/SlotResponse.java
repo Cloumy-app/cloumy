@@ -4,6 +4,7 @@ import java.util.UUID;
 
 public record SlotResponse(
         UUID id,
+        String placeId,
         int dayNumber,
         int orderIndex,
         boolean pinned,
@@ -22,6 +23,7 @@ public record SlotResponse(
     public static SlotResponse from(SlotProjection p) {
         return new SlotResponse(
                 UUID.fromString(p.getId()),
+                p.getPlaceId(),
                 p.getDayNumber(),
                 p.getOrderIndex(),
                 Boolean.TRUE.equals(p.getPinned()),

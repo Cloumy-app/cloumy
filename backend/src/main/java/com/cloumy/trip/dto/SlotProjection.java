@@ -4,6 +4,7 @@ package com.cloumy.trip.dto;
 // 컬럼 alias가 getter 이름(camelCase)과 일치해야 Spring Data가 자동 바인딩함
 public interface SlotProjection {
     String getId();
+    String getPlaceId();
     Integer getDayNumber();
     Integer getOrderIndex();
     Boolean getPinned();

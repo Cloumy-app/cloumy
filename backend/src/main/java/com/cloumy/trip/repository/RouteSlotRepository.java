@@ -24,6 +24,7 @@ public interface RouteSlotRepository extends JpaRepository<RouteSlot, UUID> {
                    rs.transport_to_next             AS transportToNext,
                    rs.transport_minutes             AS transportMinutes,
                    rs.tips                          AS tips,
+                   p.id::text                       AS placeId,
                    p.name                           AS placeName,
                    p.address                        AS address,
                    ST_Y(p.location::geometry)       AS lat,
