@@ -282,13 +282,20 @@ chore/이슈번호-작업-내용     # 설정·빌드·운영
 
 ### 커밋 컨벤션
 
+모노레포 구조에서 어느 스택을 건드렸는지 알 수 있도록 커밋 메시지에 **스택 prefix**를 붙인다.
+브랜치·PR은 기능 단위로 하나만 만들고, 커밋에서 레이어를 구분한다.
+
 ```
-feat: ✨ 로그인 API 구현
-fix: 🔨 피드 조회 500 에러 수정
-chore: 🧹 예외 응답 코드 정리
-docs: 📝 README 업데이트
-refactor: ♻️ 인증 로직 분리
+feat: ✨ [AI] hidden_gem_ratio 시스템 프롬프트 반영
+feat: ✨ [Spring] hiddenGemRatio DTO + cacheKey 전달
+feat: ✨ [Frontend] Step 3 장소 성향 선택 UI
+fix:  🔨 [Spring] 피드 조회 500 에러 수정
+chore: 🧹 [Infra] Docker Compose postgres 포트 수정
+docs: 📝 [공통] README 개발 가이드 업데이트
+refactor: ♻️ [AI] 루트 서비스 캐시 키 정규화
 ```
+
+**스택 목록:** `[AI]` · `[Spring]` · `[Frontend]` · `[Infra]` · `[DB]` · `[공통]`
 
 ### 이슈 & PR
 
