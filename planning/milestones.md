@@ -28,7 +28,7 @@ Hidden Gems 콜드스타트 방지 + 핵심 가정 사전 검증
 
 ---
 
-## Phase 0: 환경 설정 (Week 1~2)
+## Phase 0: 환경 설정 ✅ (~2026-06-08 완료)
 
 ### 목표
 코딩 시작 전 인프라와 개발 환경 완비
@@ -65,12 +65,12 @@ Hidden Gems 콜드스타트 방지 + 핵심 가정 사전 검증
 
 ---
 
-## Phase 1: AI 루트 생성 + 데이터 파이프라인 (Week 3~10)
+## Phase 1: AI 루트 생성 + 데이터 파이프라인 (2026-06-09 ~)
 
 ### 목표
 Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 개선)
 
-### Week 3~4: AI 루트 생성 Phase A (LangChain LCEL + PostGIS 태그 MVP)
+### 2026-06-09 ~ 2026-06-22: AI 루트 생성 Phase A ✅ (LangChain LCEL + PostGIS 태그 MVP)
 
 > **전략**: embedding 없이 즉시 구현 → 앱에서 확인 → Phase B에서 Retriever만 교체
 
@@ -84,60 +84,65 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 - [x] Spring `RouteController.java` — `POST /v1/routes/generate` MVC SseEmitter + 가상 스레드 (2026-06-22)
 - [x] `application.yml` — `app.fastapi.url`, `app.internal-api-key` 추가 (2026-06-22)
 
-### Week 5: 앱 확인 + 품질 평가
+### 2026-06-23 ~ 2026-06-25: Phase B + 데이터 파이프라인 + E2E ✅
 
-- [x] 앱에서 SSE 스트리밍 실제 확인 (백엔드 curl E2E 완료 2026-06-25 — React Native 연동은 프론트엔드 초기화 후)
-- [ ] 루트 결과 품질 평가 (카테고리 다양성, 동선 합리성)
-- [ ] Phase B 진행 여부 결정 (품질 충분하면 Phase C 품질 개선으로 바로 이동 가능)
+- [x] OpenAI 임베딩 배치 생성 (20,363건 × text-embedding-3-small) (2026-06-25)
+- [x] pgvector ivfflat 인덱스 최적화 (lists=100, ivfflat.probes=10) (2026-06-25)
+- [x] `PgvectorRetriever` 추가 + Retriever 한 줄 교체 (Phase B 완료) (2026-06-25)
+- [x] OR-Tools TSP 동선 최적화 (Haversine + PATH_CHEAPEST_ARC, day별 독립 최적화) (2026-06-25)
+- [x] Redis 캐시 연동 (aioredis TTL 24h + Spring RedisTemplate 폴백) (2026-06-24)
+- [x] 환각 방지 검증 `place_validator.py` (메모리 내 O(1) 검증 + None 반환으로 캐시 오염 방지) (2026-06-23)
+- [x] Spring SSE E2E 검증 + 버그 3건 수정 (HTTP/2→1.1, ASYNC DispatcherType, aclose→close) (2026-06-25)
+- [x] 백엔드 curl E2E 스트리밍 확인 (25슬롯 정상 수신)
 
-### Week 6~7: 데이터 파이프라인 보강 + Phase B 준비
+### 2026-06-25 ~ 2026-06-27: 프론트엔드 초기화 + 로그인 ✅
 
-- [ ] 카카오 로컬 API 수집기 구현 (3일 1회)
-  - ⚠️ 현재 일 10만건 무료, 2026년 말 이후 건당 50원 전환 예정 — 쿼터 관리 필요
-- [ ] KOPIS Open API 수집기 구현 (공연·콘서트·뮤지컬 일정, 1일 1회)
-- [ ] 중복 장소 병합 로직 (PostGIS 반경 100m)
-- [ ] 카테고리 태그 변환 테이블 구현
-- [ ] 좌표 검증 (PostGIS 행정구역 포함 여부)
-- [ ] OpenAI 임베딩 배치 생성 (20,363건 × text-embedding-3-small, ~$2~3)
+- [x] Expo Router + NativeWind 초기화 (2026-06-25) — `app/_layout.tsx`, `(tabs)/`, 루트 생성 Step1/2, 루트 결과 화면
+- [x] SSE 스트리밍 수신 (`lib/api/routes.ts`, `react-native-sse`) + RouteStore + SlotCard (2026-06-25)
+- [x] **Dev 로그인 + Auth Guard 구현** (2026-06-26) — `(auth)/login.tsx`, auth guard, `lib/api/auth.ts`
+- [x] 앱에서 AI 루트 생성 전체 플로우 실제 확인 (로그인 → 루트 생성 → 스트리밍)
 
-### Week 7~8: AI 루트 생성 Phase B (pgvector Retriever 교체) + OR-Tools TSP
+### ~2026-07-04: 홈 화면 완성 ✅
 
-- [ ] `retrievers.py`에 `PgvectorRetriever` 추가 (embedding `<=>` 유사도)
-- [ ] `route_service.py`에서 Retriever 한 줄 교체 (나머지 체인 동일)
-- [ ] 멀티소스 병렬: pgvector 30개 + PostGIS 20개 + tag fallback
+**[Spring]**
+- [x] `GET /v1/routes` — 내 루트 목록 API (최신순 페이징) (2026-06-26)
 
-### Week 8~9: OR-Tools TSP + 슬롯 대안 추천
+**[Frontend]**
+- [x] `(tabs)/index.tsx` — 유저 닉네임 + 아바타 (`user.nickname` / `profileImageUrl`) (2026-06-26)
+- [x] 다가오는 여행 카드 — 루트 목록 최신 1건 (D-n 뱃지, 날짜, 목적지)
+- [x] "당신을 위한 추천" 가로 스크롤 카드 (도시 이미지, 정적 데이터)
 
-- [ ] OR-Tools TSP 동선 최적화 구현
-  - 앵커 장소 고정 로직
-  - 일정 밀도(density) 파라미터 반영
-  - KOPIS 공연 시간 앵커 자동 배치 (페르소나 C 대응)
-- [ ] 루트 결과 지도 시각화 (react-native-maps)
-  - Day별 색상 구분 경로선
-  - 방문 순서 번호 핀
-  - Day 탭 필터
-- [ ] 타임라인 뷰 (하단 슬라이드업)
-- [ ] 슬롯 대안 추천 API 구현 `POST /ai/routes/slots/{slot_id}/alternatives` (Haiku)
-  - 슬롯 단위 대안 3개 추천 → 사용자 선택 → 인접 이동시간만 재계산
-  - is_pinned=true 슬롯은 대안 추천 불가
-- [ ] 슬롯 📌🔄❌ 액션 UI 구현
-- [ ] 환각 방지 검증 (place_id 재조회)
+### ~2026-07-10: 루트 결과 화면 완성 (지도 + 타임라인 + Reshuffle) ✅
 
-### Week 10~11: 루트 생성 완성도 향상
+**[Spring]**
+- [x] `GET /v1/routes/{routeId}/slots` — 슬롯 목록 + places JOIN → lat/lng 포함 응답 (2026-06-27)
+- [x] `PATCH /v1/routes/{routeId}/slots/{slotId}/pin` — 핀 토글
+- [x] `DELETE /v1/routes/{routeId}/slots/{slotId}` — 슬롯 삭제 (pinned 시 400)
+- [x] `POST /v1/routes/{routeId}/slots/{slotId}/alternatives` — AI 대안 프록시
 
-- [ ] 스트리밍 응답 (WebSocket, Day별 순차)
-- [ ] 응답 속도 최적화 (Redis 루트 캐시)
-- [ ] 예산 초과 장소 처리 (소프트/하드 초과)
-- [ ] 방문 빈도 질문 UI (루트 생성 Step 3) — "얼마나 자주 가세요?" → Hidden Gems 비율 제어 (Hidden Gems 기능 자체는 연기)
+**[AI FastAPI]**
+- [x] `POST /ai/routes/slots/alternatives` — Haiku 대안 3개 추천 (인접 동선 고려) (2026-06-27)
+
+**[Frontend]**
+- [x] `components/map/TripMap.tsx` — react-native-maps 지도 (Day별 색상 Polyline + 번호 Marker) (2026-06-27)
+- [x] `components/route/DayTabs.tsx` — Day 탭 + 예상비용/방문 장소 수 요약 카드
+- [x] `route/[routeId]/index.tsx` — 지도 + 슬라이드업 타임라인 레이아웃, GET /v1/routes/{id}/slots 연동
+- [x] `components/route/SlotCard.tsx` — 🔄 대안 인라인 패널 (3개 선택 → 슬롯 교체)
+- [ ] 타임라인 카드 탭 → 지도 핀 포커스 연동 (애니메이션 개선 필요)
+
+### ~2026-07-18: 데이터 파이프라인 보강 + 장소 디테일
+
 - [ ] 장소 카드 팝업 (사진, 체류 시간, 예상 비용, Hidden Gem 여부)
 - [ ] 카카오맵 딥링크 내비 연동
+- [ ] 예산 초과 장소 처리 (소프트/하드 초과)
+- [ ] 방문 빈도 질문 UI (루트 생성 Step 3) — Hidden Gems 비율 제어
 - [ ] 단위 테스트 작성 (루트 생성 핵심 로직)
 
 ---
 
-## Phase 2: AI 챗봇 + 예산 관리 (Week 9~14)
+## Phase 2: AI 챗봇 + 예산 관리 (~2026-07-25 ~)
 
-### Week 9~12: AI 챗봇
+### ~2026-07-25 ~ 2026-08-14: AI 챗봇
 
 - [ ] LangChain 멀티턴 챗봇 파이프라인
 - [ ] Redis 세션 관리 (메시지 히스토리, 컨텍스트)
@@ -149,7 +154,7 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 - [ ] 챗봇 UI 구현 (ChatBubble, 스트리밍 애니메이션)
 - [ ] 지출 파싱 확인 팝업 UI
 
-### Week 11~13: 예산 관리 & 지출 추적
+### ~2026-08-04 ~ 2026-08-25: 예산 관리 & 지출 추적
 
 - [ ] 총예산 입력 + AI 카테고리 자동 배분 UI
 - [ ] 태그별 비율 자동 조정 (#먹방 → 식음료 +10%)
@@ -160,7 +165,7 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 - [ ] 여행 후 지출 리포트 (Victory Native 차트)
 - [ ] 예산 초과 시 챗봇 저가 대안 자동 제안
 
-### Week 13~14: Hidden Gems + 태그 커뮤니티
+### Hidden Gems + 태그 커뮤니티 (자금 확보 후 — 연기)
 
 > ⚠️ **자금 확보 후 진행 (모두의 창업 지원금 이후 — 현재 연기)**
 > DB 테이블/컬럼은 유지, 로직만 비활성화. 해외 피벗 시 우선 적용.
@@ -175,9 +180,9 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 
 ---
 
-## Phase 3: 결제 + 그룹 모드 + 출시 준비 (Week 15~18)
+## Phase 3: 결제 + 그룹 모드 + 출시 준비 (~2026-09-01 ~)
 
-### Week 15~16: 결제 + 인증 완성
+### ~2026-09-01 ~ 2026-09-15: 결제 + 인증 완성
 
 - [ ] 토스페이먼츠 웹뷰 결제 구현
 - [ ] 서버 사이드 결제 검증 API (토스페이먼츠 서버 검증 필수)
@@ -187,7 +192,7 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 - [ ] 소셜 로그인 완성 (카카오·구글·애플)
 - [ ] 인증 플로우 완성 (JWT, Refresh Token)
 
-### Week 17~18: 그룹 여행 모드 + 오프라인 저장 + 출시
+### ~2026-09-15 ~ 2026-10-06: 그룹 여행 모드 + 오프라인 저장 + 출시
 
 - [ ] 그룹 여행방 생성 + 초대 링크/QR
 - [ ] 실시간 동기화 WebSocket (Redis Pub/Sub)
