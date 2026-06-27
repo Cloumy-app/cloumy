@@ -42,8 +42,11 @@ public class AiServiceClient {
     private String cacheKey(RouteGenRequest req) {
         String themes = req.tags() == null ? "" :
                 req.tags().stream().sorted().collect(Collectors.joining(":"));
-        return String.format("route:%s:%d:%s:%s:%s",
-                req.destination(), req.nights(), req.groupType(), req.budgetLevel(), themes);
+        String ratio = req.hiddenGemRatio() != null
+                ? String.format(":%.1f", req.hiddenGemRatio())
+                : ":0.2";
+        return String.format("route:%s:%d:%s:%s:%s%s",
+                req.destination(), req.nights(), req.groupType(), req.budgetLevel(), themes, ratio);
     }
 
     public record NearbySlotDto(String name, double lat, double lng) {}
@@ -93,7 +96,8 @@ public class AiServiceClient {
             int nights,
             String group_type,
             String budget_level,
-            List<String> themes
+            List<String> themes,
+            Double hidden_gem_ratio
     ) {}
 
     /**
@@ -126,7 +130,8 @@ public class AiServiceClient {
                     req.nights(),
                     req.groupType().toLowerCase(),
                     req.budgetLevel().toLowerCase(),
-                    req.tags() != null ? req.tags() : List.of()
+                    req.tags() != null ? req.tags() : List.of(),
+                    req.hiddenGemRatio()
             );
 
             String body = objectMapper.writeValueAsString(fastApiReq);

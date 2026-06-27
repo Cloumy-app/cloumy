@@ -78,6 +78,7 @@ export interface RouteGenRequest {
   groupType: GroupType;
   budgetLevel: BudgetLevel;
   tags: string[];
+  hiddenGemRatio?: number;
 }
 
 export type GroupType = 'solo' | 'couple' | 'friends' | 'family';

@@ -1,6 +1,8 @@
 package com.cloumy.trip.dto;
 
 import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -14,7 +16,8 @@ public record RouteGenRequest(
         @NotNull LocalDate endDate,
         @NotBlank String groupType,
         @NotBlank String budgetLevel,
-        List<String> tags
+        List<String> tags,
+        @DecimalMin("0.0") @DecimalMax("1.0") Double hiddenGemRatio
 ) {
     @AssertTrue(message = "종료일은 시작일 이후여야 합니다")
     public boolean isDateRangeValid() {
