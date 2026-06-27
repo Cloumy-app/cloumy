@@ -128,7 +128,7 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 - [x] `components/route/DayTabs.tsx` — Day 탭 + 예상비용/방문 장소 수 요약 카드
 - [x] `route/[routeId]/index.tsx` — 지도 + 슬라이드업 타임라인 레이아웃, GET /v1/routes/{id}/slots 연동
 - [x] `components/route/SlotCard.tsx` — 🔄 대안 인라인 패널 (3개 선택 → 슬롯 교체)
-- [ ] 타임라인 카드 탭 → 지도 핀 포커스 연동 (애니메이션 개선 필요)
+- [x] 타임라인 카드 탭 → 지도 핀 포커스 연동 — animateToRegion 400ms + 포커스 마커 강조 — 2026-06-27
 
 ### ~2026-07-18: 데이터 파이프라인 보강 + 장소 디테일
 
