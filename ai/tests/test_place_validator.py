@@ -1,0 +1,58 @@
+import json
+import pytest
+from app.services.place_validator import validate_route_slot
+
+CANDIDATES = {"uuid-a": "카페 A", "uuid-b": "식당 B"}
+
+VALID_SLOT = json.dumps({
+    "day": 1, "order": 1, "place_id": "uuid-a",
+    "place_name": "카페 A", "tip": "팁", "duration_minutes": 60, "budget_estimate": 10000,
+})
+
+
+async def test_valid_slot_pass_through():
+    result = await validate_route_slot(VALID_SLOT, CANDIDATES)
+    assert result is not None
+    assert '"uuid-a"' in result
+
+
+async def test_hallucinated_place_id_replaced():
+    line = json.dumps({
+        "day": 1, "order": 1, "place_id": "fake-uuid",
+        "place_name": "없는 곳", "tip": "", "duration_minutes": 60, "budget_estimate": 5000,
+    })
+    result = await validate_route_slot(line, CANDIDATES)
+    assert result is not None
+    assert "fake-uuid" not in result
+    assert "uuid-a" in result  # 후보 첫 번째 항목으로 교체
+
+
+async def test_invalid_json_returns_none():
+    result = await validate_route_slot("not-json", CANDIDATES)
+    assert result is None
+
+
+async def test_empty_candidate_lookup_returns_slot():
+    # 환각 place_id여도 후보 목록이 비어 있으면 pass-through
+    line = json.dumps({
+        "day": 1, "order": 1, "place_id": "any-id",
+        "place_name": "장소", "tip": "", "duration_minutes": 60, "budget_estimate": 5000,
+    })
+    result = await validate_route_slot(line, {})
+    assert result is not None
+
+
+async def test_output_ends_with_newline():
+    result = await validate_route_slot(VALID_SLOT, CANDIDATES)
+    assert result is not None
+    assert result.endswith("\n")
+
+
+async def test_missing_place_id_returns_slot():
+    # place_id 필드 자체가 없으면 pass-through
+    line = json.dumps({
+        "day": 1, "order": 1,
+        "place_name": "카페 A", "tip": "", "duration_minutes": 60, "budget_estimate": 10000,
+    })
+    result = await validate_route_slot(line, CANDIDATES)
+    assert result is not None
