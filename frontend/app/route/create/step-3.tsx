@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from 'react';
 import { streamRoute } from '@/lib/api/routes';
 import { useRouteStore } from '@/stores/useRouteStore';
 import type { GroupType, BudgetLevel, RouteSlot } from '@/types';
+import { BUDGET_LABEL } from '@/types';
 
 const RATIO_OPTIONS = [
   { label: '관광지 위주', desc: '유명 명소 중심으로 알차게', ratio: 0.1 },
@@ -74,7 +75,7 @@ export default function RouteCreateStep3() {
         routeId = id;
         router.replace({
           pathname: '/route/[routeId]',
-          params: { routeId: id },
+          params: { routeId: id, budgetLevel: params.budgetLevel ?? 'mid' },
         });
       },
       () => {
@@ -108,7 +109,7 @@ export default function RouteCreateStep3() {
           <Text className="text-sky-400">·</Text>
           <Text className="text-sky-600 font-medium">{params.nights}박{Number(params.nights)+1}일</Text>
           <Text className="text-sky-400">·</Text>
-          <Text className="text-sky-600 font-medium">{params.budgetLevel === 'budget' ? '알뜰' : params.budgetLevel === 'premium' ? '프리미엄' : '보통'}</Text>
+          <Text className="text-sky-600 font-medium">{BUDGET_LABEL[(params.budgetLevel ?? 'mid') as BudgetLevel]}</Text>
         </View>
 
         {/* 장소 성향 선택 */}
