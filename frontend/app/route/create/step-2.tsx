@@ -19,7 +19,7 @@ const BUDGET_LEVELS: { value: BudgetLevel; label: string; desc: string; perDayMi
 
 const step2Schema = z.object({
   tags: z.array(z.string()).min(1, '테마를 1개 이상 선택해주세요'),
-  budgetLevel: z.enum(['budget', 'mid', 'premium']),
+  budgetLevel: z.enum(['tight', 'budget', 'mid', 'premium', 'luxury']),
 });
 
 type Step2Form = z.infer<typeof step2Schema>;
