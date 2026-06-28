@@ -84,6 +84,31 @@ export interface RouteGenRequest {
 export type GroupType = 'solo' | 'couple' | 'friends' | 'family';
 export type BudgetLevel = 'tight' | 'budget' | 'mid' | 'premium' | 'luxury';
 export type PassType = 'free' | 'basic' | 'premium';
+export type BudgetStatus = 'ok' | 'soft' | 'hard';
+
+export const BUDGET_SLOT_TARGET: Record<BudgetLevel, number> = {
+  tight:   4000,
+  budget:  6000,
+  mid:     12000,
+  premium: 20000,
+  luxury:  30000,
+};
+
+export const BUDGET_LABEL: Record<BudgetLevel, string> = {
+  tight:   '초절약',
+  budget:  '알뜰',
+  mid:     '여유롭게',
+  premium: '풍족하게',
+  luxury:  '특별하게',
+};
+
+export function getBudgetStatus(cost: number, level: BudgetLevel): BudgetStatus {
+  if (!cost || level === 'luxury') return 'ok';
+  const target = BUDGET_SLOT_TARGET[level];
+  if (cost > target * 2.5) return 'hard';
+  if (cost > target * 1.5) return 'soft';
+  return 'ok';
+}
 
 export interface ChatMessage {
   id: string;

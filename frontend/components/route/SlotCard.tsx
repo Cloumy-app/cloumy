@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Lock, Unlock, RefreshCw, X, Check } from 'lucide-react-native';
-import type { RouteSlot, SlotAlternative, SlotWithCoords } from '@/types';
+import type { BudgetLevel, RouteSlot, SlotAlternative, SlotWithCoords } from '@/types';
+import { getBudgetStatus } from '@/types';
 import { getSlotAlternatives } from '@/lib/api/routes';
 
 interface SlotCardProps {
@@ -10,6 +11,7 @@ interface SlotCardProps {
   index: number;
   isLast: boolean;
   routeId?: string;
+  budgetLevel?: BudgetLevel;
   onPin: () => void;
   onRemove: () => void;
   onReplaceWithAlternative?: (alt: SlotAlternative) => void;
@@ -22,6 +24,7 @@ export function SlotCard({
   index,
   isLast,
   routeId,
+  budgetLevel,
   onPin,
   onRemove,
   onReplaceWithAlternative,
@@ -138,11 +141,32 @@ export function SlotCard({
             </Text>
           ) : null}
 
-          <View className="flex-row gap-3 mt-2">
+          <View className="flex-row gap-3 mt-2 items-center flex-wrap">
             {duration != null && <Text className="text-xs text-slate-400">⏱ {duration}분</Text>}
-            {budget > 0 && (
-              <Text className="text-xs text-slate-400">💰 {budget.toLocaleString()}원</Text>
-            )}
+            {budget > 0 && (() => {
+              const status = budgetLevel ? getBudgetStatus(budget, budgetLevel) : 'ok';
+              return (
+                <View className="flex-row items-center gap-1">
+                  <Text className={`text-xs ${
+                    status === 'hard' ? 'text-rose-500 font-bold' :
+                    status === 'soft' ? 'text-amber-500 font-semibold' :
+                    'text-slate-400'
+                  }`}>
+                    💰 {budget.toLocaleString()}원
+                  </Text>
+                  {status === 'soft' && (
+                    <Text className="text-[10px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded-md">
+                      예산 주의
+                    </Text>
+                  )}
+                  {status === 'hard' && (
+                    <Text className="text-[10px] text-rose-600 font-bold bg-rose-50 px-1.5 py-0.5 rounded-md">
+                      예산 초과
+                    </Text>
+                  )}
+                </View>
+              );
+            })()}
           </View>
 
           {/* 대안 추천 인라인 패널 */}

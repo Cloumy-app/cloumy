@@ -10,10 +10,10 @@ import { TripMap } from '@/components/map/TripMap';
 import { DayTabs } from '@/components/route/DayTabs';
 import { SlotCard } from '@/components/route/SlotCard';
 import { PlaceDetailSheet } from '@/components/route/PlaceDetailSheet';
-import type { SlotAlternative, SlotWithCoords } from '@/types';
+import type { BudgetLevel, SlotAlternative, SlotWithCoords } from '@/types';
 
 export default function RouteResultScreen() {
-  const { routeId } = useLocalSearchParams<{ routeId: string }>();
+  const { routeId, budgetLevel } = useLocalSearchParams<{ routeId: string; budgetLevel?: string }>();
   const queryClient = useQueryClient();
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [focusedSlotId, setFocusedSlotId] = useState<string | null>(null);
@@ -167,6 +167,7 @@ export default function RouteResultScreen() {
                 index={i}
                 isLast={i === currentDayApiSlots.length - 1}
                 routeId={routeId}
+                budgetLevel={(budgetLevel ?? 'mid') as BudgetLevel}
                 onPin={() => handlePin(apiSlot.id)}
                 onRemove={() => handleDelete(apiSlot.id)}
                 onReplaceWithAlternative={(alt) => handleReplaceWithAlternative(apiSlot.id, alt)}
