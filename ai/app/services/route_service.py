@@ -44,12 +44,18 @@ ROUTE_GEN_SYSTEM_PROMPT = """당신은 한국 여행 전문 플래너입니다. 
 규칙:
 - 하루 최대 5슬롯: 식사 2 + 관광/체험 2 + 카페/기타 1
 - 동선 효율 최우선 (같은 구역끼리 묶기)
-- budget_level 기준: budget=1만원대, mid=3만원대, premium=5만원대 이상
+- budget_level 기준 (슬롯당 budget_estimate): budget(알뜰)=5,000~10,000원 | mid(여유롭게)=15,000~30,000원 | premium(풍족하게)=30,000원 이상
 - place_id는 반드시 후보 목록의 실제 id 값만 사용 (임의 생성 금지)
 - tip은 실용적인 현지 정보 (영업시간, 주차, 대기시간 등)
 - JSON 문자열 내 개행은 반드시 \\n으로 이스케이프 (리터럴 개행문자 금지)
 - JSON 외 다른 텍스트 출력 금지 — 오직 JSON 줄만
 - hidden_gem 비율 목표가 주어지면 후보 목록의 is_hidden_gem=true 장소 비율을 해당 목표에 맞출 것"""
+
+BUDGET_GUIDE: dict[str, str] = {
+    "budget":  "슬롯당 목표 1만원 이하",
+    "mid":     "슬롯당 목표 1.5~3만원",
+    "premium": "슬롯당 목표 3만원 이상",
+}
 
 
 async def close_ai_clients() -> None:
@@ -126,9 +132,10 @@ async def stream_route(
     )
     ratio = request.hidden_gem_ratio if request.hidden_gem_ratio is not None else 0.2
     ratio_desc = "관광지 위주" if ratio < 0.3 else ("혼합" if ratio < 0.7 else "숨은 명소 위주")
+    budget_hint = BUDGET_GUIDE.get(request.budget_level, "슬롯당 목표 1.5~3만원")
     user_message = (
         f"도시: {request.city} | {request.nights}박{request.nights + 1}일 | "
-        f"여행 유형: {request.group_type} | 예산 수준: {request.budget_level}\n"
+        f"여행 유형: {request.group_type} | 예산: {request.budget_level} — {budget_hint}\n"
         f"Hidden Gem 비율 목표: {ratio:.0%} ({ratio_desc})\n\n"
         f"후보 장소 ({len(candidates)}곳):\n{candidates_text}\n\n"
         f"{request.nights}박{request.nights + 1}일 루트를 생성하세요. "
