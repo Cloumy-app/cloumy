@@ -7,7 +7,7 @@ class RouteGenRequest(BaseModel):
     city: str
     nights: int
     group_type: Literal["solo", "couple", "friends", "family"]
-    budget_level: Literal["budget", "mid", "premium"]
+    budget_level: Literal["tight", "budget", "mid", "premium", "luxury"]
     themes: list[str] = []
     hidden_gem_ratio: float | None = None  # 0.0(관광지 위주) ~ 1.0(숨은 명소 위주)
 

@@ -9,10 +9,12 @@ import type { BudgetLevel } from '@/types';
 
 const THEMES = ['맛집', '카페', '관광', '자연', '쇼핑', '문화', '액티비티', '힐링', '야경'];
 
-const BUDGET_LEVELS: { value: BudgetLevel; label: string; desc: string; perDayMin: number; perDayMax: number }[] = [
-  { value: 'budget',  label: '알뜰',     desc: '1인 하루 3만원 이하',  perDayMin: 20000,  perDayMax: 30000  },
-  { value: 'mid',     label: '여유롭게',  desc: '1인 하루 5~9만원',    perDayMin: 50000,  perDayMax: 90000  },
-  { value: 'premium', label: '풍족하게',  desc: '1인 하루 10만원 이상', perDayMin: 100000, perDayMax: 180000 },
+const BUDGET_LEVELS: { value: BudgetLevel; label: string; desc: string; perDayMin: number; perDayMax: number | null }[] = [
+  { value: 'tight',   label: '초절약',   desc: '1인 하루 2만원 이하',  perDayMin: 10000,  perDayMax: 20000  },
+  { value: 'budget',  label: '알뜰',     desc: '1인 하루 3~4만원',    perDayMin: 30000,  perDayMax: 40000  },
+  { value: 'mid',     label: '여유롭게',  desc: '1인 하루 5~7만원',    perDayMin: 50000,  perDayMax: 70000  },
+  { value: 'premium', label: '풍족하게',  desc: '1인 하루 8~12만원',   perDayMin: 80000,  perDayMax: 120000 },
+  { value: 'luxury',  label: '특별하게',  desc: '1인 하루 13만원 이상', perDayMin: 130000, perDayMax: null   },
 ];
 
 const step2Schema = z.object({
@@ -133,7 +135,10 @@ export default function RouteCreateStep2() {
                       <Text className="text-xs text-slate-500 mt-0.5">{b.desc}</Text>
                       {days !== null && (
                         <Text className="text-xs text-slate-400 mt-0.5">
-                          {nightsNum}박{days}일 약 {Math.round(b.perDayMin * days / 10000)}~{Math.round(b.perDayMax * days / 10000)}만원
+                          {nightsNum}박{days}일 약{' '}
+                          {b.perDayMax === null
+                            ? `${Math.round(b.perDayMin * days / 10000)}만원 이상`
+                            : `${Math.round(b.perDayMin * days / 10000)}~${Math.round(b.perDayMax * days / 10000)}만원`}
                           {' '}
                           <Text className="text-slate-300">(숙박·교통 제외)</Text>
                         </Text>

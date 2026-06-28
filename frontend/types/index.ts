@@ -82,7 +82,7 @@ export interface RouteGenRequest {
 }
 
 export type GroupType = 'solo' | 'couple' | 'friends' | 'family';
-export type BudgetLevel = 'budget' | 'mid' | 'premium';
+export type BudgetLevel = 'tight' | 'budget' | 'mid' | 'premium' | 'luxury';
 export type PassType = 'free' | 'basic' | 'premium';
 
 export interface ChatMessage {
