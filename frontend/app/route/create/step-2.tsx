@@ -5,13 +5,15 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
+import type { BudgetLevel } from '@/types';
 
 const THEMES = ['맛집', '카페', '관광', '자연', '쇼핑', '문화', '액티비티', '힐링', '야경'];
-const BUDGET_LEVELS = [
-  { value: 'budget', label: '알뜰', desc: '1만원대' },
-  { value: 'mid', label: '보통', desc: '3만원대' },
-  { value: 'premium', label: '프리미엄', desc: '5만원 이상' },
-] as const;
+
+const BUDGET_LEVELS: { value: BudgetLevel; label: string; desc: string; perDayMin: number; perDayMax: number }[] = [
+  { value: 'budget',  label: '알뜰',     desc: '1인 하루 3만원 이하',  perDayMin: 20000,  perDayMax: 30000  },
+  { value: 'mid',     label: '여유롭게',  desc: '1인 하루 5~9만원',    perDayMin: 50000,  perDayMax: 90000  },
+  { value: 'premium', label: '풍족하게',  desc: '1인 하루 10만원 이상', perDayMin: 100000, perDayMax: 180000 },
+];
 
 const step2Schema = z.object({
   tags: z.array(z.string()).min(1, '테마를 1개 이상 선택해주세요'),
@@ -28,6 +30,9 @@ export default function RouteCreateStep2() {
     startDate: string;
     endDate: string;
   }>();
+
+  const nightsNum = Number(params.nights);
+  const days = Number.isNaN(nightsNum) ? null : Math.max(nightsNum + 1, 1);
 
   const { control, handleSubmit, formState: { errors } } = useForm<Step2Form>({
     resolver: zodResolver(step2Schema),
@@ -126,6 +131,13 @@ export default function RouteCreateStep2() {
                         {b.label}
                       </Text>
                       <Text className="text-xs text-slate-500 mt-0.5">{b.desc}</Text>
+                      {days !== null && (
+                        <Text className="text-xs text-slate-400 mt-0.5">
+                          {nightsNum}박{days}일 약 {Math.round(b.perDayMin * days / 10000)}~{Math.round(b.perDayMax * days / 10000)}만원
+                          {' '}
+                          <Text className="text-slate-300">(숙박·교통 제외)</Text>
+                        </Text>
+                      )}
                     </View>
                     <View className={`w-5 h-5 rounded-full border-2 items-center justify-center ${
                       value === b.value ? 'border-sky-500 bg-sky-500' : 'border-slate-300'
