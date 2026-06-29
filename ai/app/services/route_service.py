@@ -1,4 +1,5 @@
 import logging
+from datetime import date
 from typing import AsyncGenerator
 
 import asyncpg
@@ -10,6 +11,7 @@ from app.models.schemas import RouteGenRequest
 from app.services.place_validator import validate_route_slot
 from app.services.retrievers import PostgisTagRetriever, PgvectorRetriever
 from app.services.tsp_service import reorder_slots
+from app.services.weather_service import apply_weather_weights
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +114,17 @@ async def stream_route(
         ).ainvoke("")
     logger.info("후보 장소 %d건", len(candidates))
 
-    # 3. 후보 장소 0건 조기 차단 — Sonnet 호출 및 환각 방지
+    # 3. 날씨 예보 기반 야외/실내 가중치 조정 (start_date 없으면 오늘 기준)
+    candidates = await apply_weather_weights(
+        candidates=candidates,
+        destination=request.city,
+        start_date=request.start_date or date.today(),
+        nights=request.nights,
+        api_key=settings.openweathermap_api_key,
+        city_centers=CITY_CENTERS,
+    )
+
+    # 4. 후보 장소 0건 조기 차단 — Sonnet 호출 및 환각 방지
     if not candidates:
         logger.warning("후보 장소 0건 — 루트 생성 불가: city=%s", request.city)
         yield '{"error": "후보 장소 없음", "city": "' + request.city + '"}\n'
@@ -127,7 +139,7 @@ async def stream_route(
         for doc in candidates
     }
 
-    # 4. 후보 장소 목록 텍스트 구성
+    # 5. 후보 장소 목록 텍스트 구성
     candidates_text = "\n".join(
         f"[{i + 1}] id={doc.metadata['id']} | {doc.page_content}"
         for i, doc in enumerate(candidates)
@@ -144,7 +156,7 @@ async def stream_route(
         "각 슬롯을 JSON 한 줄씩 스트리밍 출력하세요."
     )
 
-    # 5. Sonnet 스트리밍 (Prompt Caching으로 시스템 프롬프트 입력 비용 ~90% 절감)
+    # 6. Sonnet 스트리밍 (Prompt Caching으로 시스템 프롬프트 입력 비용 ~90% 절감)
     buffer = ""
     collected: list[str] = []
     try:
