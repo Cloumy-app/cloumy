@@ -6,6 +6,7 @@ import asyncpg
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
 
+from app.config.city_centers import CITY_CENTERS
 from app.config.settings import settings
 from app.models.schemas import RouteGenRequest
 from app.services.place_validator import validate_route_slot
@@ -14,23 +15,6 @@ from app.services.tsp_service import reorder_slots
 from app.services.weather_service import apply_weather_weights
 
 logger = logging.getLogger(__name__)
-
-CITY_CENTERS: dict[str, tuple[float, float]] = {
-    "서울": (126.9780, 37.5665),
-    "부산": (129.0756, 35.1796),
-    "제주": (126.5312, 33.4996),
-    "경주": (129.2114, 35.8562),
-    "강릉": (128.8761, 37.7519),
-    "전주": (127.1490, 35.8242),
-    "여수": (127.6622, 34.7604),
-    "인천": (126.7052, 37.4563),
-    "대전": (127.3845, 36.3504),
-    "대구": (128.6014, 35.8714),
-    "광주": (126.8526, 35.1595),
-    "속초": (128.5918, 38.2070),
-    "춘천": (127.7298, 37.8813),
-    "거제": (128.6211, 34.8800),
-}
 
 # Anthropic SDK 클라이언트 — Sonnet 스트리밍 (Prompt Caching 안정적 적용)
 _anthropic = AsyncAnthropic(api_key=settings.anthropic_api_key)
