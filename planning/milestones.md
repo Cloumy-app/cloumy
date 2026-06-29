@@ -142,7 +142,7 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 ### ~2026-07-25: 데이터 보강 + 품질 개선
 
 **[FastAPI]**
-- [ ] 카카오 로컬 보충 수집기 — TourAPI 미수집 맛집/카페 보강 + 좌표 교정 (`scripts/collect_kakao.py`)
+- [x] 카카오 로컬 보충 수집기 — TourAPI 미수집 맛집/카페 보강 + 좌표 교정 (`scripts/collect_kakao.py`) — 2026-06-29
 - [x] 기상청 API 연동 (OpenWeatherMap) — 여행 날짜 예보 기반 실외/실내 장소 가중치 조정 (`services/weather_service.py`) — 2026-06-29
 
 **[Spring]**
