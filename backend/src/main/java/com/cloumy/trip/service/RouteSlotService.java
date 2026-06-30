@@ -39,12 +39,19 @@ public class RouteSlotService {
         String placeIdStr = node.path("place_id").asText(null);
         if (placeIdStr == null || placeIdStr.isBlank()) return;
 
+        int dayNumber = node.path("day").asInt(1);
+        int orderIndex = node.path("order").asInt(1) - 1; // AI 1-indexed → DB 0-indexed
+
+        // 동일 슬롯 이미 존재하면 스킵 (Redis 캐시 재생 또는 스트림 재시도 시 중복 방지)
+        if (routeSlotRepository.existsByRouteIdAndDayNumberAndOrderIndex(routeId, dayNumber, orderIndex)) {
+            return;
+        }
+
         RouteSlot slot = RouteSlot.builder()
                 .routeId(routeId)
                 .placeId(UUID.fromString(placeIdStr))
-                .dayNumber(node.path("day").asInt(1))
-                // AI는 1-indexed order → DB는 0-indexed order_index
-                .orderIndex(node.path("order").asInt(1) - 1)
+                .dayNumber(dayNumber)
+                .orderIndex(orderIndex)
                 .durationMinutes(node.path("duration_minutes").asInt(0))
                 .estimatedCost(node.path("budget_estimate").asInt(0))
                 .tips(node.path("tip").asText(null))
