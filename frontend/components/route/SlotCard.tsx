@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { Lock, Unlock, RefreshCw, X, Check } from 'lucide-react-native';
+import { Lock, Unlock, RefreshCw, X, Check, Navigation, Wallet, MapPin, Sparkles } from 'lucide-react-native';
 import type { BudgetLevel, RouteSlot, SlotAlternative, SlotWithCoords } from '@/types';
 import { getBudgetStatus } from '@/types';
 import { getSlotAlternatives } from '@/lib/api/routes';
@@ -12,10 +12,16 @@ interface SlotCardProps {
   isLast: boolean;
   routeId?: string;
   budgetLevel?: BudgetLevel;
+  viewMode?: 'edit' | 'detail';
   onPin: () => void;
   onRemove: () => void;
   onReplaceWithAlternative?: (alt: SlotAlternative) => void;
   onTap?: () => void;
+}
+
+function formatTime(timeStr: string | null): string | null {
+  if (!timeStr) return null;
+  return timeStr.slice(0, 5);
 }
 
 export function SlotCard({
@@ -25,6 +31,7 @@ export function SlotCard({
   isLast,
   routeId,
   budgetLevel,
+  viewMode = 'edit',
   onPin,
   onRemove,
   onReplaceWithAlternative,
@@ -39,8 +46,9 @@ export function SlotCard({
   const duration = apiSlot?.durationMinutes ?? slot?.duration_minutes ?? null;
   const budget = apiSlot?.estimatedCost ?? slot?.budget_estimate ?? 0;
   const pinned = apiSlot?.pinned ?? slot?.isPinned ?? false;
-  const dayLabel = apiSlot ? `Day ${apiSlot.dayNumber}` : slot ? `Day ${slot.day}` : '';
-  const orderLabel = apiSlot ? `${apiSlot.orderIndex + 1}번째` : slot ? `${slot.order}번째` : '';
+  const startTime = formatTime(apiSlot?.startTime ?? null);
+  const transportMinutes = apiSlot?.transportMinutes ?? null;
+  const transportToNext = apiSlot?.transportToNext ?? null;
 
   const handleReshuffle = async () => {
     if (pinned || !routeId || !apiSlot) return;
@@ -65,6 +73,145 @@ export function SlotCard({
     setAlternatives([]);
   };
 
+  // ─── detail 모드: Itinerary 스타일 ───────────────────────────────────────
+  if (viewMode === 'detail') {
+    const budgetStatus = budgetLevel ? getBudgetStatus(budget, budgetLevel) : 'ok';
+
+    return (
+      <View className="mb-8">
+        <TouchableOpacity
+          activeOpacity={onTap ? 0.85 : 1}
+          onPress={onTap}
+        >
+          <View className="flex-row">
+            {/* 좌측: dot + 수직 연결선 */}
+            <View className="items-center" style={{ width: 32 }}>
+              <View className="w-8 h-8 rounded-full bg-sky-500 border-4 border-slate-50 items-center justify-center shadow-sm z-10">
+                <MapPin size={12} color="white" />
+              </View>
+              {!isLast && <View className="flex-1 w-0.5 bg-sky-100 mt-1" style={{ minHeight: 24 }} />}
+            </View>
+
+            {/* 우측: 흰 카드 */}
+            <View className="flex-1 ml-4 bg-white rounded-3xl p-4 shadow-sm border border-slate-100">
+              {/* 시간 + 제목 + 소요시간 배지 */}
+              <View className="flex-row justify-between items-start mb-2">
+                <View className="flex-1 mr-2">
+                  {startTime && (
+                    <Text className="text-sky-600 font-black text-sm">{startTime}</Text>
+                  )}
+                  <Text className="text-lg font-bold text-slate-800 leading-tight">{placeName}</Text>
+                </View>
+                {duration != null && (
+                  <Text className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded-lg font-bold">
+                    {duration}분
+                  </Text>
+                )}
+              </View>
+
+              {/* 설명 */}
+              {tip && (
+                <Text className="text-xs text-slate-500 mb-3 leading-relaxed" numberOfLines={2}>
+                  {tip}
+                </Text>
+              )}
+
+              {/* 하단: 타입 배지 + 비용 + 소형 액션 */}
+              <View className="flex-row justify-between items-center pt-3 border-t border-slate-50">
+                <Text className="text-[10px] font-bold px-2 py-1 rounded-md bg-slate-100 text-slate-500">
+                  #방문
+                </Text>
+                <View className="flex-row items-center gap-3">
+                  {/* 비용 */}
+                  <View className="flex-row items-center gap-1">
+                    <Wallet size={11} color="#475569" />
+                    <Text className={`text-xs font-bold ${
+                      budgetStatus === 'hard' ? 'text-rose-500' :
+                      budgetStatus === 'soft' ? 'text-amber-500' :
+                      'text-slate-600'
+                    }`}>
+                      {budget === 0 ? '무료' : `${budget.toLocaleString()}원`}
+                    </Text>
+                  </View>
+
+                  {/* 소형 액션 버튼 */}
+                  <View className="flex-row gap-2 items-center">
+                    <TouchableOpacity onPress={onPin} hitSlop={8}>
+                      {pinned
+                        ? <Lock size={13} color="#0ea5e9" />
+                        : <Unlock size={13} color="#cbd5e1" />}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={handleReshuffle}
+                      disabled={pinned || !apiSlot || loadingAlts}
+                      hitSlop={8}
+                    >
+                      {loadingAlts
+                        ? <ActivityIndicator size={12} color="#0ea5e9" />
+                        : <RefreshCw size={13} color={pinned || !apiSlot ? '#e2e8f0' : showAlts ? '#0ea5e9' : '#94a3b8'} />}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={pinned ? undefined : onRemove}
+                      disabled={pinned}
+                      hitSlop={8}
+                    >
+                      <X size={13} color={pinned ? '#e2e8f0' : '#f43f5e'} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        {/* 이동 정보: 점선 구분자 스타일 */}
+        {!isLast && (transportMinutes != null || transportToNext) && (
+          <View className="flex-row items-center gap-2 ml-10 my-2 py-2 border-b border-dashed border-slate-200">
+            <Navigation size={14} color="#94a3b8" />
+            <Text className="text-sm font-bold text-slate-500 flex-1">
+              다음 장소까지{transportToNext ? ` ${transportToNext} ·` : ''} {transportMinutes != null ? `${transportMinutes}분 소요` : ''}
+            </Text>
+          </View>
+        )}
+
+        {/* AI 대안 추천 패널 */}
+        {showAlts && alternatives.length > 0 && (
+          <View className="ml-10 mt-2 p-4 bg-sky-50 border border-sky-100 rounded-2xl">
+            <View className="flex-row items-center gap-1.5 mb-3">
+              <Sparkles size={13} color="#0369a1" />
+              <Text className="text-xs font-bold text-sky-800">AI 대안 추천 (이 동선에 맞는 장소)</Text>
+            </View>
+            {alternatives.map((alt, i) => (
+              <TouchableOpacity
+                key={i}
+                onPress={() => handleSelectAlternative(alt)}
+                className="flex-row items-start gap-2 p-3 bg-white rounded-xl border border-sky-100 mb-2"
+                activeOpacity={0.8}
+              >
+                <View className="w-6 h-6 rounded-full bg-sky-500 items-center justify-center mt-0.5 shrink-0">
+                  <Text className="text-white font-black text-[10px]">{i + 1}</Text>
+                </View>
+                <View className="flex-1">
+                  <Text className="font-bold text-slate-800 text-sm">{alt.placeName}</Text>
+                  <Text className="text-slate-400 text-xs mt-0.5 leading-relaxed" numberOfLines={2}>
+                    {alt.reason}
+                  </Text>
+                  {alt.estimatedCost > 0 && (
+                    <Text className="text-sky-500 text-xs font-semibold mt-1">
+                      {alt.estimatedCost.toLocaleString()}원
+                    </Text>
+                  )}
+                </View>
+                <Check size={16} color="#0ea5e9" />
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  }
+
+  // ─── edit 모드: Planner 스타일 (기존) ───────────────────────────────────
   return (
     <View className="relative">
       {!isLast && (
@@ -75,44 +222,38 @@ export function SlotCard({
         activeOpacity={onTap ? 0.75 : 1}
         onPress={onTap}
         className={`flex-row gap-3 p-4 rounded-2xl border-2 ${
-          pinned ? 'border-sky-500 bg-blue-50/30' : 'border-transparent bg-slate-50'
+          pinned ? 'border-sky-400 bg-sky-50/40' : 'border-transparent bg-slate-50'
         }`}
       >
+        {/* 번호 원 */}
         <View className="items-center">
-          <View
-            className={`w-10 h-10 rounded-full items-center justify-center z-10 ${
-              pinned ? 'bg-sky-500' : 'bg-white border border-slate-200'
-            }`}
-          >
+          <View className={`w-10 h-10 rounded-full items-center justify-center z-10 shadow-sm ${
+            pinned ? 'bg-sky-500 shadow-sky-500/30' : 'bg-white border border-slate-200'
+          }`}>
             <Text className={`font-black text-sm ${pinned ? 'text-white' : 'text-slate-500'}`}>
               {index + 1}
             </Text>
           </View>
+          {startTime && (
+            <Text className="text-[10px] font-bold text-slate-500 mt-2 whitespace-nowrap">{startTime}</Text>
+          )}
         </View>
 
-        <View className="flex-1 pt-1">
+        <View className="flex-1 pt-0.5">
           <View className="flex-row justify-between items-start mb-1">
             <View className="flex-1 mr-2">
-              <View
-                className={`self-start px-2 py-0.5 rounded-md mb-1.5 ${
-                  pinned ? 'bg-blue-100' : 'bg-slate-200'
-                }`}
-              >
-                <Text className={`text-[10px] font-bold ${pinned ? 'text-blue-700' : 'text-slate-600'}`}>
-                  {dayLabel} · {orderLabel}
-                </Text>
-              </View>
-              <Text className={`font-bold leading-tight ${pinned ? 'text-blue-900' : 'text-slate-800'}`}>
+              <Text className={`font-bold text-base leading-tight ${pinned ? 'text-sky-900' : 'text-slate-800'}`}>
                 {placeName}
               </Text>
             </View>
 
+            {/* 액션 버튼들 */}
             <View className="flex-row items-center gap-1 bg-white p-1 rounded-xl border border-slate-100">
               <TouchableOpacity
                 onPress={onPin}
-                className={`p-1.5 rounded-lg ${pinned ? 'bg-blue-100' : ''}`}
+                className={`p-1.5 rounded-lg ${pinned ? 'bg-sky-100' : ''}`}
               >
-                {pinned ? <Lock size={16} color="#2563eb" /> : <Unlock size={16} color="#94a3b8" />}
+                {pinned ? <Lock size={16} color="#0ea5e9" /> : <Unlock size={16} color="#94a3b8" />}
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleReshuffle}
@@ -122,7 +263,7 @@ export function SlotCard({
                 {loadingAlts ? (
                   <ActivityIndicator size={14} color="#0ea5e9" />
                 ) : (
-                  <RefreshCw size={16} color={pinned || !apiSlot ? '#94a3b8' : '#0ea5e9'} />
+                  <RefreshCw size={16} color={pinned || !apiSlot ? '#cbd5e1' : '#0ea5e9'} />
                 )}
               </TouchableOpacity>
               <TouchableOpacity
@@ -135,14 +276,17 @@ export function SlotCard({
             </View>
           </View>
 
-          {tip ? (
-            <Text className="text-xs text-slate-500 font-medium leading-relaxed" numberOfLines={2}>
+          {tip && (
+            <Text className="text-xs text-slate-500 leading-relaxed mb-1.5" numberOfLines={2}>
               {tip}
             </Text>
-          ) : null}
+          )}
 
-          <View className="flex-row gap-3 mt-2 items-center flex-wrap">
-            {duration != null && <Text className="text-xs text-slate-400">⏱ {duration}분</Text>}
+          {/* 체류시간 + 예산 */}
+          <View className="flex-row gap-3 mt-1 items-center flex-wrap">
+            {!startTime && duration != null && (
+              <Text className="text-xs text-slate-400">⏱ {duration}분</Text>
+            )}
             {budget > 0 && (() => {
               const status = budgetLevel ? getBudgetStatus(budget, budgetLevel) : 'ok';
               return (
@@ -152,7 +296,7 @@ export function SlotCard({
                     status === 'soft' ? 'text-amber-500 font-semibold' :
                     'text-slate-400'
                   }`}>
-                    💰 {budget.toLocaleString()}원
+                    {budget === 0 ? '무료' : `${budget.toLocaleString()}원`}
                   </Text>
                   {status === 'soft' && (
                     <Text className="text-[10px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded-md">
@@ -169,15 +313,18 @@ export function SlotCard({
             })()}
           </View>
 
-          {/* 대안 추천 인라인 패널 */}
+          {/* AI 대안 추천 인라인 패널 */}
           {showAlts && alternatives.length > 0 && (
             <View className="mt-3 gap-2">
-              <Text className="text-xs font-bold text-slate-600 mb-1">대안 장소 추천</Text>
+              <View className="flex-row items-center gap-1.5 mb-1">
+                <Sparkles size={12} color="#0369a1" />
+                <Text className="text-xs font-bold text-slate-500">AI 대안 추천 (이 동선에 맞는 장소)</Text>
+              </View>
               {alternatives.map((alt, i) => (
                 <TouchableOpacity
                   key={i}
                   onPress={() => handleSelectAlternative(alt)}
-                  className="flex-row items-start gap-2 p-3 bg-white rounded-xl border border-sky-100"
+                  className="flex-row items-start gap-2 p-3 bg-white rounded-xl border border-slate-100"
                   activeOpacity={0.8}
                 >
                   <View className="w-6 h-6 rounded-full bg-sky-500 items-center justify-center mt-0.5 shrink-0">
@@ -185,12 +332,12 @@ export function SlotCard({
                   </View>
                   <View className="flex-1">
                     <Text className="font-bold text-slate-800 text-sm">{alt.placeName}</Text>
-                    <Text className="text-slate-500 text-xs mt-0.5 leading-relaxed" numberOfLines={2}>
+                    <Text className="text-slate-400 text-xs mt-0.5 leading-relaxed" numberOfLines={2}>
                       {alt.reason}
                     </Text>
                     {alt.estimatedCost > 0 && (
-                      <Text className="text-sky-500 text-xs font-bold mt-1">
-                        💰 {alt.estimatedCost.toLocaleString()}원
+                      <Text className="text-sky-500 text-xs font-semibold mt-1">
+                        {alt.estimatedCost.toLocaleString()}원
                       </Text>
                     )}
                   </View>
@@ -201,6 +348,17 @@ export function SlotCard({
           )}
         </View>
       </TouchableOpacity>
+
+      {/* 이동 정보 */}
+      {!isLast && (transportMinutes != null || transportToNext) && (
+        <View className="flex-row items-center gap-1.5 ml-14 my-1">
+          <Navigation size={11} color="#94a3b8" />
+          <Text className="text-[11px] text-slate-400">
+            {transportToNext && `${transportToNext} · `}
+            {transportMinutes != null ? `${transportMinutes}분 소요` : ''}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
