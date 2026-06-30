@@ -35,7 +35,16 @@ ROUTE_GEN_SYSTEM_PROMPT = """당신은 한국 여행 전문 플래너입니다. 
 - tip은 실용적인 현지 정보 (영업시간, 주차, 대기시간 등)
 - JSON 문자열 내 개행은 반드시 \\n으로 이스케이프 (리터럴 개행문자 금지)
 - JSON 외 다른 텍스트 출력 금지 — 오직 JSON 줄만
-- hidden_gem 비율 목표가 주어지면 후보 목록의 is_hidden_gem=true 장소 비율을 해당 목표에 맞출 것"""
+- hidden_gem 비율 목표가 주어지면 후보 목록의 is_hidden_gem=true 장소 비율을 해당 목표에 맞출 것
+
+[예산 균등 배분]
+- 각 날의 budget_estimate 합계가 비슷하도록 분산할 것 (Day 1에 집중 금지)
+- 모든 날의 슬롯 수를 균등하게 배분 (±1 이내)
+
+[Day별 지역 집중]
+- 같은 날의 장소들은 이동 30분 이내 가까운 구역에 몰아서 배치
+- Day가 바뀌면 구역 전환 (Day 1 = A구역, Day 2 = B구역, ...)
+- 서로 멀리 떨어진 장소를 같은 날 배치하지 말 것"""
 
 BUDGET_GUIDE: dict[str, str] = {
     "tight":   "하루 활동비 목표 2만원 (슬롯당 4,000원 이하)",
@@ -134,7 +143,8 @@ async def stream_route(
     user_message = (
         f"도시: {request.city} | {request.nights}박{request.nights + 1}일 | "
         f"여행 유형: {request.group_type} | 예산: {request.budget_level} — {budget_hint}\n"
-        f"Hidden Gem 비율 목표: {ratio:.0%} ({ratio_desc})\n\n"
+        f"Hidden Gem 비율 목표: {ratio:.0%} ({ratio_desc})\n"
+        f"총 {request.nights}박이므로 {request.nights + 1}개 지역 구역으로 나눠 Day별 집중 배치할 것\n\n"
         f"후보 장소 ({len(candidates)}곳):\n{candidates_text}\n\n"
         f"{request.nights}박{request.nights + 1}일 루트를 생성하세요. "
         "각 슬롯을 JSON 한 줄씩 스트리밍 출력하세요."
