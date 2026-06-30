@@ -1,10 +1,12 @@
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { router } from 'expo-router';
-import { ChevronLeft, MapPin, Users } from 'lucide-react-native';
+import { ChevronLeft, MapPin, Users, Calendar } from 'lucide-react-native';
+import { useState } from 'react';
+import DateTimePicker from '@expo/ui/community/datetime-picker';
 
 const CITIES = ['서울', '부산', '제주', '경주', '강릉', '전주', '여수', '속초', '춘천', '거제'];
 const GROUP_TYPES = [
@@ -28,6 +30,9 @@ function toDateStr(d: Date): string {
 }
 
 export default function RouteCreateStep1() {
+  const [startDate, setStartDate] = useState(new Date());
+  const [showPicker, setShowPicker] = useState(false);
+
   const { control, handleSubmit, formState: { errors } } = useForm<Step1Form>({
     resolver: zodResolver(step1Schema),
     defaultValues: {
@@ -38,13 +43,13 @@ export default function RouteCreateStep1() {
   });
 
   const onNext = (data: Step1Form) => {
-    const startDate = toDateStr(new Date());
-    const end = new Date();
+    const startDateStr = toDateStr(startDate);
+    const end = new Date(startDate);
     end.setDate(end.getDate() + data.nights);
     const endDate = toDateStr(end);
     router.push({
       pathname: '/route/create/step-2',
-      params: { ...data, startDate, endDate },
+      params: { ...data, startDate: startDateStr, endDate },
     });
   };
 
@@ -97,6 +102,52 @@ export default function RouteCreateStep1() {
           />
           {errors.destination && (
             <Text className="text-rose-500 text-xs mt-2">{errors.destination.message}</Text>
+          )}
+        </View>
+
+        {/* 출발일 */}
+        <View className="mb-6">
+          <View className="flex-row items-center gap-2 mb-3">
+            <Calendar size={18} color="#0ea5e9" />
+            <Text className="font-bold text-slate-700">출발일</Text>
+          </View>
+
+          {Platform.OS === 'ios' ? (
+            <View className="bg-sky-50 border-2 border-sky-200 rounded-2xl px-4 py-2.5">
+              <DateTimePicker
+                value={startDate}
+                mode="date"
+                display="compact"
+                minimumDate={new Date()}
+                onValueChange={(_, date) => { if (date) setStartDate(date); }}
+              />
+            </View>
+          ) : (
+            <>
+              <TouchableOpacity
+                className="flex-row items-center bg-sky-50 border-2 border-sky-200 rounded-2xl px-4 py-3.5"
+                onPress={() => setShowPicker(true)}
+                activeOpacity={0.8}
+              >
+                <Calendar size={16} color="#0ea5e9" />
+                <Text className="ml-2 text-sky-700 font-semibold">
+                  {startDate.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
+                </Text>
+              </TouchableOpacity>
+              {showPicker && (
+                <DateTimePicker
+                  value={startDate}
+                  mode="date"
+                  display="default"
+                  minimumDate={new Date()}
+                  onValueChange={(_, date) => {
+                    setShowPicker(false);
+                    if (date) setStartDate(date);
+                  }}
+                  onDismiss={() => setShowPicker(false)}
+                />
+              )}
+            </>
           )}
         </View>
 
