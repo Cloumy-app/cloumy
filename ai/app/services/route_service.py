@@ -6,6 +6,7 @@ import asyncpg
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
 
+from app.config.city_centers import CITY_CENTERS
 from app.config.settings import settings
 from app.models.schemas import RouteGenRequest
 from app.services.place_validator import validate_route_slot
@@ -14,23 +15,6 @@ from app.services.tsp_service import reorder_slots
 from app.services.weather_service import apply_weather_weights
 
 logger = logging.getLogger(__name__)
-
-CITY_CENTERS: dict[str, tuple[float, float]] = {
-    "서울": (126.9780, 37.5665),
-    "부산": (129.0756, 35.1796),
-    "제주": (126.5312, 33.4996),
-    "경주": (129.2114, 35.8562),
-    "강릉": (128.8761, 37.7519),
-    "전주": (127.1490, 35.8242),
-    "여수": (127.6622, 34.7604),
-    "인천": (126.7052, 37.4563),
-    "대전": (127.3845, 36.3504),
-    "대구": (128.6014, 35.8714),
-    "광주": (126.8526, 35.1595),
-    "속초": (128.5918, 38.2070),
-    "춘천": (127.7298, 37.8813),
-    "거제": (128.6211, 34.8800),
-}
 
 # Anthropic SDK 클라이언트 — Sonnet 스트리밍 (Prompt Caching 안정적 적용)
 _anthropic = AsyncAnthropic(api_key=settings.anthropic_api_key)
@@ -51,7 +35,16 @@ ROUTE_GEN_SYSTEM_PROMPT = """당신은 한국 여행 전문 플래너입니다. 
 - tip은 실용적인 현지 정보 (영업시간, 주차, 대기시간 등)
 - JSON 문자열 내 개행은 반드시 \\n으로 이스케이프 (리터럴 개행문자 금지)
 - JSON 외 다른 텍스트 출력 금지 — 오직 JSON 줄만
-- hidden_gem 비율 목표가 주어지면 후보 목록의 is_hidden_gem=true 장소 비율을 해당 목표에 맞출 것"""
+- hidden_gem 비율 목표가 주어지면 후보 목록의 is_hidden_gem=true 장소 비율을 해당 목표에 맞출 것
+
+[예산 균등 배분]
+- 각 날의 budget_estimate 합계가 비슷하도록 분산할 것 (Day 1에 집중 금지)
+- 모든 날의 슬롯 수를 균등하게 배분 (±1 이내)
+
+[Day별 지역 집중]
+- 같은 날의 장소들은 이동 30분 이내 가까운 구역에 몰아서 배치
+- Day가 바뀌면 구역 전환 (Day 1 = A구역, Day 2 = B구역, ...)
+- 서로 멀리 떨어진 장소를 같은 날 배치하지 말 것"""
 
 BUDGET_GUIDE: dict[str, str] = {
     "tight":   "하루 활동비 목표 2만원 (슬롯당 4,000원 이하)",
@@ -150,7 +143,8 @@ async def stream_route(
     user_message = (
         f"도시: {request.city} | {request.nights}박{request.nights + 1}일 | "
         f"여행 유형: {request.group_type} | 예산: {request.budget_level} — {budget_hint}\n"
-        f"Hidden Gem 비율 목표: {ratio:.0%} ({ratio_desc})\n\n"
+        f"Hidden Gem 비율 목표: {ratio:.0%} ({ratio_desc})\n"
+        f"총 {request.nights}박이므로 {request.nights + 1}개 지역 구역으로 나눠 Day별 집중 배치할 것\n\n"
         f"후보 장소 ({len(candidates)}곳):\n{candidates_text}\n\n"
         f"{request.nights}박{request.nights + 1}일 루트를 생성하세요. "
         "각 슬롯을 JSON 한 줄씩 스트리밍 출력하세요."

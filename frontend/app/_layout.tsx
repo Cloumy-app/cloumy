@@ -10,7 +10,6 @@ const queryClient = new QueryClient();
 export default function RootLayout() {
   const loadFromStorage = useAuthStore((s) => s.loadFromStorage);
   const isHydrated = useAuthStore((s) => s.isHydrated);
-  const accessToken = useAuthStore((s) => s.accessToken);
 
   useEffect(() => {
     loadFromStorage();
@@ -18,6 +17,9 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (!isHydrated) return;
+    // accessToken을 컴포넌트 구독 대신 store에서 직접 읽음
+    // → 토큰 갱신 시 _layout이 리렌더되지 않아 네비게이션 컨텍스트 안정 유지
+    const { accessToken } = useAuthStore.getState();
     if (accessToken) {
       router.replace('/(tabs)');
     } else {

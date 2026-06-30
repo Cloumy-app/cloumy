@@ -1,9 +1,11 @@
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft, Sparkles } from 'lucide-react-native';
 import { useState, useRef, useEffect } from 'react';
 import { streamRoute } from '@/lib/api/routes';
+import { devLogin } from '@/lib/api/auth';
+import { useAuthStore } from '@/stores/useAuthStore';
 import { useRouteStore } from '@/stores/useRouteStore';
 import type { GroupType, BudgetLevel, RouteSlot } from '@/types';
 import { BUDGET_LABEL } from '@/types';
@@ -30,15 +32,31 @@ export default function RouteCreateStep3() {
   const stopStreamRef = useRef<(() => void) | null>(null);
   const hasNavigatedRef = useRef(false);
   const { appendStreamingSlot, finalizeRoute, setIsStreaming, reset } = useRouteStore();
+  const { setTokens, setUser } = useAuthStore();
 
   useEffect(() => {
     return () => {
-      stopStreamRef.current?.();
-      setIsStreaming(false);
+      // router.replace로 화면 이동한 경우 스트림 유지 — zustand store를 통해 슬롯이 계속 추가됨
+      if (!hasNavigatedRef.current) {
+        stopStreamRef.current?.();
+        setIsStreaming(false);
+      }
     };
   }, []);
 
-  const onGenerate = () => {
+  const onGenerate = async () => {
+    // DEV: 생성 전 토큰 자동 갱신 (JWT 1시간 TTL 만료 대비)
+    if (__DEV__) {
+      try {
+        const data = await devLogin();
+        setTokens(data.accessToken, data.refreshToken);
+        setUser(data.user);
+      } catch {
+        Alert.alert('서버 연결 실패', 'Spring 서버가 실행 중인지 확인해주세요.');
+        return;
+      }
+    }
+
     const nights = Number(params.nights ?? 2);
     const startDate = params.startDate ?? new Date().toISOString().split('T')[0];
     const endDate = params.endDate ?? new Date(Date.now() + nights * 86400000).toISOString().split('T')[0];
@@ -82,9 +100,12 @@ export default function RouteCreateStep3() {
         finalizeRoute(routeId, params.destination ?? '서울', startDate, endDate);
         setIsGenerating(false);
       },
-      () => {
+      (e) => {
         setIsGenerating(false);
         setIsStreaming(false);
+        // 오류 내용을 화면에 표시 (무음 실패 방지)
+        const msg = e instanceof Error ? e.message : JSON.stringify(e);
+        Alert.alert('루트 생성 실패', `오류가 발생했어요.\n${msg}`);
       },
     );
   };

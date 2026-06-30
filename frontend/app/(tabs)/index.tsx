@@ -153,7 +153,7 @@ export default function HomeScreen() {
           <View className="mb-8">
             <View className="flex-row justify-between items-center mb-4">
               <Text className="text-lg font-bold text-slate-800">다가오는 여행</Text>
-              <TouchableOpacity onPress={() => router.push('/route/create/step-1' as never)}>
+              <TouchableOpacity onPress={() => router.push('/routes' as never)}>
                 <Text className="text-sky-500 text-sm font-bold">전체보기</Text>
               </TouchableOpacity>
             </View>
