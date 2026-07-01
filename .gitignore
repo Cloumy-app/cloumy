@@ -25,6 +25,7 @@ target/
 .gradle/
 build/
 out/
+bin/
 
 # Node / React Native
 node_modules/
