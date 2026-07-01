@@ -117,6 +117,7 @@
 | `docs/02-architecture.md` | 시스템 구조, 기술 결정, 폴더 구조 |
 | `docs/03-data-model.md` | DB 스키마, 엔티티 정의, TypeScript 타입 |
 | `docs/04-api-spec.md` | API 엔드포인트 명세, 인증, 에러 처리 |
+| `docs/05-ai-service-architecture.md` | AI 서비스 실제 구현 구조·흐름 (as-built, spec.md는 계획 문서) |
 | `frontend/spec.md` | React Native 컴포넌트 구조, 상태 관리 |
 | `backend/spec.md` | Spring Boot 레이어 구조, 비즈니스 로직 |
 | `ai/spec.md` | FastAPI AI 서비스, RAG 파이프라인, 비용 전략 |
