@@ -1,5 +1,7 @@
 package com.cloumy.trip.service;
 
+import com.cloumy.common.exception.BusinessException;
+import com.cloumy.common.response.ErrorCode;
 import com.cloumy.payment.service.PassValidationService;
 import com.cloumy.trip.dto.RouteGenRequest;
 import com.cloumy.trip.dto.RouteListResponse;
@@ -50,5 +52,15 @@ public class RouteService {
                 .build();
 
         return routeRepository.save(route);
+    }
+
+    @Transactional
+    public void deleteRoute(UUID routeId, UUID userId) {
+        Route route = routeRepository.findById(routeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
+        if (!route.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.ROUTE_ACCESS_DENIED);
+        }
+        routeRepository.delete(route);
     }
 }
