@@ -53,6 +53,14 @@ export async function getPlaceDetail(placeId: string): Promise<PlaceDetail> {
   return body.data;
 }
 
+export async function deleteRoute(routeId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/v1/routes/${routeId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+}
+
 export async function getSlotAlternatives(
   routeId: string,
   slotId: string,

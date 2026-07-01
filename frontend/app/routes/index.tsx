@@ -1,10 +1,18 @@
-import { View, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useRef } from 'react';
+import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft, MapPin, Calendar, Sparkles } from 'lucide-react-native';
-import { getMyRoutes } from '@/lib/api/routes';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ChevronLeft, MapPin, Calendar, Sparkles, Trash2 } from 'lucide-react-native';
+import { Swipeable } from 'react-native-gesture-handler';
+import { getMyRoutes, deleteRoute } from '@/lib/api/routes';
 import type { RouteListItem } from '@/types';
+
+interface SpringPage<T> {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+}
 
 function calcDDay(startDate: string): string {
   const diff = Math.ceil(
@@ -42,14 +50,8 @@ function RouteCard({ route }: { route: RouteListItem }) {
           <Text className="text-lg font-bold text-slate-800 flex-1 pr-2" numberOfLines={1}>
             {route.title}
           </Text>
-          <View
-            className={`px-2.5 py-1 rounded-full ${
-              isPast ? 'bg-slate-100' : 'bg-sky-50'
-            }`}
-          >
-            <Text
-              className={`text-xs font-bold ${isPast ? 'text-slate-500' : 'text-sky-600'}`}
-            >
+          <View className={`px-2.5 py-1 rounded-full ${isPast ? 'bg-slate-100' : 'bg-sky-50'}`}>
+            <Text className={`text-xs font-bold ${isPast ? 'text-slate-500' : 'text-sky-600'}`}>
               {dday}
             </Text>
           </View>
@@ -69,6 +71,51 @@ function RouteCard({ route }: { route: RouteListItem }) {
         </View>
       </View>
     </TouchableOpacity>
+  );
+}
+
+function SwipeableRouteCard({
+  route,
+  onDelete,
+}: {
+  route: RouteListItem;
+  onDelete: (id: string) => void;
+}) {
+  const swipeableRef = useRef<Swipeable>(null);
+
+  const renderRightActions = () => (
+    <TouchableOpacity
+      onPress={() => {
+        swipeableRef.current?.close();
+        Alert.alert('루트 삭제', `"${route.title}" 루트를 삭제할까요?`, [
+          { text: '취소', style: 'cancel' },
+          { text: '삭제', style: 'destructive', onPress: () => onDelete(route.id) },
+        ]);
+      }}
+      style={{
+        backgroundColor: '#f43f5e',
+        justifyContent: 'center',
+        alignItems: 'center',
+        width: 80,
+        marginBottom: 16,
+        marginRight: 24,
+        borderRadius: 24,
+      }}
+    >
+      <Trash2 size={20} color="white" />
+      <Text style={{ color: 'white', fontSize: 11, fontWeight: '700', marginTop: 4 }}>삭제</Text>
+    </TouchableOpacity>
+  );
+
+  return (
+    <Swipeable
+      ref={swipeableRef}
+      renderRightActions={renderRightActions}
+      overshootRight={false}
+      friction={2}
+    >
+      <RouteCard route={route} />
+    </Swipeable>
   );
 }
 
@@ -94,13 +141,28 @@ function EmptyState() {
 }
 
 export default function RoutesScreen() {
+  const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ['routes', 'all'],
     queryFn: () => getMyRoutes(0, 50),
-    staleTime: 1000 * 60,
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
   });
 
   const routes = data?.content ?? [];
+
+  const handleDelete = async (routeId: string) => {
+    // optimistic update: 먼저 UI에서 제거
+    queryClient.setQueryData<SpringPage<RouteListItem>>(['routes', 'all'], (old) =>
+      old ? { ...old, content: old.content.filter((r) => r.id !== routeId) } : old,
+    );
+    try {
+      await deleteRoute(routeId);
+    } catch {
+      // 실패 시 재조회로 복구
+      queryClient.invalidateQueries({ queryKey: ['routes', 'all'] });
+    }
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50">
@@ -129,7 +191,9 @@ export default function RoutesScreen() {
         <FlatList
           data={routes}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <RouteCard route={item} />}
+          renderItem={({ item }) => (
+            <SwipeableRouteCard route={item} onDelete={handleDelete} />
+          )}
           contentContainerStyle={{ paddingTop: 16, paddingBottom: 32 }}
           showsVerticalScrollIndicator={false}
         />
