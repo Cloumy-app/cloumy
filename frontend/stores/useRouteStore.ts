@@ -28,7 +28,13 @@ export const useRouteStore = create<RouteStore>((set) => ({
   setCurrentRoute: (route) => set({ currentRoute: route, selectedDay: 1 }),
 
   appendStreamingSlot: (slot) =>
-    set((s) => ({ streamingSlots: [...s.streamingSlots, slot] })),
+    set((s) => {
+      const isDuplicate = s.streamingSlots.some(
+        (existing) => existing.day === slot.day && existing.order === slot.order,
+      );
+      if (isDuplicate) return s;
+      return { streamingSlots: [...s.streamingSlots, slot] };
+    }),
 
   finalizeRoute: (routeId, destination, startDate, endDate) =>
     set((s) => ({
