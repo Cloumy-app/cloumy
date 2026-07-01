@@ -7,7 +7,8 @@ interface DayTabsProps {
   slots: SlotWithCoords[];
   selectedDay: number;
   onSelectDay: (day: number) => void;
-  weather?: WeatherInfo | null;
+  weatherByDate?: Record<string, WeatherInfo>;
+  startDate?: string;
   variant?: 'planner' | 'itinerary';
 }
 
@@ -17,7 +18,13 @@ function formatBudget(won: number): string {
   return `${won.toLocaleString()}원`;
 }
 
-export function DayTabs({ slots, selectedDay, onSelectDay, weather, variant = 'planner' }: DayTabsProps) {
+function getDateForDay(startDate: string, dayNumber: number): string {
+  const date = new Date(startDate);
+  date.setDate(date.getDate() + dayNumber - 1);
+  return date.toISOString().split('T')[0];
+}
+
+export function DayTabs({ slots, selectedDay, onSelectDay, weatherByDate, startDate, variant = 'planner' }: DayTabsProps) {
   const days = [...new Set(slots.map((s) => s.dayNumber))].sort();
 
   const dayBudget = slots
@@ -27,6 +34,9 @@ export function DayTabs({ slots, selectedDay, onSelectDay, weather, variant = 'p
   const totalBudget = slots.reduce((sum, s) => sum + (s.estimatedCost ?? 0), 0);
   const daySlotCount = slots.filter((s) => s.dayNumber === selectedDay).length;
 
+  const currentDateStr = startDate ? getDateForDay(startDate, selectedDay) : null;
+  const weather = currentDateStr && weatherByDate ? weatherByDate[currentDateStr] ?? null : null;
+
   return (
     <View>
       {/* Day 탭 */}
@@ -34,20 +44,27 @@ export function DayTabs({ slots, selectedDay, onSelectDay, weather, variant = 'p
         horizontal
         showsHorizontalScrollIndicator={false}
         className="px-6 py-2"
-        contentContainerClassName="gap-2"
+        contentContainerStyle={{ gap: 8 }}
       >
         {days.map((day) => (
           <TouchableOpacity
             key={day}
             onPress={() => onSelectDay(day)}
-            className={`px-5 py-2.5 rounded-2xl border ${
-              selectedDay === day ? 'bg-sky-500 border-sky-500 shadow-md' : 'bg-slate-100 border-transparent'
-            }`}
+            style={{
+              paddingHorizontal: 20,
+              paddingVertical: 10,
+              borderRadius: 16,
+              borderWidth: 1,
+              backgroundColor: selectedDay === day ? '#0ea5e9' : '#f1f5f9',
+              borderColor: selectedDay === day ? '#0ea5e9' : 'transparent',
+            }}
           >
             <Text
-              className={`font-bold text-sm ${
-                selectedDay === day ? 'text-white' : 'text-slate-600'
-              }`}
+              style={{
+                fontWeight: '700',
+                fontSize: 14,
+                color: selectedDay === day ? '#ffffff' : '#475569',
+              }}
             >
               {day}일차
             </Text>
@@ -58,7 +75,6 @@ export function DayTabs({ slots, selectedDay, onSelectDay, weather, variant = 'p
       {/* 요약 카드 */}
       {daySlotCount > 0 && variant === 'itinerary' && (
         <View className="flex-row gap-2 px-6 pb-2">
-          {/* 예상 비용 */}
           <View className="flex-1 bg-sky-50 rounded-xl p-3 items-center justify-center border border-sky-100">
             <Wallet size={16} color="#0ea5e9" />
             <Text className="text-[10px] text-slate-500 font-medium mt-1">예상 비용</Text>
@@ -67,14 +83,12 @@ export function DayTabs({ slots, selectedDay, onSelectDay, weather, variant = 'p
             </Text>
           </View>
 
-          {/* 방문 장소 */}
           <View className="flex-1 bg-emerald-50 rounded-xl p-3 items-center justify-center border border-emerald-100">
             <MapPin size={16} color="#10b981" />
             <Text className="text-[10px] text-slate-500 font-medium mt-1">방문 장소</Text>
             <Text className="text-xs font-black text-slate-800 mt-0.5">{daySlotCount}곳</Text>
           </View>
 
-          {/* 날씨 or 총 예산 */}
           {weather ? (
             <View className="flex-1 bg-amber-50 rounded-xl p-3 items-center justify-center border border-amber-100">
               <CloudSun size={16} color="#f59e0b" />
@@ -95,7 +109,6 @@ export function DayTabs({ slots, selectedDay, onSelectDay, weather, variant = 'p
         </View>
       )}
 
-      {/* planner variant: 기존 스타일 */}
       {daySlotCount > 0 && variant === 'planner' && (
         <View className="flex-row gap-2 px-6 pb-2">
           <View className="flex-1 bg-sky-50 rounded-xl px-3 py-2 items-center">
@@ -113,7 +126,7 @@ export function DayTabs({ slots, selectedDay, onSelectDay, weather, variant = 'p
               <Text className="text-amber-600 font-black text-base" numberOfLines={1}>
                 {weather.description} {weather.temp}°
               </Text>
-              <Text className="text-slate-500 text-[10px] font-medium">현재 날씨</Text>
+              <Text className="text-slate-500 text-[10px] font-medium">여행 날씨</Text>
             </View>
           ) : (
             <View className="flex-1 bg-violet-50 rounded-xl px-3 py-2 items-center">

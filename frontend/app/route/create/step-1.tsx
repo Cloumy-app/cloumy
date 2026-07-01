@@ -1,10 +1,10 @@
-import { View, Text, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Platform, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { router } from 'expo-router';
-import { ChevronLeft, MapPin, Users, Calendar } from 'lucide-react-native';
+import { ChevronLeft, MapPin, Users, Calendar, ChevronRight } from 'lucide-react-native';
 import { useState } from 'react';
 import DateTimePicker from '@expo/ui/community/datetime-picker';
 
@@ -15,41 +15,75 @@ const GROUP_TYPES = [
   { value: 'friends', label: '친구들' },
   { value: 'family', label: '가족' },
 ] as const;
-const NIGHTS_OPTIONS = [1, 2, 3, 4, 5];
 
 const step1Schema = z.object({
   destination: z.string().min(1, '목적지를 선택해주세요'),
   groupType: z.enum(['solo', 'couple', 'friends', 'family']),
-  nights: z.number().min(1).max(5),
 });
 
 type Step1Form = z.infer<typeof step1Schema>;
+
+const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 
 function toDateStr(d: Date): string {
   return d.toISOString().split('T')[0];
 }
 
+function formatDisplayDate(d: Date): string {
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 (${DAY_LABELS[d.getDay()]})`;
+}
+
 export default function RouteCreateStep1() {
   const [startDate, setStartDate] = useState(new Date());
-  const [showPicker, setShowPicker] = useState(false);
+  const [endDate, setEndDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d;
+  });
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
+  const [tempStartDate, setTempStartDate] = useState(new Date());
+  const [tempEndDate, setTempEndDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d;
+  });
+
+  const handleStartConfirm = () => {
+    setStartDate(tempStartDate);
+    if (tempStartDate >= endDate) {
+      const next = new Date(tempStartDate);
+      next.setDate(next.getDate() + 1);
+      setEndDate(next);
+    }
+    setShowStartPicker(false);
+  };
+
+  const handleEndConfirm = () => {
+    setEndDate(tempEndDate);
+    setShowEndPicker(false);
+  };
+
+  const nights = Math.max(
+    1,
+    Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)),
+  );
+
+  const minEndDate = new Date(startDate);
+  minEndDate.setDate(minEndDate.getDate() + 1);
 
   const { control, handleSubmit, formState: { errors } } = useForm<Step1Form>({
     resolver: zodResolver(step1Schema),
     defaultValues: {
       destination: '',
       groupType: 'friends',
-      nights: 2,
     },
   });
 
   const onNext = (data: Step1Form) => {
-    const startDateStr = toDateStr(startDate);
-    const end = new Date(startDate);
-    end.setDate(end.getDate() + data.nights);
-    const endDate = toDateStr(end);
     router.push({
       pathname: '/route/create/step-2',
-      params: { ...data, startDate: startDateStr, endDate },
+      params: { ...data, startDate: toDateStr(startDate), endDate: toDateStr(endDate), nights },
     });
   };
 
@@ -105,78 +139,114 @@ export default function RouteCreateStep1() {
           )}
         </View>
 
-        {/* 출발일 */}
+        {/* 여행 기간 */}
         <View className="mb-6">
           <View className="flex-row items-center gap-2 mb-3">
             <Calendar size={18} color="#0ea5e9" />
-            <Text className="font-bold text-slate-700">출발일</Text>
+            <Text className="font-bold text-slate-700">여행 기간</Text>
           </View>
 
-          {Platform.OS === 'ios' ? (
-            <View className="bg-sky-50 border-2 border-sky-200 rounded-2xl px-4 py-2.5">
-              <DateTimePicker
-                value={startDate}
-                mode="date"
-                display="compact"
-                minimumDate={new Date()}
-                onValueChange={(_, date) => { if (date) setStartDate(date); }}
-              />
-            </View>
-          ) : (
-            <>
-              <TouchableOpacity
-                className="flex-row items-center bg-sky-50 border-2 border-sky-200 rounded-2xl px-4 py-3.5"
-                onPress={() => setShowPicker(true)}
-                activeOpacity={0.8}
-              >
-                <Calendar size={16} color="#0ea5e9" />
-                <Text className="ml-2 text-sky-700 font-semibold">
-                  {startDate.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
-                </Text>
-              </TouchableOpacity>
-              {showPicker && (
-                <DateTimePicker
-                  value={startDate}
-                  mode="date"
-                  display="default"
-                  minimumDate={new Date()}
-                  onValueChange={(_, date) => {
-                    setShowPicker(false);
-                    if (date) setStartDate(date);
-                  }}
-                  onDismiss={() => setShowPicker(false)}
-                />
-              )}
-            </>
-          )}
-        </View>
+          {/* 날짜 선택 버튼 행 */}
+          <View className="flex-row items-center gap-2">
+            {/* 출발일 버튼 */}
+            <TouchableOpacity
+              onPress={() => setShowStartPicker(true)}
+              activeOpacity={0.8}
+              className="flex-1 bg-sky-50 border-2 border-sky-200 rounded-2xl px-4 py-3"
+            >
+              <Text className="text-[10px] font-bold text-sky-400 mb-0.5">출발일</Text>
+              <Text className="text-sm font-bold text-sky-700" numberOfLines={1}>
+                {formatDisplayDate(startDate)}
+              </Text>
+            </TouchableOpacity>
 
-        {/* 박수 */}
-        <View className="mb-6">
-          <Text className="font-bold text-slate-700 mb-3">여행 기간</Text>
-          <Controller
-            control={control}
-            name="nights"
-            render={({ field: { value, onChange } }) => (
-              <View className="flex-row gap-2">
-                {NIGHTS_OPTIONS.map((n) => (
-                  <TouchableOpacity
-                    key={n}
-                    onPress={() => onChange(n)}
-                    className={`flex-1 py-3 rounded-2xl border-2 items-center ${
-                      value === n
-                        ? 'border-sky-500 bg-sky-50'
-                        : 'border-slate-200 bg-white'
-                    }`}
-                  >
-                    <Text className={`font-bold text-sm ${value === n ? 'text-sky-600' : 'text-slate-500'}`}>
-                      {n}박
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          />
+            <ChevronRight size={16} color="#94a3b8" />
+
+            {/* 도착일 버튼 */}
+            <TouchableOpacity
+              onPress={() => setShowEndPicker(true)}
+              activeOpacity={0.8}
+              className="flex-1 bg-slate-50 border-2 border-slate-200 rounded-2xl px-4 py-3"
+            >
+              <Text className="text-[10px] font-bold text-slate-400 mb-0.5">도착일</Text>
+              <Text className="text-sm font-bold text-slate-700" numberOfLines={1}>
+                {formatDisplayDate(endDate)}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* 박수 뱃지 */}
+          <View className="items-center mt-3">
+            <View className="bg-sky-500 px-5 py-1.5 rounded-full">
+              <Text className="text-white font-bold text-sm">{nights}박 {nights + 1}일</Text>
+            </View>
+          </View>
+
+          {/* 출발일 피커 모달 */}
+          <Modal
+            visible={showStartPicker}
+            transparent
+            animationType="slide"
+            onShow={() => setTempStartDate(startDate)}
+          >
+            <TouchableOpacity
+              className="flex-1"
+              activeOpacity={1}
+              onPress={() => setShowStartPicker(false)}
+            />
+            <View className="bg-white rounded-t-3xl px-6 pt-5 pb-10">
+              <View className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4" />
+              <Text className="text-base font-bold text-slate-800 mb-3">출발일 선택</Text>
+              <DateTimePicker
+                value={tempStartDate}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                minimumDate={new Date()}
+                onValueChange={(_, date) => {
+                  if (date) setTempStartDate(date);
+                }}
+              />
+              <TouchableOpacity
+                onPress={handleStartConfirm}
+                className="bg-sky-500 py-4 rounded-2xl items-center mt-4"
+              >
+                <Text className="text-white font-bold text-base">확인</Text>
+              </TouchableOpacity>
+            </View>
+          </Modal>
+
+          {/* 도착일 피커 모달 */}
+          <Modal
+            visible={showEndPicker}
+            transparent
+            animationType="slide"
+            onShow={() => setTempEndDate(endDate)}
+          >
+            <TouchableOpacity
+              className="flex-1"
+              activeOpacity={1}
+              onPress={() => setShowEndPicker(false)}
+            />
+            <View className="bg-white rounded-t-3xl px-6 pt-5 pb-10">
+              <View className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4" />
+              <Text className="text-base font-bold text-slate-800 mb-3">도착일 선택</Text>
+              <DateTimePicker
+                value={tempEndDate}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                minimumDate={minEndDate}
+                onValueChange={(_, date) => {
+                  if (date) setTempEndDate(date);
+                }}
+              />
+              <TouchableOpacity
+                onPress={handleEndConfirm}
+                className="bg-sky-500 py-4 rounded-2xl items-center mt-4"
+              >
+                <Text className="text-white font-bold text-base">확인</Text>
+              </TouchableOpacity>
+            </View>
+          </Modal>
         </View>
 
         {/* 인원 유형 */}

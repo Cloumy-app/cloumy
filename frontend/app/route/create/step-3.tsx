@@ -27,17 +27,48 @@ export default function RouteCreateStep3() {
     budgetLevel: string;
   }>();
 
+  const destination = params.destination ?? '여행지';
+
+  const LOADING_MESSAGES = [
+    `${destination}의 숨은 명소를 찾고 있어요`,
+    '최적의 이동 동선을 계산하고 있어요',
+    '맛집과 관광지를 균형 있게 배치해요',
+    '이동 시간을 최소화하고 있어요',
+    '완벽한 여행 루트가 거의 완성됐어요!',
+  ];
+
   const [selectedRatio, setSelectedRatio] = useState(0.5);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [slotCount, setSlotCount] = useState(0);
+  const [messageIndex, setMessageIndex] = useState(0);
+  const [progress, setProgress] = useState(0);
+
   const stopStreamRef = useRef<(() => void) | null>(null);
-  const hasNavigatedRef = useRef(false);
+  const routeIdRef = useRef<string>('');
   const { appendStreamingSlot, finalizeRoute, setIsStreaming, reset } = useRouteStore();
   const { setTokens, setUser } = useAuthStore();
 
+  // 생성 중 메시지 순환
+  useEffect(() => {
+    if (!isGenerating) return;
+    const interval = setInterval(() => {
+      setMessageIndex((i) => (i + 1) % LOADING_MESSAGES.length);
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [isGenerating]);
+
+  // 슬롯 수에 따른 프로그레스 계산
+  useEffect(() => {
+    if (!isGenerating) return;
+    const nights = Number(params.nights ?? 2);
+    const estimated = nights * 4;
+    setProgress(Math.min(95, Math.round((slotCount / estimated) * 100)));
+  }, [slotCount, isGenerating]);
+
   useEffect(() => {
     return () => {
-      // router.replace로 화면 이동한 경우 스트림 유지 — zustand store를 통해 슬롯이 계속 추가됨
-      if (!hasNavigatedRef.current) {
+      // 뒤로가기 등으로 언마운트 시 스트림 정리
+      if (!routeIdRef.current) {
         stopStreamRef.current?.();
         setIsStreaming(false);
       }
@@ -45,7 +76,6 @@ export default function RouteCreateStep3() {
   }, []);
 
   const onGenerate = async () => {
-    // DEV: 생성 전 토큰 자동 갱신 (JWT 1시간 TTL 만료 대비)
     if (__DEV__) {
       try {
         const data = await devLogin();
@@ -68,11 +98,12 @@ export default function RouteCreateStep3() {
     }
 
     reset();
-    hasNavigatedRef.current = false;
+    routeIdRef.current = '';
+    setSlotCount(0);
+    setProgress(0);
+    setMessageIndex(0);
     setIsGenerating(true);
     setIsStreaming(true);
-
-    let routeId = '';
 
     stopStreamRef.current = streamRoute(
       {
@@ -86,29 +117,56 @@ export default function RouteCreateStep3() {
       },
       (slot: RouteSlot) => {
         appendStreamingSlot(slot);
+        setSlotCount((c) => c + 1);
       },
       (id: string) => {
-        if (hasNavigatedRef.current) return;
-        hasNavigatedRef.current = true;
-        routeId = id;
-        router.replace({
-          pathname: '/route/[routeId]',
-          params: { routeId: id, budgetLevel: params.budgetLevel ?? 'mid' },
-        });
+        routeIdRef.current = id;
       },
       () => {
-        finalizeRoute(routeId, params.destination ?? '서울', startDate, endDate);
-        setIsGenerating(false);
+        const id = routeIdRef.current;
+        finalizeRoute(id, params.destination ?? '서울', startDate, endDate);
+        setProgress(100);
+        setTimeout(() => {
+          setIsGenerating(false);
+          router.replace({
+            pathname: '/route/[routeId]',
+            params: { routeId: id, budgetLevel: params.budgetLevel ?? 'mid', mode: 'new' },
+          });
+        }, 500);
       },
       (e) => {
         setIsGenerating(false);
         setIsStreaming(false);
-        // 오류 내용을 화면에 표시 (무음 실패 방지)
         const msg = e instanceof Error ? e.message : JSON.stringify(e);
         Alert.alert('루트 생성 실패', `오류가 발생했어요.\n${msg}`);
       },
     );
   };
+
+  // 로딩 화면
+  if (isGenerating) {
+    return (
+      <SafeAreaView className="flex-1 bg-white items-center justify-center px-8">
+        <View className="w-24 h-24 bg-sky-50 rounded-full items-center justify-center mb-8">
+          <Sparkles size={40} color="#0ea5e9" />
+        </View>
+
+        <Text className="text-2xl font-black text-slate-800 mb-2 text-center">루트 생성 중</Text>
+        <Text className="text-slate-500 text-center mb-10 text-sm px-4">
+          {LOADING_MESSAGES[messageIndex]}
+        </Text>
+
+        {/* 프로그레스 바 */}
+        <View className="w-full bg-slate-100 rounded-full h-2 mb-3">
+          <View
+            className="bg-sky-500 h-2 rounded-full"
+            style={{ width: `${progress}%` }}
+          />
+        </View>
+        <Text className="text-sky-500 font-bold text-lg">{progress}%</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -173,20 +231,11 @@ export default function RouteCreateStep3() {
       <View className="px-6 pb-8">
         <TouchableOpacity
           onPress={onGenerate}
-          disabled={isGenerating}
-          className={`py-4 rounded-2xl items-center flex-row justify-center gap-2 ${
-            isGenerating ? 'bg-sky-300' : 'bg-sky-500'
-          }`}
+          className="bg-sky-500 py-4 rounded-2xl items-center flex-row justify-center gap-2"
           activeOpacity={0.9}
         >
-          {isGenerating ? (
-            <ActivityIndicator color="#ffffff" size="small" />
-          ) : (
-            <Sparkles size={20} color="#ffffff" />
-          )}
-          <Text className="text-white font-bold text-base">
-            {isGenerating ? 'AI가 루트를 생성 중...' : 'AI 루트 생성하기'}
-          </Text>
+          <Sparkles size={20} color="#ffffff" />
+          <Text className="text-white font-bold text-base">AI 루트 생성하기</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
