@@ -12,7 +12,7 @@ from app.models.schemas import RouteGenRequest
 from app.services.place_validator import validate_route_slot
 from app.services.retrievers import PostgisTagRetriever, PgvectorRetriever
 from app.services.tsp_service import reorder_slots
-from app.services.weather_service import apply_weather_weights
+from app.services.weather_service import build_weather_forecast_text
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,11 @@ ROUTE_GEN_SYSTEM_PROMPT = """당신은 한국 여행 전문 플래너입니다. 
 [Day별 지역 집중]
 - 같은 날의 장소들은 이동 30분 이내 가까운 구역에 몰아서 배치
 - Day가 바뀌면 구역 전환 (Day 1 = A구역, Day 2 = B구역, ...)
-- 서로 멀리 떨어진 장소를 같은 날 배치하지 말 것"""
+- 서로 멀리 떨어진 장소를 같은 날 배치하지 말 것
+
+[날씨 반영]
+- user 메시지에 Day별 강수확률이 주어지면, 강수확률이 높은 날은 후보의 태그를 보고 실내 장소(카페/식당/박물관/미술관/쇼핑몰 등) 비중을 높여 배치
+- 강수확률이 낮은 날은 야외 장소(공원/전망대/해변 등)도 자유롭게 포함"""
 
 BUDGET_GUIDE: dict[str, str] = {
     "tight":   "하루 활동비 목표 2만원 (슬롯당 4,000원 이하)",
@@ -107,14 +111,15 @@ async def stream_route(
         ).ainvoke("")
     logger.info("후보 장소 %d건", len(candidates))
 
-    # 3. 날씨 예보 기반 야외/실내 가중치 조정 (start_date 없으면 오늘 기준)
-    candidates = await apply_weather_weights(
-        candidates=candidates,
+    # 3. 날씨 예보 (start_date 없으면 오늘 기준) — Day별 텍스트로 프롬프트에 직접 삽입
+    lon, lat = CITY_CENTERS[request.city]
+    weather_forecast_text = await build_weather_forecast_text(
         destination=request.city,
         start_date=request.start_date or date.today(),
         nights=request.nights,
         api_key=settings.openweathermap_api_key,
-        city_centers=CITY_CENTERS,
+        lon=lon,
+        lat=lat,
     )
 
     # 4. 후보 장소 0건 조기 차단 — Sonnet 호출 및 환각 방지
@@ -140,11 +145,18 @@ async def stream_route(
     ratio = request.hidden_gem_ratio if request.hidden_gem_ratio is not None else 0.2
     ratio_desc = "관광지 위주" if ratio < 0.3 else ("혼합" if ratio < 0.7 else "숨은 명소 위주")
     budget_hint = BUDGET_GUIDE.get(request.budget_level, "하루 활동비 목표 6만원 (슬롯당 12,000원)")
+    weather_hint = (
+        f"Day별 날씨 예보:\n{weather_forecast_text}\n"
+        "강수확률이 높은 날은 후보의 '태그'를 보고 실내(카페/식당/박물관/미술관/쇼핑몰 등) 위주로, "
+        "낮은 날은 야외 포함해 배치할 것.\n\n"
+        if weather_forecast_text else ""
+    )
     user_message = (
         f"도시: {request.city} | {request.nights}박{request.nights + 1}일 | "
         f"여행 유형: {request.group_type} | 예산: {request.budget_level} — {budget_hint}\n"
         f"Hidden Gem 비율 목표: {ratio:.0%} ({ratio_desc})\n"
         f"총 {request.nights}박이므로 {request.nights + 1}개 지역 구역으로 나눠 Day별 집중 배치할 것\n\n"
+        f"{weather_hint}"
         f"후보 장소 ({len(candidates)}곳):\n{candidates_text}\n\n"
         f"{request.nights}박{request.nights + 1}일 루트를 생성하세요. "
         "각 슬롯을 JSON 한 줄씩 스트리밍 출력하세요."
