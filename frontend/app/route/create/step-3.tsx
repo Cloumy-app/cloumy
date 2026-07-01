@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft, Sparkles } from 'lucide-react-native';
 import { useState, useRef, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { streamRoute } from '@/lib/api/routes';
 import { devLogin } from '@/lib/api/auth';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -47,6 +48,7 @@ export default function RouteCreateStep3() {
   const routeIdRef = useRef<string>('');
   const { appendStreamingSlot, finalizeRoute, setIsStreaming, reset } = useRouteStore();
   const { setTokens, setUser } = useAuthStore();
+  const queryClient = useQueryClient();
 
   // 생성 중 메시지 순환
   useEffect(() => {
@@ -125,6 +127,7 @@ export default function RouteCreateStep3() {
       () => {
         const id = routeIdRef.current;
         finalizeRoute(id, params.destination ?? '서울', startDate, endDate);
+        queryClient.invalidateQueries({ queryKey: ['routes', 'all'] });
         setProgress(100);
         setTimeout(() => {
           setIsGenerating(false);
