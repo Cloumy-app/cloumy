@@ -1,52 +1,79 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, Alert, StyleSheet } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { ChevronLeft, Settings2, Sparkles, CheckCircle, Wallet } from 'lucide-react-native';
+import { ChevronLeft, Sparkles, Wallet } from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getRouteSlots, toggleSlotPin as apiToggleSlotPin, deleteRouteSlot } from '@/lib/api/routes';
-import { fetchCurrentWeather } from '@/lib/api/weather';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { getRouteSlots, toggleSlotPin as apiToggleSlotPin, deleteRouteSlot, deleteRoute } from '@/lib/api/routes';
+import { fetchForecast } from '@/lib/api/weather';
 import { useRouteStore } from '@/stores/useRouteStore';
 import { TripMap } from '@/components/map/TripMap';
 import { DayTabs } from '@/components/route/DayTabs';
 import { SlotCard } from '@/components/route/SlotCard';
-import { PlaceDetailSheet } from '@/components/route/PlaceDetailSheet';
 import type { BudgetLevel, SlotAlternative, SlotWithCoords } from '@/types';
+import type { WeatherInfo } from '@/lib/api/weather';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+function getDateForDay(startDate: string, dayNumber: number): string {
+  const date = new Date(startDate);
+  date.setDate(date.getDate() + dayNumber - 1);
+  return date.toISOString().split('T')[0];
+}
+
 export default function RouteResultScreen() {
-  const { routeId, budgetLevel } = useLocalSearchParams<{ routeId: string; budgetLevel?: string }>();
+  const { routeId, budgetLevel, mode } = useLocalSearchParams<{
+    routeId: string;
+    budgetLevel?: string;
+    mode?: string;
+  }>();
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [focusedSlotId, setFocusedSlotId] = useState<string | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const slotPositions = useRef<Record<string, number>>({});
+
+  const isNewRoute = mode === 'new';
+
+  // 스냅 포인트
+  const SNAP_TOP = insets.top + 60;
+  const SNAP_MIDDLE = SCREEN_HEIGHT * 0.48;
+  const SNAP_BOTTOM = SCREEN_HEIGHT * 0.72;
+  const SHEET_HEIGHT = SCREEN_HEIGHT - SNAP_TOP + 20;
+
+  const sheetY = useSharedValue(SNAP_BOTTOM);
+  const startY = useSharedValue(SNAP_BOTTOM);
+
+  const panGesture = Gesture.Pan()
+    .onStart(() => {
+      startY.value = sheetY.value;
+    })
+    .onUpdate((e) => {
+      sheetY.value = Math.max(SNAP_TOP, Math.min(SNAP_BOTTOM, startY.value + e.translationY));
+    })
+    .onEnd((e) => {
+      const dest =
+        e.velocityY < -500 || sheetY.value < SNAP_MIDDLE
+          ? SNAP_TOP
+          : e.velocityY > 500 || sheetY.value > SNAP_MIDDLE
+          ? SNAP_BOTTOM
+          : SNAP_MIDDLE;
+      sheetY.value = withTiming(dest, { duration: 280, easing: Easing.out(Easing.cubic) });
+    });
+
+  const sheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: sheetY.value }],
+  }));
 
   const { currentRoute, streamingSlots, isStreaming, selectedDay, setSelectedDay, toggleSlotPin, removeSlot } =
     useRouteStore();
 
-  // 스트리밍 완료 시점 감지 → 저장 완료 토스트
-  const [showSavedToast, setShowSavedToast] = useState(false);
-  const wasStreamingRef = useRef(isStreaming);
-  useEffect(() => {
-    if (wasStreamingRef.current && !isStreaming) {
-      setShowSavedToast(true);
-      const timer = setTimeout(() => setShowSavedToast(false), 2500);
-      return () => clearTimeout(timer);
-    }
-    wasStreamingRef.current = isStreaming;
-  }, [isStreaming]);
-
   const destination = currentRoute?.destination ?? '';
+  const routeStartDate = currentRoute?.startDate ?? '';
 
-  // 날씨 fetch (스트리밍 완료 + 목적지 확정 후)
-  const { data: weatherData } = useQuery({
-    queryKey: ['weather', destination],
-    queryFn: () => fetchCurrentWeather(destination),
-    enabled: !!destination && !isStreaming,
-    staleTime: 1000 * 60 * 30,
-  });
-
-  // 스트리밍 완료 후 API에서 슬롯 로드
   const { data: apiSlots, isLoading: slotsLoading } = useQuery({
     queryKey: ['route-slots', routeId],
     queryFn: () => getRouteSlots(routeId!),
@@ -54,23 +81,51 @@ export default function RouteResultScreen() {
     staleTime: 1000 * 60 * 5,
   });
 
-  const hasApiSlots = apiSlots && apiSlots.length > 0;
-  const streamSlots = currentRoute?.slots ?? streamingSlots;
+  const hasApiSlots = !!(apiSlots && apiSlots.length > 0);
 
+  // 날씨 예보: 여행 날짜 배열 생성 후 fetch
   const days = hasApiSlots
-    ? [...new Set(apiSlots.map((s) => s.dayNumber))].sort()
-    : [...new Set(streamSlots.map((s) => s.day))].sort();
+    ? [...new Set(apiSlots!.map((s) => s.dayNumber))].sort()
+    : [...new Set(streamingSlots.map((s) => s.day))].sort();
+
+  const travelDates = routeStartDate
+    ? days.map((day) => getDateForDay(routeStartDate, day))
+    : [];
+
+  const { data: weatherByDate } = useQuery<Record<string, WeatherInfo>>({
+    queryKey: ['forecast', destination, travelDates.join(',')],
+    queryFn: () => fetchForecast(destination, travelDates),
+    enabled: !!destination && travelDates.length > 0 && !isStreaming,
+    staleTime: 1000 * 60 * 60,
+  });
+
+  const streamSlots =
+    isStreaming || currentRoute?.id === routeId
+      ? (currentRoute?.slots ?? streamingSlots)
+      : streamingSlots;
 
   const currentDayApiSlots: SlotWithCoords[] = hasApiSlots
-    ? apiSlots.filter((s) => s.dayNumber === selectedDay)
+    ? apiSlots!.filter((s) => s.dayNumber === selectedDay)
     : [];
 
   const currentDayStreamSlots = streamSlots.filter((s) => s.day === selectedDay);
 
-  // 선택된 날 예상 비용 (Planner 모드 헤더용)
-  const dayBudget = hasApiSlots
-    ? currentDayApiSlots.reduce((sum, s) => sum + (s.estimatedCost ?? 0), 0)
-    : 0;
+  const dayBudget = currentDayApiSlots.reduce((sum, s) => sum + (s.estimatedCost ?? 0), 0);
+
+  useEffect(() => {
+    if (hasApiSlots) {
+      sheetY.value = withTiming(SNAP_MIDDLE, { duration: 280, easing: Easing.out(Easing.cubic) });
+    }
+  }, [hasApiSlots]);
+
+  const handleMapSlotPress = (slotId: string) => {
+    setFocusedSlotId(slotId);
+    sheetY.value = withTiming(SNAP_MIDDLE, { duration: 280, easing: Easing.out(Easing.cubic) });
+    // 바텀시트 스냅 애니메이션 후 슬롯으로 스크롤
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({ y: slotPositions.current[slotId] ?? 0, animated: true });
+    }, 420);
+  };
 
   const handleReplaceWithAlternative = (slotId: string, alt: SlotAlternative) => {
     queryClient.setQueryData<SlotWithCoords[]>(['route-slots', routeId], (prev) =>
@@ -89,268 +144,419 @@ export default function RouteResultScreen() {
       queryClient.setQueryData<SlotWithCoords[]>(['route-slots', routeId], (prev) =>
         prev?.map((s) => (s.id === slotId ? { ...s, pinned: updated.pinned } : s)),
       );
-    } catch {
-      // 핀 토글 실패 시 무시
-    }
+    } catch {}
   };
 
-  const handleDelete = async (slotId: string) => {
+  const handleDeleteSlot = async (slotId: string) => {
     if (!routeId) return;
+    // 낙관적 필터링: 즉시 목록에서 제거
+    queryClient.setQueryData<SlotWithCoords[]>(['route-slots', routeId], (prev) =>
+      prev?.filter((s) => s.id !== slotId),
+    );
     try {
       await deleteRouteSlot(routeId, slotId);
-      queryClient.setQueryData<SlotWithCoords[]>(['route-slots', routeId], (prev) =>
-        prev?.filter((s) => s.id !== slotId),
-      );
+      // 서버가 재정렬한 orderIndex 반영
+      queryClient.invalidateQueries({ queryKey: ['route-slots', routeId] });
     } catch {
-      // 삭제 실패 시 무시
+      // 실패 시 원본 복구
+      queryClient.invalidateQueries({ queryKey: ['route-slots', routeId] });
     }
   };
 
-  // ─── Planner 모드: 스트리밍 중 또는 API 슬롯 미로드 ───────────────────────
-  if (isStreaming || !hasApiSlots) {
-    return (
-      <View className="flex-1 bg-sky-50">
-        {/* 지도 배경 (상단 45%) */}
-        <View style={{ height: SCREEN_HEIGHT * 0.45 }}>
-          {/* 스트리밍 완료 후 좌표 있으면 실제 지도, 없으면 점 패턴 배경 */}
-          {hasApiSlots ? (
-            <TripMap
-              slots={apiSlots}
-              selectedDay={selectedDay}
-              height={SCREEN_HEIGHT * 0.45}
-              focusedSlotId={focusedSlotId ?? undefined}
-            />
-          ) : (
-            <View className="flex-1 bg-sky-100 items-center justify-center">
-              <ActivityIndicator color="#0ea5e9" size="large" />
-            </View>
-          )}
+  const handleExit = () => {
+    Alert.alert('루트 삭제', '나가면 생성된 루트가 삭제됩니다. 계속하시겠습니까?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제 후 나가기',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            if (routeId) await deleteRoute(routeId);
+          } catch {}
+          router.replace('/(tabs)');
+        },
+      },
+    ]);
+  };
 
-          {/* 지도 위 플로팅 헤더 */}
-          <View className="absolute top-0 left-0 right-0 z-20 p-6 flex-row justify-between items-center">
-            <TouchableOpacity
-              onPress={() => router.back()}
-              className="w-10 h-10 bg-white/90 rounded-full items-center justify-center shadow-sm"
-            >
-              <ChevronLeft size={24} color="#334155" />
-            </TouchableOpacity>
+  const handleEditCancel = () => {
+    // 서버 원본으로 복구
+    queryClient.invalidateQueries({ queryKey: ['route-slots', routeId] });
+    setIsEditMode(false);
+    setFocusedSlotId(null);
+  };
 
-            <View className="bg-white/90 px-5 py-2 rounded-2xl items-center shadow-sm">
-              <View className="flex-row items-center gap-1">
-                <Text className="font-bold text-slate-800 text-[15px]">
-                  {destination || '루트 생성 중'}
-                </Text>
-                {isStreaming && <Sparkles size={13} color="#0ea5e9" />}
-              </View>
-              {currentRoute && (
-                <Text className="text-[10px] font-bold text-slate-500">
-                  {currentRoute.startDate} ~ {currentRoute.endDate}
-                </Text>
-              )}
-            </View>
+  const displaySlots: SlotWithCoords[] = hasApiSlots ? apiSlots! : [];
+  const showEditControls = isNewRoute || isEditMode;
 
-            <TouchableOpacity className="w-10 h-10 bg-white/90 rounded-full items-center justify-center shadow-sm">
-              <Settings2 size={20} color="#334155" />
-            </TouchableOpacity>
+  return (
+    <View style={{ flex: 1 }}>
+      {/* 지도 (전체 화면 배경) */}
+      <View style={StyleSheet.absoluteFill}>
+        <TripMap
+          slots={displaySlots}
+          selectedDay={selectedDay}
+          height={SCREEN_HEIGHT}
+          focusedSlotId={focusedSlotId ?? undefined}
+          onSlotPress={handleMapSlotPress}
+        />
+      </View>
+
+      {/* 플로팅 헤더 */}
+      <View
+        pointerEvents="box-none"
+        style={[
+          StyleSheet.absoluteFillObject,
+          {
+            bottom: undefined,
+            zIndex: 30,
+            paddingTop: insets.top + 8,
+            paddingHorizontal: 24,
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            height: insets.top + 72,
+          },
+        ]}
+      >
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={{
+            width: 40,
+            height: 40,
+            backgroundColor: 'rgba(255,255,255,0.92)',
+            borderRadius: 20,
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.12,
+            shadowRadius: 8,
+            elevation: 4,
+          }}
+        >
+          <ChevronLeft size={24} color="#334155" />
+        </TouchableOpacity>
+
+        <View
+          style={{
+            backgroundColor: 'rgba(255,255,255,0.92)',
+            paddingHorizontal: 20,
+            paddingVertical: 8,
+            borderRadius: 20,
+            alignItems: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.12,
+            shadowRadius: 8,
+            elevation: 4,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Text style={{ fontWeight: '800', color: '#1e293b', fontSize: 15 }}>
+              {destination || '루트 생성 완료'}
+            </Text>
+            {isStreaming && <Sparkles size={13} color="#0ea5e9" />}
           </View>
+          {currentRoute && (
+            <Text style={{ fontSize: 10, fontWeight: '700', color: '#64748b' }}>
+              {currentRoute.startDate} ~ {currentRoute.endDate}
+            </Text>
+          )}
         </View>
 
-        {/* 바텀 시트 */}
-        <View
-          className="flex-1 bg-white z-20"
-          style={{ borderTopLeftRadius: 40, borderTopRightRadius: 40, marginTop: -32, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 40, elevation: 20 }}
-        >
-          {/* 드래그 핸들 */}
-          <View className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mt-4 mb-2" />
+        <View style={{ width: 40 }} />
+      </View>
 
-          {/* 바텀시트 헤더 */}
-          <View className="px-6 py-4 border-b border-slate-100 flex-row justify-between items-center">
-            <View>
-              <View className="flex-row items-center gap-2">
-                <Text className="text-xl font-black text-slate-800">{selectedDay}일차 타임라인</Text>
+      {/* Reanimated 드래그 바텀시트 */}
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: 0,
+            height: SHEET_HEIGHT,
+            backgroundColor: 'white',
+            borderTopLeftRadius: 32,
+            borderTopRightRadius: 32,
+            shadowColor: '#000',
+            shadowOpacity: 0.08,
+            shadowRadius: 20,
+            elevation: 10,
+          },
+          sheetStyle,
+        ]}
+      >
+        {/* 드래그 핸들 + 시트 헤더 */}
+        <GestureDetector gesture={panGesture}>
+          <View>
+            <View
+              style={{
+                width: 48,
+                height: 6,
+                backgroundColor: '#e2e8f0',
+                borderRadius: 3,
+                alignSelf: 'center',
+                marginTop: 12,
+                marginBottom: 8,
+              }}
+            />
+
+            <View
+              style={{
+                paddingHorizontal: 24,
+                paddingVertical: 12,
+                borderBottomWidth: 1,
+                borderBottomColor: '#f1f5f9',
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={{ fontSize: 18, fontWeight: '900', color: '#1e293b' }}>
+                  {selectedDay}일차 타임라인
+                </Text>
                 {dayBudget > 0 && (
-                  <View className="bg-sky-50 px-2 py-0.5 rounded-full flex-row items-center gap-1">
+                  <View
+                    style={{
+                      backgroundColor: '#f0f9ff',
+                      paddingHorizontal: 8,
+                      paddingVertical: 2,
+                      borderRadius: 20,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
                     <Wallet size={11} color="#0ea5e9" />
-                    <Text className="text-sky-600 text-[10px] font-bold">
-                      예상 {dayBudget >= 10000 ? `약 ${Math.round(dayBudget / 10000)}만원` : `${dayBudget.toLocaleString()}원`}
+                    <Text style={{ color: '#0ea5e9', fontSize: 10, fontWeight: '700' }}>
+                      {dayBudget >= 10000
+                        ? `약 ${Math.round(dayBudget / 10000)}만원`
+                        : `${dayBudget.toLocaleString()}원`}
                     </Text>
                   </View>
                 )}
-                {isStreaming && (
-                  <ActivityIndicator size="small" color="#0ea5e9" />
-                )}
+                {isStreaming && <ActivityIndicator size="small" color="#0ea5e9" />}
               </View>
-              <Text className="text-xs text-slate-500 font-medium mt-1">
-                마음에 드는 일정은 핀으로 고정하세요
+              <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '500', marginTop: 2 }}>
+                위로 당기면 상세 일정이 펼쳐져요
               </Text>
             </View>
+
+            {/* Day 탭 */}
+            {days.length > 1 && hasApiSlots && (
+              <DayTabs
+                slots={apiSlots ?? []}
+                selectedDay={selectedDay}
+                onSelectDay={setSelectedDay}
+                weatherByDate={weatherByDate}
+                startDate={routeStartDate}
+                variant="planner"
+              />
+            )}
+            {days.length > 1 && !hasApiSlots && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ paddingHorizontal: 24, paddingTop: 12 }}
+                contentContainerStyle={{ gap: 8 }}
+              >
+                {days.map((day) => (
+                  <TouchableOpacity
+                    key={day}
+                    onPress={() => setSelectedDay(day)}
+                    style={{
+                      paddingHorizontal: 16,
+                      paddingVertical: 8,
+                      borderRadius: 20,
+                      borderWidth: 1,
+                      backgroundColor: selectedDay === day ? '#0ea5e9' : '#ffffff',
+                      borderColor: selectedDay === day ? '#0ea5e9' : '#e2e8f0',
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontWeight: '700',
+                        fontSize: 14,
+                        color: selectedDay === day ? '#fff' : '#475569',
+                      }}
+                    >
+                      {day}일차
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
           </View>
+        </GestureDetector>
 
-          {/* Day 탭 (스트리밍 중 다중 날인 경우) */}
-          {days.length > 1 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              className="px-6 pt-3"
-              contentContainerClassName="gap-2"
-            >
-              {days.map((day) => (
-                <TouchableOpacity
-                  key={day}
-                  onPress={() => setSelectedDay(day)}
-                  className={`px-4 py-2 rounded-full border ${
-                    selectedDay === day ? 'bg-sky-500 border-sky-500' : 'bg-white border-slate-200'
-                  }`}
-                >
-                  <Text className={`font-bold text-sm ${selectedDay === day ? 'text-white' : 'text-slate-600'}`}>
-                    {day}일차
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
-
-          {/* 슬롯 리스트 (edit 모드) */}
-          <ScrollView
-            className="flex-1 px-6"
-            showsVerticalScrollIndicator={false}
-            contentContainerClassName="gap-4 pb-16 pt-4"
-          >
-            {hasApiSlots ? (
-              currentDayApiSlots.map((apiSlot, i) => (
-                <SlotCard
+        {/* 슬롯 목록 */}
+        <ScrollView
+          ref={scrollViewRef}
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            paddingHorizontal: 24,
+            paddingTop: 16,
+            paddingBottom: hasApiSlots ? 120 : 40,
+            gap: 16,
+          }}
+          showsVerticalScrollIndicator={false}
+        >
+          {hasApiSlots
+            ? currentDayApiSlots.map((apiSlot, i) => (
+                <View
                   key={apiSlot.id}
-                  slot={null}
-                  apiSlot={apiSlot}
-                  index={i}
-                  isLast={i === currentDayApiSlots.length - 1}
-                  routeId={routeId}
-                  budgetLevel={(budgetLevel ?? 'mid') as BudgetLevel}
-                  viewMode="edit"
-                  onPin={() => handlePin(apiSlot.id)}
-                  onRemove={() => handleDelete(apiSlot.id)}
-                  onReplaceWithAlternative={(alt) => handleReplaceWithAlternative(apiSlot.id, alt)}
-                  onTap={() => {
-                    setFocusedSlotId(apiSlot.id);
-                    setSelectedPlaceId(apiSlot.placeId);
+                  onLayout={(e) => {
+                    slotPositions.current[apiSlot.id] = e.nativeEvent.layout.y;
                   }}
-                />
+                >
+                  <SlotCard
+                    slot={null}
+                    apiSlot={apiSlot}
+                    index={i}
+                    isLast={i === currentDayApiSlots.length - 1}
+                    routeId={routeId}
+                    budgetLevel={(budgetLevel ?? 'mid') as BudgetLevel}
+                    viewMode="edit"
+                    showActions={showEditControls}
+                    isFocused={apiSlot.id === focusedSlotId}
+                    onPin={() => handlePin(apiSlot.id)}
+                    onRemove={() => handleDeleteSlot(apiSlot.id)}
+                    onReplaceWithAlternative={(alt) => handleReplaceWithAlternative(apiSlot.id, alt)}
+                    onTap={() => {
+                      setFocusedSlotId(apiSlot.id);
+                      sheetY.value = withTiming(SNAP_MIDDLE, { duration: 280, easing: Easing.out(Easing.cubic) });
+                    }}
+                  />
+                </View>
               ))
-            ) : (
-              currentDayStreamSlots.map((slot, i) => (
+            : currentDayStreamSlots.map((slot, i) => (
                 <SlotCard
-                  key={`${slot.day}-${slot.order}`}
+                  key={`${slot.day}-${slot.order}-${i}`}
                   slot={slot}
                   index={i}
                   isLast={i === currentDayStreamSlots.length - 1}
                   viewMode="edit"
+                  showActions={showEditControls}
                   onPin={() => toggleSlotPin(slot.day, slot.order)}
                   onRemove={() => removeSlot(slot.day, slot.order)}
                 />
-              ))
+              ))}
+
+          {isStreaming && (
+            <View style={{ alignItems: 'center', paddingVertical: 16 }}>
+              <ActivityIndicator color="#0ea5e9" />
+              <Text style={{ color: '#94a3b8', fontSize: 12, marginTop: 8 }}>장소를 찾는 중...</Text>
+            </View>
+          )}
+
+          {slotsLoading && !isStreaming && (
+            <View style={{ alignItems: 'center', paddingVertical: 16 }}>
+              <ActivityIndicator color="#0ea5e9" />
+            </View>
+          )}
+        </ScrollView>
+
+        {/* 하단 액션 버튼 */}
+        {hasApiSlots && (
+          <View
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              flexDirection: 'row',
+              gap: 10,
+              paddingHorizontal: 24,
+              paddingTop: 12,
+              paddingBottom: insets.bottom > 0 ? insets.bottom : 14,
+              backgroundColor: 'rgba(255,255,255,0.96)',
+              borderTopWidth: 1,
+              borderTopColor: '#f1f5f9',
+            }}
+          >
+            {/* 신규 생성 루트: 저장하기 + 나가기 */}
+            {isNewRoute && (
+              <>
+                <TouchableOpacity
+                  onPress={() => router.replace('/(tabs)')}
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#0ea5e9',
+                    paddingVertical: 10,
+                    borderRadius: 14,
+                    alignItems: 'center',
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>저장하기</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleExit}
+                  style={{
+                    flex: 1,
+                    borderWidth: 2,
+                    borderColor: '#f43f5e',
+                    paddingVertical: 10,
+                    borderRadius: 14,
+                    alignItems: 'center',
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={{ color: '#f43f5e', fontWeight: '700', fontSize: 14 }}>나가기</Text>
+                </TouchableOpacity>
+              </>
             )}
 
-            {isStreaming && (
-              <View className="items-center py-4">
-                <ActivityIndicator color="#0ea5e9" />
-                <Text className="text-slate-400 text-xs mt-2">장소를 찾는 중...</Text>
-              </View>
+            {/* 저장된 루트 보기: 수정하기 */}
+            {!isNewRoute && !isEditMode && (
+              <TouchableOpacity
+                onPress={() => setIsEditMode(true)}
+                style={{
+                  flex: 1,
+                  backgroundColor: '#0ea5e9',
+                  paddingVertical: 10,
+                  borderRadius: 14,
+                  alignItems: 'center',
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>수정하기</Text>
+              </TouchableOpacity>
             )}
 
-            {slotsLoading && !isStreaming && (
-              <View className="items-center py-4">
-                <ActivityIndicator color="#0ea5e9" />
-              </View>
+            {/* 편집 모드: 변경완료 + 취소 */}
+            {!isNewRoute && isEditMode && (
+              <>
+                <TouchableOpacity
+                  onPress={() => setIsEditMode(false)}
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#0ea5e9',
+                    paddingVertical: 10,
+                    borderRadius: 14,
+                    alignItems: 'center',
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>변경완료</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleEditCancel}
+                  style={{
+                    flex: 1,
+                    borderWidth: 2,
+                    borderColor: '#94a3b8',
+                    paddingVertical: 10,
+                    borderRadius: 14,
+                    alignItems: 'center',
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={{ color: '#64748b', fontWeight: '700', fontSize: 14 }}>취소</Text>
+                </TouchableOpacity>
+              </>
             )}
-          </ScrollView>
-        </View>
-
-        <PlaceDetailSheet placeId={selectedPlaceId} onClose={() => setSelectedPlaceId(null)} />
-
-        {showSavedToast && (
-          <View className="absolute bottom-8 left-6 right-6 bg-slate-800 rounded-2xl px-5 py-3.5 flex-row items-center gap-2.5 shadow-lg z-50">
-            <CheckCircle size={18} color="#22c55e" />
-            <Text className="text-white font-semibold text-sm">루트가 저장됐어요</Text>
           </View>
         )}
-      </View>
-    );
-  }
-
-  // ─── Itinerary 모드: API 슬롯 로드 완료 ─────────────────────────────────
-  return (
-    <SafeAreaView className="flex-1 bg-slate-50">
-      {/* 스티키 헤더 */}
-      <View className="px-6 pt-2 pb-4 bg-white shadow-sm" style={{ borderBottomLeftRadius: 40, borderBottomRightRadius: 40 }}>
-        {/* 뒤로가기 + 제목 + 설정 */}
-        <View className="flex-row justify-between items-center mb-4">
-          <TouchableOpacity onPress={() => router.back()}>
-            <ChevronLeft size={24} color="#475569" />
-          </TouchableOpacity>
-          <View className="items-center">
-            <Text className="text-xl font-black text-slate-800">상세 일정</Text>
-            {currentRoute && (
-              <Text className="text-xs text-slate-500">
-                {destination} · {currentRoute.startDate} ~ {currentRoute.endDate}
-              </Text>
-            )}
-          </View>
-          <TouchableOpacity>
-            <Settings2 size={22} color="#475569" />
-          </TouchableOpacity>
-        </View>
-
-        {/* DayTabs (itinerary variant: Day 탭 + 아이콘 요약 카드) */}
-        <DayTabs
-          slots={apiSlots}
-          selectedDay={selectedDay}
-          onSelectDay={setSelectedDay}
-          weather={weatherData}
-          variant="itinerary"
-        />
-      </View>
-
-      {/* 타임라인 (Itinerary 스타일) */}
-      <ScrollView
-        className="flex-1 px-6 pt-6"
-        showsVerticalScrollIndicator={false}
-        contentContainerClassName="pb-20"
-      >
-        {currentDayApiSlots.length === 0 ? (
-          <View className="items-center justify-center py-16">
-            <Text className="text-slate-400 font-medium">이 날 슬롯이 없습니다</Text>
-          </View>
-        ) : (
-          currentDayApiSlots.map((apiSlot, i) => (
-            <SlotCard
-              key={apiSlot.id}
-              slot={null}
-              apiSlot={apiSlot}
-              index={i}
-              isLast={i === currentDayApiSlots.length - 1}
-              routeId={routeId}
-              budgetLevel={(budgetLevel ?? 'mid') as BudgetLevel}
-              viewMode="detail"
-              onPin={() => handlePin(apiSlot.id)}
-              onRemove={() => handleDelete(apiSlot.id)}
-              onReplaceWithAlternative={(alt) => handleReplaceWithAlternative(apiSlot.id, alt)}
-              onTap={() => {
-                setFocusedSlotId(apiSlot.id);
-                setSelectedPlaceId(apiSlot.placeId);
-              }}
-            />
-          ))
-        )}
-      </ScrollView>
-
-      <PlaceDetailSheet placeId={selectedPlaceId} onClose={() => setSelectedPlaceId(null)} />
-
-      {showSavedToast && (
-        <View className="absolute bottom-8 left-6 right-6 bg-slate-800 rounded-2xl px-5 py-3.5 flex-row items-center gap-2.5 shadow-lg z-50">
-          <CheckCircle size={18} color="#22c55e" />
-          <Text className="text-white font-semibold text-sm">루트가 저장됐어요</Text>
-        </View>
-      )}
-    </SafeAreaView>
+      </Animated.View>
+    </View>
   );
 }

@@ -10,9 +10,10 @@ interface TripMapProps {
   selectedDay: number;
   height?: number;
   focusedSlotId?: string;
+  onSlotPress?: (slotId: string) => void;
 }
 
-export function TripMap({ slots, selectedDay, height = 300, focusedSlotId }: TripMapProps) {
+export function TripMap({ slots, selectedDay, height = 300, focusedSlotId, onSlotPress }: TripMapProps) {
   const mapRef = useRef<MapViewMethods>(null);
 
   const days = [...new Set(slots.map((s) => s.dayNumber))].sort();
@@ -26,7 +27,17 @@ export function TripMap({ slots, selectedDay, height = 300, focusedSlotId }: Tri
       400,
     );
   }, [focusedSlotId]);
+
   const validSlots = slots.filter((s) => s.lat !== 0 && s.lng !== 0);
+
+  // 일차별 정렬 순서 기준으로 표시 번호 계산 (orderIndex 값이 아닌 실제 위치)
+  const displayRank = new Map<string, number>();
+  days.forEach((day) => {
+    validSlots
+      .filter((s) => s.dayNumber === day)
+      .sort((a, b) => a.orderIndex - b.orderIndex)
+      .forEach((s, i) => displayRank.set(s.id, i + 1));
+  });
 
   if (validSlots.length === 0) {
     return (
@@ -65,7 +76,7 @@ export function TripMap({ slots, selectedDay, height = 300, focusedSlotId }: Tri
         const color = DAY_COLORS[(day - 1) % DAY_COLORS.length];
         return (
           <Polyline
-            key={`poly-${day}`}
+            key={`poly-${day}-${daySlots.map(s => s.id).join('-')}`}
             coordinates={daySlots.map((s) => ({ latitude: s.lat, longitude: s.lng }))}
             strokeColor={color}
             strokeWidth={day === selectedDay ? 3 : 1.5}
@@ -80,6 +91,7 @@ export function TripMap({ slots, selectedDay, height = 300, focusedSlotId }: Tri
         const isActive = slot.dayNumber === selectedDay;
         const isFocused = slot.id === focusedSlotId;
         const size = isFocused ? 36 : isActive ? 28 : 22;
+        const number = displayRank.get(slot.id) ?? 0;
         return (
           <Marker
             key={slot.id}
@@ -87,6 +99,7 @@ export function TripMap({ slots, selectedDay, height = 300, focusedSlotId }: Tri
             anchor={{ x: 0.5, y: 0.5 }}
             title={slot.placeName}
             opacity={isActive ? 1 : 0.45}
+            onPress={() => onSlotPress?.(slot.id)}
           >
             <View
               className="rounded-full items-center justify-center"
@@ -95,7 +108,7 @@ export function TripMap({ slots, selectedDay, height = 300, focusedSlotId }: Tri
                 height: size,
                 backgroundColor: color,
                 borderWidth: isFocused ? 3 : 2,
-                borderColor: isFocused ? '#ffffff' : '#ffffff',
+                borderColor: '#ffffff',
                 shadowColor: isFocused ? color : 'transparent',
                 shadowOffset: { width: 0, height: 2 },
                 shadowOpacity: isFocused ? 0.6 : 0,
@@ -104,7 +117,7 @@ export function TripMap({ slots, selectedDay, height = 300, focusedSlotId }: Tri
               }}
             >
               <Text className="text-white font-black" style={{ fontSize: isFocused ? 13 : isActive ? 11 : 9 }}>
-                {slot.orderIndex + 1}
+                {number}
               </Text>
             </View>
           </Marker>

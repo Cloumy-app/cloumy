@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { Lock, Unlock, RefreshCw, X, Check, Navigation, Wallet, MapPin, Sparkles } from 'lucide-react-native';
+import { Star, RefreshCw, X, Check, Navigation, Wallet, MapPin, Sparkles } from 'lucide-react-native';
 import type { BudgetLevel, RouteSlot, SlotAlternative, SlotWithCoords } from '@/types';
 import { getBudgetStatus } from '@/types';
 import { getSlotAlternatives } from '@/lib/api/routes';
@@ -13,6 +13,8 @@ interface SlotCardProps {
   routeId?: string;
   budgetLevel?: BudgetLevel;
   viewMode?: 'edit' | 'detail';
+  showActions?: boolean;
+  isFocused?: boolean;
   onPin: () => void;
   onRemove: () => void;
   onReplaceWithAlternative?: (alt: SlotAlternative) => void;
@@ -32,6 +34,8 @@ export function SlotCard({
   routeId,
   budgetLevel,
   viewMode = 'edit',
+  showActions = true,
+  isFocused = false,
   onPin,
   onRemove,
   onReplaceWithAlternative,
@@ -94,7 +98,6 @@ export function SlotCard({
 
             {/* 우측: 흰 카드 */}
             <View className="flex-1 ml-4 bg-white rounded-3xl p-4 shadow-sm border border-slate-100">
-              {/* 시간 + 제목 + 소요시간 배지 */}
               <View className="flex-row justify-between items-start mb-2">
                 <View className="flex-1 mr-2">
                   {startTime && (
@@ -109,20 +112,17 @@ export function SlotCard({
                 )}
               </View>
 
-              {/* 설명 */}
               {tip && (
                 <Text className="text-xs text-slate-500 mb-3 leading-relaxed" numberOfLines={2}>
                   {tip}
                 </Text>
               )}
 
-              {/* 하단: 타입 배지 + 비용 + 소형 액션 */}
               <View className="flex-row justify-between items-center pt-3 border-t border-slate-50">
                 <Text className="text-[10px] font-bold px-2 py-1 rounded-md bg-slate-100 text-slate-500">
                   #방문
                 </Text>
                 <View className="flex-row items-center gap-3">
-                  {/* 비용 */}
                   <View className="flex-row items-center gap-1">
                     <Wallet size={11} color="#475569" />
                     <Text className={`text-xs font-bold ${
@@ -134,37 +134,39 @@ export function SlotCard({
                     </Text>
                   </View>
 
-                  {/* 소형 액션 버튼 */}
-                  <View className="flex-row gap-2 items-center">
-                    <TouchableOpacity onPress={onPin} hitSlop={8}>
-                      {pinned
-                        ? <Lock size={13} color="#0ea5e9" />
-                        : <Unlock size={13} color="#cbd5e1" />}
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={handleReshuffle}
-                      disabled={pinned || !apiSlot || loadingAlts}
-                      hitSlop={8}
-                    >
-                      {loadingAlts
-                        ? <ActivityIndicator size={12} color="#0ea5e9" />
-                        : <RefreshCw size={13} color={pinned || !apiSlot ? '#e2e8f0' : showAlts ? '#0ea5e9' : '#94a3b8'} />}
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={pinned ? undefined : onRemove}
-                      disabled={pinned}
-                      hitSlop={8}
-                    >
-                      <X size={13} color={pinned ? '#e2e8f0' : '#f43f5e'} />
-                    </TouchableOpacity>
-                  </View>
+                  {showActions && (
+                    <View className="flex-row gap-2 items-center">
+                      <TouchableOpacity onPress={onPin} hitSlop={8}>
+                        <Star
+                          size={13}
+                          color={pinned ? '#0ea5e9' : '#cbd5e1'}
+                          fill={pinned ? '#0ea5e9' : 'none'}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={handleReshuffle}
+                        disabled={pinned || !apiSlot || loadingAlts}
+                        hitSlop={8}
+                      >
+                        {loadingAlts
+                          ? <ActivityIndicator size={12} color="#0ea5e9" />
+                          : <RefreshCw size={13} color={pinned || !apiSlot ? '#e2e8f0' : showAlts ? '#0ea5e9' : '#94a3b8'} />}
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={pinned ? undefined : onRemove}
+                        disabled={pinned}
+                        hitSlop={8}
+                      >
+                        <X size={13} color={pinned ? '#e2e8f0' : '#f43f5e'} />
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
               </View>
             </View>
           </View>
         </TouchableOpacity>
 
-        {/* 이동 정보: 점선 구분자 스타일 */}
         {!isLast && (transportMinutes != null || transportToNext) && (
           <View className="flex-row items-center gap-2 ml-10 my-2 py-2 border-b border-dashed border-slate-200">
             <Navigation size={14} color="#94a3b8" />
@@ -174,7 +176,6 @@ export function SlotCard({
           </View>
         )}
 
-        {/* AI 대안 추천 패널 */}
         {showAlts && alternatives.length > 0 && (
           <View className="ml-10 mt-2 p-4 bg-sky-50 border border-sky-100 rounded-2xl">
             <View className="flex-row items-center gap-1.5 mb-3">
@@ -211,7 +212,7 @@ export function SlotCard({
     );
   }
 
-  // ─── edit 모드: Planner 스타일 (기존) ───────────────────────────────────
+  // ─── edit 모드: Planner 스타일 ───────────────────────────────────────────
   return (
     <View className="relative">
       {!isLast && (
@@ -221,9 +222,15 @@ export function SlotCard({
       <TouchableOpacity
         activeOpacity={onTap ? 0.75 : 1}
         onPress={onTap}
-        className={`flex-row gap-3 p-4 rounded-2xl border-2 ${
-          pinned ? 'border-sky-400 bg-sky-50/40' : 'border-transparent bg-slate-50'
-        }`}
+        style={{
+          flexDirection: 'row',
+          gap: 12,
+          padding: 16,
+          borderRadius: 16,
+          borderWidth: 2,
+          borderColor: isFocused ? '#0ea5e9' : pinned ? '#7dd3fc' : 'transparent',
+          backgroundColor: isFocused ? '#f0f9ff' : pinned ? 'rgba(240,249,255,0.4)' : '#f8fafc',
+        }}
       >
         {/* 번호 원 */}
         <View className="items-center">
@@ -248,32 +255,38 @@ export function SlotCard({
             </View>
 
             {/* 액션 버튼들 */}
-            <View className="flex-row items-center gap-1 bg-white p-1 rounded-xl border border-slate-100">
-              <TouchableOpacity
-                onPress={onPin}
-                className={`p-1.5 rounded-lg ${pinned ? 'bg-sky-100' : ''}`}
-              >
-                {pinned ? <Lock size={16} color="#0ea5e9" /> : <Unlock size={16} color="#94a3b8" />}
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handleReshuffle}
-                className={`p-1.5 rounded-lg ${showAlts ? 'bg-sky-100' : ''}`}
-                disabled={pinned || !apiSlot || loadingAlts}
-              >
-                {loadingAlts ? (
-                  <ActivityIndicator size={14} color="#0ea5e9" />
-                ) : (
-                  <RefreshCw size={16} color={pinned || !apiSlot ? '#cbd5e1' : '#0ea5e9'} />
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={pinned ? undefined : onRemove}
-                className={`p-1.5 rounded-lg ${pinned ? 'opacity-30' : ''}`}
-                disabled={pinned}
-              >
-                <X size={16} color={pinned ? '#94a3b8' : '#f43f5e'} />
-              </TouchableOpacity>
-            </View>
+            {showActions && (
+              <View className="flex-row items-center gap-1 bg-white p-1 rounded-xl border border-slate-100">
+                <TouchableOpacity
+                  onPress={onPin}
+                  className={`p-1.5 rounded-lg ${pinned ? 'bg-sky-100' : ''}`}
+                >
+                  <Star
+                    size={16}
+                    color={pinned ? '#0ea5e9' : '#cbd5e1'}
+                    fill={pinned ? '#0ea5e9' : 'none'}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleReshuffle}
+                  className={`p-1.5 rounded-lg ${showAlts ? 'bg-sky-100' : ''}`}
+                  disabled={pinned || !apiSlot || loadingAlts}
+                >
+                  {loadingAlts ? (
+                    <ActivityIndicator size={14} color="#0ea5e9" />
+                  ) : (
+                    <RefreshCw size={16} color={pinned || !apiSlot ? '#cbd5e1' : '#0ea5e9'} />
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={pinned ? undefined : onRemove}
+                  className={`p-1.5 rounded-lg ${pinned ? 'opacity-30' : ''}`}
+                  disabled={pinned}
+                >
+                  <X size={16} color={pinned ? '#94a3b8' : '#f43f5e'} />
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
 
           {tip && (
@@ -282,7 +295,6 @@ export function SlotCard({
             </Text>
           )}
 
-          {/* 체류시간 + 예산 */}
           <View className="flex-row gap-3 mt-1 items-center flex-wrap">
             {!startTime && duration != null && (
               <Text className="text-xs text-slate-400">⏱ {duration}분</Text>
@@ -313,7 +325,6 @@ export function SlotCard({
             })()}
           </View>
 
-          {/* AI 대안 추천 인라인 패널 */}
           {showAlts && alternatives.length > 0 && (
             <View className="mt-3 gap-2">
               <View className="flex-row items-center gap-1.5 mb-1">
@@ -349,7 +360,6 @@ export function SlotCard({
         </View>
       </TouchableOpacity>
 
-      {/* 이동 정보 */}
       {!isLast && (transportMinutes != null || transportToNext) && (
         <View className="flex-row items-center gap-1.5 ml-14 my-1">
           <Navigation size={11} color="#94a3b8" />
