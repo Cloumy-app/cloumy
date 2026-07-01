@@ -3,8 +3,9 @@ import logging
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
+from app.config.city_centers import CITY_CENTERS
 from app.models.schemas import RouteGenRequest
-from app.services.route_service import CITY_CENTERS, stream_route
+from app.services.route_service import stream_route
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ai", tags=["routes"])
