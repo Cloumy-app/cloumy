@@ -8,11 +8,13 @@ import com.cloumy.trip.entity.Route;
 import com.cloumy.trip.entity.RouteSlot;
 import com.cloumy.trip.repository.RouteRepository;
 import com.cloumy.trip.repository.RouteSlotRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Arrays;
@@ -33,11 +35,13 @@ public class RouteSlotService {
     // 스트리밍 중 AI ndjson 한 줄을 파싱해 route_slots에 저장
     // places FK 위반(존재하지 않는 place_id) 시 해당 슬롯 건너뜀
     // REQUIRES_NEW: 각 슬롯 저장을 독립 트랜잭션으로 처리 — 실패해도 다음 슬롯에 영향 없음
-    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
-    public void saveStreamingSlot(UUID routeId, String jsonLine) throws com.fasterxml.jackson.core.JsonProcessingException {
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void saveStreamingSlot(UUID routeId, String jsonLine) throws JsonProcessingException {
         JsonNode node = objectMapper.readTree(jsonLine);
         String placeIdStr = node.path("place_id").asText(null);
-        if (placeIdStr == null || placeIdStr.isBlank()) return;
+        if (placeIdStr == null || placeIdStr.isBlank()) {
+            return;
+        }
 
         int dayNumber = node.path("day").asInt(1);
         int orderIndex = node.path("order").asInt(1) - 1; // AI 1-indexed → DB 0-indexed
