@@ -29,12 +29,29 @@ public class RouteSlotService {
 
     private final RouteRepository routeRepository;
     private final RouteSlotRepository routeSlotRepository;
+    private final RouteDaySummaryService routeDaySummaryService;
     private final AiServiceClient aiServiceClient;
     private final ObjectMapper objectMapper;
+
+    // 스트리밍 중 AI ndjson 한 줄을 타입("day_summary" vs 슬롯)에 따라 다른 저장 경로로 분기
+    // REQUIRES_NEW를 여기 명시해야 함: saveStreamingSlot()을 this.로 self-invocation하면
+    // Spring AOP 프록시를 우회해 그 메서드 자신의 @Transactional이 무시되고, 클래스 레벨의
+    // readOnly=true 트랜잭션 안에서 실행되어 INSERT가 조용히 무효화된다(자기호출 프록시 우회 함정).
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void saveStreamingLine(UUID routeId, String jsonLine) throws JsonProcessingException {
+        JsonNode node = objectMapper.readTree(jsonLine);
+        if ("day_summary".equals(node.path("type").asText(null))) {
+            routeDaySummaryService.upsertFromStream(routeId, node);
+        } else {
+            saveStreamingSlot(routeId, jsonLine);
+        }
+    }
 
     // 스트리밍 중 AI ndjson 한 줄을 파싱해 route_slots에 저장
     // places FK 위반(존재하지 않는 place_id) 시 해당 슬롯 건너뜀
     // REQUIRES_NEW: 각 슬롯 저장을 독립 트랜잭션으로 처리 — 실패해도 다음 슬롯에 영향 없음
+    // (RouteController에서 직접 호출되는 경로도 있어 이 어노테이션 자체는 유지 — 위 self-invocation
+    // 문제는 saveStreamingLine 쪽에 REQUIRES_NEW를 추가해 우회)
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void saveStreamingSlot(UUID routeId, String jsonLine) throws JsonProcessingException {
         JsonNode node = objectMapper.readTree(jsonLine);
