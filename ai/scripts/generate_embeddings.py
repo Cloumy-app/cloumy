@@ -85,12 +85,20 @@ async def main() -> None:
             upload = await client.files.create(file=f, purpose="batch")
         log.info("업로드 완료: file_id=%s", upload.id)
 
-        # 4. 배치 생성 (이미 생성된 배치 ID가 있으면 재사용)
+        # 4. 배치 생성 (이미 생성된 배치 ID가 있고 아직 진행 중이면 재사용.
+        #    저장된 배치가 실패/만료/취소로 끝났다면 방금 새로 올린 입력으로 새 배치를 만든다 —
+        #    그렇지 않으면 새 입력을 올려놓고도 죽은 배치를 계속 재조회하게 됨)
+        batch = None
         if BATCH_ID_FILE.exists():
             saved_id = BATCH_ID_FILE.read_text().strip()
-            log.info("기존 배치 재사용: %s", saved_id)
             batch = await client.batches.retrieve(saved_id)
-        else:
+            if batch.status in ("failed", "expired", "cancelled"):
+                log.warning("기존 배치가 %s 상태 — 새 배치 생성", batch.status)
+                batch = None
+            else:
+                log.info("기존 배치 재사용: %s (status=%s)", saved_id, batch.status)
+
+        if batch is None:
             batch = await client.batches.create(
                 input_file_id=upload.id,
                 endpoint="/v1/embeddings",

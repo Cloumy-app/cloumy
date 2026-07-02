@@ -1,7 +1,11 @@
+import json
 from datetime import date, timedelta
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+from langchain_core.documents import Document
+
+import app.services.route_service as route_service
 from app.services.route_service import _cache_key, _is_weather_sensitive, stream_route
 from app.models.schemas import RouteGenRequest
 
@@ -61,3 +65,91 @@ async def test_stream_route_cache_hit():
 
     assert len(results) == 1
     assert "place_id" in results[0]
+
+
+def _candidates() -> list[Document]:
+    return [
+        Document(page_content="A | 주소 | 태그: 맛집", metadata={"id": "p1", "name": "A", "lng": 129.0, "lat": 35.0, "avg_duration_minutes": 60, "is_hidden_gem": False}),
+        Document(page_content="B | 주소 | 태그: 카페", metadata={"id": "p2", "name": "B", "lng": 129.01, "lat": 35.01, "avg_duration_minutes": 60, "is_hidden_gem": False}),
+        Document(page_content="C | 주소 | 태그: 관광", metadata={"id": "p3", "name": "C", "lng": 129.02, "lat": 35.02, "avg_duration_minutes": 60, "is_hidden_gem": False}),
+        Document(page_content="D | 주소 | 태그: 관광", metadata={"id": "p4", "name": "D", "lng": 129.03, "lat": 35.03, "avg_duration_minutes": 60, "is_hidden_gem": False}),
+    ]
+
+
+class _FakeAnthropicStream:
+    """_anthropic.messages.stream()이 반환하는 async context manager를 흉내."""
+
+    def __init__(self, chunks: list[str]):
+        self._chunks = chunks
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def _gen(self):
+        for chunk in self._chunks:
+            yield chunk
+
+    @property
+    def text_stream(self):
+        return self._gen()
+
+
+@pytest.mark.asyncio
+async def test_stream_route_day_boundary_reorders_per_day_and_cache_matches_stream():
+    day1 = (
+        '{"day":1,"order":1,"place_id":"p1","place_name":"A","tip":"","duration_minutes":60,"budget_estimate":5000}\n'
+        '{"day":1,"order":2,"place_id":"p2","place_name":"B","tip":"","duration_minutes":60,"budget_estimate":5000}\n'
+    )
+    day2 = (
+        '{"day":2,"order":1,"place_id":"p3","place_name":"C","tip":"","duration_minutes":60,"budget_estimate":5000}\n'
+        '{"day":2,"order":2,"place_id":"p4","place_name":"D","tip":"","duration_minutes":60,"budget_estimate":5000}\n'
+    )
+    fake_stream = _FakeAnthropicStream([day1, day2])
+
+    mock_pgvector = MagicMock()
+    mock_pgvector.return_value.ainvoke = AsyncMock(return_value=_candidates())
+
+    redis_mock = AsyncMock()
+    redis_mock.get = AsyncMock(return_value=None)
+    redis_mock.setex = AsyncMock()
+
+    with patch.object(route_service, "PgvectorRetriever", mock_pgvector), \
+         patch.object(route_service._anthropic.messages, "stream", return_value=fake_stream), \
+         patch.object(route_service, "reorder_slots", wraps=route_service.reorder_slots) as reorder_spy:
+        results = []
+        async for line in stream_route(_make_req(), db=MagicMock(), redis=redis_mock):
+            results.append(line)
+
+    assert len(results) == 4
+    # day 경계마다 한 번씩, day별로 분리된 인자로 reorder_slots가 호출돼야 함
+    assert reorder_spy.call_count == 2
+    first_day_lines = reorder_spy.call_args_list[0][0][0]
+    second_day_lines = reorder_spy.call_args_list[1][0][0]
+    assert all(json.loads(line)["day"] == 1 for line in first_day_lines)
+    assert all(json.loads(line)["day"] == 2 for line in second_day_lines)
+
+    # 캐시에 저장된 내용이 실제 yield된 내용과 완전히 동일해야 함 (스트림/캐시 불일치 해소 검증)
+    cached_arg = redis_mock.setex.call_args[0][2]
+    assert cached_arg == "".join(results)
+
+
+@pytest.mark.asyncio
+async def test_pgvector_failure_falls_back_with_request_themes():
+    req = _make_req(themes=["카페", "등산"])
+
+    mock_pgvector = MagicMock()
+    mock_pgvector.return_value.ainvoke = AsyncMock(side_effect=RuntimeError("pgvector 오류"))
+
+    mock_postgis_cls = MagicMock()
+    mock_postgis_cls.return_value.ainvoke = AsyncMock(return_value=[])
+
+    with patch.object(route_service, "PgvectorRetriever", mock_pgvector), \
+         patch.object(route_service, "PostgisTagRetriever", mock_postgis_cls):
+        async for _ in stream_route(req, db=MagicMock(), redis=None):
+            pass
+
+    _, kwargs = mock_postgis_cls.call_args
+    assert kwargs["tags"] == ["카페", "등산"]

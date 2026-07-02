@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import date
 from typing import AsyncGenerator
@@ -117,7 +118,7 @@ async def stream_route(
         candidates = await PostgisTagRetriever(
             db=db,
             city_coords=CITY_CENTERS[request.city],
-            tags=[],
+            tags=request.themes,
         ).ainvoke("")
     logger.info("후보 장소 %d건", len(candidates))
 
@@ -171,8 +172,26 @@ async def stream_route(
     )
 
     # 6. Sonnet 스트리밍 (Prompt Caching으로 시스템 프롬프트 입력 비용 ~90% 절감)
+    # day 경계마다 그 day를 TSP로 재정렬한 뒤 yield — 스트림/DB(Spring이 즉시 저장)/캐시가
+    # 전부 동일한(=이미 최적화된) 순서를 보게 하기 위함. Day 1은 여전히 Day 2/3보다 먼저
+    # 도착하므로 스트리밍의 체감 지연 이점은 유지된다.
     buffer = ""
     collected: list[str] = []
+    day_buffer: list[str] = []
+    current_day: int | None = None
+
+    def _ingest(validated: str) -> list[str]:
+        """day 경계를 넘으면 이전 day를 TSP 재정렬해 반환, 아니면 버퍼링만 하고 빈 리스트 반환."""
+        nonlocal current_day, day_buffer
+        slot_day = json.loads(validated).get("day", 1)
+        flushed: list[str] = []
+        if current_day is not None and slot_day != current_day:
+            flushed = reorder_slots(day_buffer, coord_lookup)
+            day_buffer = []
+        current_day = slot_day
+        day_buffer.append(validated)
+        return flushed
+
     try:
         async with _anthropic.messages.stream(
             model="claude-sonnet-4-6",
@@ -188,21 +207,27 @@ async def stream_route(
         ) as stream:
             async for text in stream.text_stream:
                 buffer += text
-                # 완성된 JSON 줄만 즉시 yield
+                # 완성된 JSON 줄만 검증
                 while "\n" in buffer:
                     line, buffer = buffer.split("\n", 1)
                     line = line.strip()
                     if line:
                         validated = await validate_route_slot(line, candidate_lookup)
                         if validated is not None:
-                            collected.append(validated)
-                            yield validated
+                            for flushed_line in _ingest(validated):
+                                collected.append(flushed_line)
+                                yield flushed_line
             # 버퍼 잔여분 처리
             if buffer.strip():
                 validated = await validate_route_slot(buffer.strip(), candidate_lookup)
                 if validated is not None:
-                    collected.append(validated)
-                    yield validated
+                    for flushed_line in _ingest(validated):
+                        collected.append(flushed_line)
+                        yield flushed_line
+        # 스트림 종료 — 마지막 day 플러시
+        for flushed_line in reorder_slots(day_buffer, coord_lookup):
+            collected.append(flushed_line)
+            yield flushed_line
     except GeneratorExit:
         logger.info("클라이언트 연결 종료 — 스트리밍 정상 중단")
         return  # 부분 수집 데이터가 캐싱되지 않도록 명시적 종료
@@ -210,11 +235,8 @@ async def stream_route(
         logger.error("Sonnet 스트리밍 오류: %s", e)
         raise
 
-    # 스트리밍 완료 후 TSP 동선 최적화 (캐시에는 최적화된 순서 저장)
-    if collected:
-        collected = reorder_slots(collected, coord_lookup)
-
-    # Redis 캐시 저장 (TTL 24h)
+    # Redis 캐시 저장 (TTL 24h) — collected는 이미 day별로 TSP 재정렬된 상태이므로
+    # 그대로 저장하면 스트림으로 전달된 내용과 100% 동일
     if redis is not None and collected and not weather_sensitive:
         try:
             await redis.setex(_cache_key(request), 86400, "".join(collected))

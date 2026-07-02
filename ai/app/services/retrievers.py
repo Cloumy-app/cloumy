@@ -27,7 +27,7 @@ class PostgisTagRetriever(BaseRetriever):
                 """
                 SELECT
                     id, name, category_tags, address,
-                    avg_duration_minutes,
+                    avg_duration_minutes, is_hidden_gem,
                     ST_X(location::geometry) AS lng,
                     ST_Y(location::geometry) AS lat
                 FROM places
@@ -47,7 +47,7 @@ class PostgisTagRetriever(BaseRetriever):
             """
             SELECT
                 id, name, category_tags, address,
-                avg_duration_minutes,
+                avg_duration_minutes, is_hidden_gem,
                 ST_X(location::geometry) AS lng,
                 ST_Y(location::geometry) AS lat
             FROM places
@@ -82,6 +82,7 @@ class PostgisTagRetriever(BaseRetriever):
                 page_content=(
                     f"{row['name']} | {row['address'] or '주소 없음'} | "
                     f"태그: {', '.join(row['category_tags'] or [])}"
+                    + (" | Hidden Gem" if row["is_hidden_gem"] else "")
                 ),
                 metadata={
                     "id": str(row["id"]),
@@ -89,6 +90,7 @@ class PostgisTagRetriever(BaseRetriever):
                     "lng": float(row["lng"]),
                     "lat": float(row["lat"]),
                     "avg_duration_minutes": row["avg_duration_minutes"],
+                    "is_hidden_gem": row["is_hidden_gem"],
                 },
             )
             for row in rows
@@ -125,7 +127,7 @@ class PgvectorRetriever(BaseRetriever):
                     """
                     SELECT
                         id, name, category_tags, address,
-                        avg_duration_minutes,
+                        avg_duration_minutes, is_hidden_gem,
                         ST_X(location::geometry) AS lng,
                         ST_Y(location::geometry) AS lat
                     FROM places
@@ -157,6 +159,7 @@ class PgvectorRetriever(BaseRetriever):
                 page_content=(
                     f"{row['name']} | {row['address'] or '주소 없음'} | "
                     f"태그: {', '.join(row['category_tags'] or [])}"
+                    + (" | Hidden Gem" if row["is_hidden_gem"] else "")
                 ),
                 metadata={
                     "id": str(row["id"]),
@@ -164,6 +167,7 @@ class PgvectorRetriever(BaseRetriever):
                     "lng": float(row["lng"]),
                     "lat": float(row["lat"]),
                     "avg_duration_minutes": row["avg_duration_minutes"],
+                    "is_hidden_gem": row["is_hidden_gem"],
                 },
             )
             for row in rows
