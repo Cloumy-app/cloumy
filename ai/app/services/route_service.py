@@ -12,7 +12,7 @@ from app.models.schemas import RouteGenRequest
 from app.services.place_validator import validate_route_slot
 from app.services.retrievers import PostgisTagRetriever, PgvectorRetriever
 from app.services.tsp_service import reorder_slots
-from app.services.weather_service import build_weather_forecast_text
+from app.services.weather_service import FORECAST_WINDOW_DAYS, build_weather_forecast_text
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +47,9 @@ ROUTE_GEN_SYSTEM_PROMPT = """당신은 한국 여행 전문 플래너입니다. 
 - 서로 멀리 떨어진 장소를 같은 날 배치하지 말 것
 
 [날씨 반영]
-- user 메시지에 Day별 강수확률이 주어지면, 강수확률이 높은 날은 후보의 태그를 보고 실내 장소(카페/식당/박물관/미술관/쇼핑몰 등) 비중을 높여 배치
-- 강수확률이 낮은 날은 야외 장소(공원/전망대/해변 등)도 자유롭게 포함"""
+- user 메시지에 Day별 날씨 라벨이 주어지면, 슬롯 order를 대략적 시간대로 간주: 앞쪽(1~2번째)=오전, 중간(3번째)=오후, 뒤쪽(4~5번째)=저녁
+- 라벨에 포함된 시간대의 슬롯만 실내 장소(카페/식당/박물관/미술관/쇼핑몰 등) 위주로 배치 (예: "오후 한때 비"면 3번째 슬롯만 실내 위주)
+- "종일 비"는 모든 슬롯 실내 위주, "맑음"은 제약 없음"""
 
 BUDGET_GUIDE: dict[str, str] = {
     "tight":   "하루 활동비 목표 2만원 (슬롯당 4,000원 이하)",
@@ -71,13 +72,22 @@ def _cache_key(req: RouteGenRequest) -> str:
     return f"route:{req.city}:{req.nights}:{req.group_type}:{req.budget_level}:{themes}:{ratio:.1f}"
 
 
+def _is_weather_sensitive(start_date: date | None, today: date | None = None) -> bool:
+    """출발일이 예보 유효 범위(FORECAST_WINDOW_DAYS) 이내면 날씨 민감 요청으로 간주해 캐시를 건너뛴다."""
+    if start_date is None:
+        return False
+    return (start_date - (today or date.today())).days <= FORECAST_WINDOW_DAYS
+
+
 async def stream_route(
     request: RouteGenRequest,
     db: asyncpg.Pool,
     redis=None,
 ) -> AsyncGenerator[str, None]:
-    # 캐시 히트 시 Redis에서 즉시 반환
-    if redis is not None:
+    weather_sensitive = _is_weather_sensitive(request.start_date)
+
+    # 캐시 히트 시 Redis에서 즉시 반환 (날씨 민감 요청은 매번 최신 예보로 재생성)
+    if redis is not None and not weather_sensitive:
         try:
             cached = await redis.get(_cache_key(request))
             if cached:
@@ -146,9 +156,7 @@ async def stream_route(
     ratio_desc = "관광지 위주" if ratio < 0.3 else ("혼합" if ratio < 0.7 else "숨은 명소 위주")
     budget_hint = BUDGET_GUIDE.get(request.budget_level, "하루 활동비 목표 6만원 (슬롯당 12,000원)")
     weather_hint = (
-        f"Day별 날씨 예보:\n{weather_forecast_text}\n"
-        "강수확률이 높은 날은 후보의 '태그'를 보고 실내(카페/식당/박물관/미술관/쇼핑몰 등) 위주로, "
-        "낮은 날은 야외 포함해 배치할 것.\n\n"
+        f"Day별 날씨:\n{weather_forecast_text}\n\n"
         if weather_forecast_text else ""
     )
     user_message = (
@@ -207,7 +215,7 @@ async def stream_route(
         collected = reorder_slots(collected, coord_lookup)
 
     # Redis 캐시 저장 (TTL 24h)
-    if redis is not None and collected:
+    if redis is not None and collected and not weather_sensitive:
         try:
             await redis.setex(_cache_key(request), 86400, "".join(collected))
             logger.info("캐시 저장: key=%s lines=%d", _cache_key(request), len(collected))

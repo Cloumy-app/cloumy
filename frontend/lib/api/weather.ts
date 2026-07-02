@@ -37,10 +37,27 @@ export interface WeatherInfo {
   icon: string;
 }
 
+export type RainBlock = '오전' | '오후' | '저녁';
+
+export interface DayWeather extends WeatherInfo {
+  rainyBlocks: RainBlock[]; // 강수확률 임계치 넘는 블록만
+}
+
+// ai/app/services/weather_service.py의 _RAIN_THRESHOLD와 동일 값 유지 —
+// AI가 루트를 짤 때 쓴 기준과 사용자에게 보여주는 기준을 맞추기 위함
+const RAIN_THRESHOLD = 0.6;
+
+function hourToBlock(hour: number): RainBlock | null {
+  if (hour >= 6 && hour < 12) return '오전';
+  if (hour >= 12 && hour < 18) return '오후';
+  if (hour >= 18 && hour < 24) return '저녁';
+  return null; // 새벽 — 여행 활동 시간대 아님
+}
+
 export async function fetchForecast(
   city: string,
   dates: string[],
-): Promise<Record<string, WeatherInfo>> {
+): Promise<Record<string, DayWeather>> {
   if (!KEY || dates.length === 0) return {};
   const cityEn = CITY_EN_MAP[city] ?? city;
   try {
@@ -53,22 +70,40 @@ export async function fetchForecast(
         dt_txt: string;
         weather: { description: string; icon: string }[];
         main: { temp: number };
+        pop?: number;
       }[];
     };
-    const result: Record<string, WeatherInfo> = {};
+    const result: Record<string, DayWeather> = {};
     for (const date of dates) {
-      // 해당 날짜의 정오(12:00) 예보 우선, 없으면 가장 가까운 항목
-      const noon = data.list.find((item) => item.dt_txt.startsWith(`${date} 12:`));
-      const closest = data.list.find((item) => item.dt_txt.startsWith(date));
-      const entry = noon ?? closest;
-      if (entry) {
-        const rawDesc = entry.weather[0]?.description ?? '';
-        result[date] = {
-          description: WEATHER_KO[rawDesc] ?? rawDesc,
-          temp: Math.round(entry.main.temp),
-          icon: entry.weather[0]?.icon ?? '01d',
-        };
+      const dayEntries = data.list.filter((item) => item.dt_txt.startsWith(date));
+      if (dayEntries.length === 0) continue;
+
+      // 대표 설명·아이콘은 정오(12:00) 예보 우선, 없으면 가장 가까운 항목
+      const noon = dayEntries.find((item) => item.dt_txt.startsWith(`${date} 12:`));
+      const entry = noon ?? dayEntries[0];
+      const rawDesc = entry.weather[0]?.description ?? '';
+
+      // 기온은 하루 전체 평균 (정오 스냅샷 하나가 아니라)
+      const avgTemp = dayEntries.reduce((sum, item) => sum + item.main.temp, 0) / dayEntries.length;
+
+      const blockPop: Partial<Record<RainBlock, number>> = {};
+      for (const item of dayEntries) {
+        const hour = Number(item.dt_txt.slice(11, 13));
+        const block = hourToBlock(hour);
+        if (block === null) continue;
+        const pop = item.pop ?? 0;
+        blockPop[block] = Math.max(blockPop[block] ?? 0, pop);
       }
+      const rainyBlocks = (['오전', '오후', '저녁'] as const).filter(
+        (block) => (blockPop[block] ?? 0) >= RAIN_THRESHOLD,
+      );
+
+      result[date] = {
+        description: WEATHER_KO[rawDesc] ?? rawDesc,
+        temp: Math.round(avgTemp),
+        icon: entry.weather[0]?.icon ?? '01d',
+        rainyBlocks,
+      };
     }
     return result;
   } catch {

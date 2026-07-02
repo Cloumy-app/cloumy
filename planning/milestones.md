@@ -145,6 +145,7 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 - [x] 카카오 로컬 보충 수집기 — TourAPI 미수집 맛집/카페 보강 + 좌표 교정 (`scripts/collect_kakao.py`) — 2026-06-29
 - [x] 기상청 API 연동 (OpenWeatherMap) — 여행 날짜 예보 기반 실외/실내 장소 가중치 조정 (`services/weather_service.py`) — 2026-06-29
 - [x] 날씨 가중치 반영 방식 개선 — 전체 평균 정렬 → Day별 강수확률 프롬프트 반영 (`services/weather_service.py`) — 2026-07-02
+- [x] 날씨 라벨 세분화(오전/오후/저녁 블록) + 근시일(5일 이내) 요청 캐시 우회 (`services/weather_service.py`, `services/route_service.py`) — 2026-07-02
 
 **[Spring]**
 - [ ] 폴백 — 유사 루트 추천 — FastAPI 장애 시 Redis → DB 유사 루트 → 503 (`trip/service/FallbackRouteService.java`)
@@ -169,6 +170,9 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 - [x] 날씨 정보 표시 5일 예보로 확장 (일자별 날씨) — 2026-07-01
 - [x] 루트 상세화면 지도 마커 클릭 → 슬롯 스크롤 연동 — 2026-07-01
 - [x] 루트 생성 후 "내 루트" 목록 캐시 미반영 버그 수정 — 2026-07-01
+
+**[Frontend 날씨 표시 개선 (2026-07-02 완료)]**
+- [x] Day 카드 날씨를 정오 스냅샷 → 하루 평균 기온으로 변경 + 슬롯별 강수 블록 아이콘 표시 (`lib/api/weather.ts`, `components/route/SlotCard.tsx`) — 2026-07-02
 
 ---
 

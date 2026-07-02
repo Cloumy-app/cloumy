@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { Star, RefreshCw, X, Check, Navigation, Wallet, MapPin, Sparkles } from 'lucide-react-native';
+import { Star, RefreshCw, X, Check, Navigation, Wallet, MapPin, Sparkles, CloudRain } from 'lucide-react-native';
 import type { BudgetLevel, RouteSlot, SlotAlternative, SlotWithCoords } from '@/types';
 import { getBudgetStatus } from '@/types';
 import { getSlotAlternatives } from '@/lib/api/routes';
@@ -15,6 +15,7 @@ interface SlotCardProps {
   viewMode?: 'edit' | 'detail';
   showActions?: boolean;
   isFocused?: boolean;
+  isRainy?: boolean;
   onPin: () => void;
   onRemove: () => void;
   onReplaceWithAlternative?: (alt: SlotAlternative) => void;
@@ -36,6 +37,7 @@ export function SlotCard({
   viewMode = 'edit',
   showActions = true,
   isFocused = false,
+  isRainy = false,
   onPin,
   onRemove,
   onReplaceWithAlternative,
@@ -105,11 +107,14 @@ export function SlotCard({
                   )}
                   <Text className="text-lg font-bold text-slate-800 leading-tight">{placeName}</Text>
                 </View>
-                {duration != null && (
-                  <Text className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded-lg font-bold">
-                    {duration}분
-                  </Text>
-                )}
+                <View className="flex-row items-center gap-1.5">
+                  {isRainy && <CloudRain size={12} color="#0ea5e9" />}
+                  {duration != null && (
+                    <Text className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded-lg font-bold">
+                      {duration}분
+                    </Text>
+                  )}
+                </View>
               </View>
 
               {tip && (
@@ -296,6 +301,7 @@ export function SlotCard({
           )}
 
           <View className="flex-row gap-3 mt-1 items-center flex-wrap">
+            {isRainy && <CloudRain size={12} color="#0ea5e9" />}
             {!startTime && duration != null && (
               <Text className="text-xs text-slate-400">⏱ {duration}분</Text>
             )}

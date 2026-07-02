@@ -5,14 +5,25 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+FORECAST_WINDOW_DAYS = 5  # OpenWeatherMap 무료 티어 /forecast 제공 범위
+_RAIN_THRESHOLD = 0.6
+_BLOCK_HOURS = {"오전": range(6, 12), "오후": range(12, 18), "저녁": range(18, 24)}
 
-async def _get_daily_rain_probs(
+
+def _hour_to_block(hour: int) -> str | None:
+    for block, hours in _BLOCK_HOURS.items():
+        if hour in hours:
+            return block
+    return None  # 00~05시는 여행 활동 시간대 아님
+
+
+async def _get_forecast_by_block(
     lat: float,
     lon: float,
     api_key: str,
-) -> dict[str, float]:
-    """OpenWeatherMap /forecast로 날짜별 최대 강수확률 반환.
-    반환 형식: {"2026-07-01": 0.64, "2026-07-02": 0.20, ...}
+) -> dict[str, dict[str, float]]:
+    """OpenWeatherMap /forecast를 오전/오후/저녁 블록별 최대 강수확률로 집계.
+    반환 형식: {"2026-07-01": {"오후": 0.8, "저녁": 0.3}, ...}
     """
     async with httpx.AsyncClient(timeout=5.0) as client:
         resp = await client.get(
@@ -22,17 +33,35 @@ async def _get_daily_rain_probs(
                 "lon": lon,
                 "appid": api_key,
                 "units": "metric",
-                "cnt": 40,  # 5일 × 8회 (3시간 간격)
+                "cnt": 8 * FORECAST_WINDOW_DAYS,  # 3시간 간격
             },
         )
         resp.raise_for_status()
 
-    daily: dict[str, float] = {}
+    blocks: dict[str, dict[str, float]] = {}
     for item in resp.json().get("list", []):
-        date_str = item["dt_txt"][:10]  # "2026-07-01 09:00:00" → "2026-07-01"
+        date_str, time_str = item["dt_txt"].split(" ")  # "2026-07-01 09:00:00"
+        block = _hour_to_block(int(time_str[:2]))
+        if block is None:
+            continue
         pop = float(item.get("pop", 0.0))
-        daily[date_str] = max(daily.get(date_str, 0.0), pop)
-    return daily
+        day = blocks.setdefault(date_str, {})
+        day[block] = max(day.get(block, 0.0), pop)
+    return blocks
+
+
+def _label_for_day(day_blocks: dict[str, float]) -> str:
+    """블록별 강수확률을 사람이 읽는 라벨로 압축.
+    임계치 넘는 블록 조합에 따라 맑음/한때 비/부분 비/종일 비로 분류.
+    """
+    rainy = [b for b in ("오전", "오후", "저녁") if day_blocks.get(b, 0.0) >= _RAIN_THRESHOLD]
+    if not rainy:
+        return "맑음"
+    if len(rainy) == 3:
+        return "종일 비"
+    if len(rainy) == 1:
+        return f"{rainy[0]} 한때 비"
+    return "·".join(rainy) + " 비"
 
 
 async def build_weather_forecast_text(
@@ -52,10 +81,10 @@ async def build_weather_forecast_text(
         return ""
 
     try:
-        forecast = await _get_daily_rain_probs(lat, lon, api_key)
+        forecast = await _get_forecast_by_block(lat, lon, api_key)
         lines = [
             f"Day {i + 1} ({(start_date + timedelta(days=i)).isoformat()}): "
-            f"강수확률 {forecast.get((start_date + timedelta(days=i)).isoformat(), 0.0):.0%}"
+            f"{_label_for_day(forecast.get((start_date + timedelta(days=i)).isoformat(), {}))}"
             for i in range(nights + 1)
         ]
         logger.info("날씨 예보 조회: %s", destination)
