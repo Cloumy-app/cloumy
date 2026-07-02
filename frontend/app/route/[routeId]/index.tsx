@@ -13,7 +13,7 @@ import { TripMap } from '@/components/map/TripMap';
 import { DayTabs } from '@/components/route/DayTabs';
 import { SlotCard } from '@/components/route/SlotCard';
 import type { BudgetLevel, SlotAlternative, SlotWithCoords } from '@/types';
-import type { WeatherInfo } from '@/lib/api/weather';
+import type { DayWeather, RainBlock } from '@/lib/api/weather';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -21,6 +21,14 @@ function getDateForDay(startDate: string, dayNumber: number): string {
   const date = new Date(startDate);
   date.setDate(date.getDate() + dayNumber - 1);
   return date.toISOString().split('T')[0];
+}
+
+// index는 하루 안에서의 렌더링 순서(0-indexed) — AI 시스템 프롬프트(route_service.py)의
+// "앞쪽(1~2)=오전, 중간(3)=오후, 뒤쪽(4~5)=저녁" 근사치와 반드시 동일하게 맞춘다.
+function isSlotInRainyBlock(dayWeather: DayWeather | null | undefined, index: number): boolean {
+  if (!dayWeather?.rainyBlocks.length) return false;
+  const block: RainBlock = index < 2 ? '오전' : index === 2 ? '오후' : '저녁';
+  return dayWeather.rainyBlocks.includes(block);
 }
 
 export default function RouteResultScreen() {
@@ -92,12 +100,15 @@ export default function RouteResultScreen() {
     ? days.map((day) => getDateForDay(routeStartDate, day))
     : [];
 
-  const { data: weatherByDate } = useQuery<Record<string, WeatherInfo>>({
+  const { data: weatherByDate } = useQuery<Record<string, DayWeather>>({
     queryKey: ['forecast', destination, travelDates.join(',')],
     queryFn: () => fetchForecast(destination, travelDates),
     enabled: !!destination && travelDates.length > 0 && !isStreaming,
     staleTime: 1000 * 60 * 60,
   });
+
+  const currentDateStr = routeStartDate ? getDateForDay(routeStartDate, selectedDay) : null;
+  const currentDayWeather = currentDateStr ? weatherByDate?.[currentDateStr] : undefined;
 
   const streamSlots =
     isStreaming || currentRoute?.id === routeId
@@ -417,6 +428,7 @@ export default function RouteResultScreen() {
                     viewMode="edit"
                     showActions={showEditControls}
                     isFocused={apiSlot.id === focusedSlotId}
+                    isRainy={isSlotInRainyBlock(currentDayWeather, i)}
                     onPin={() => handlePin(apiSlot.id)}
                     onRemove={() => handleDeleteSlot(apiSlot.id)}
                     onReplaceWithAlternative={(alt) => handleReplaceWithAlternative(apiSlot.id, alt)}
@@ -435,6 +447,7 @@ export default function RouteResultScreen() {
                   isLast={i === currentDayStreamSlots.length - 1}
                   viewMode="edit"
                   showActions={showEditControls}
+                  isRainy={isSlotInRainyBlock(currentDayWeather, i)}
                   onPin={() => toggleSlotPin(slot.day, slot.order)}
                   onRemove={() => removeSlot(slot.day, slot.order)}
                 />
