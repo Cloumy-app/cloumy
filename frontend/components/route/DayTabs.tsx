@@ -1,13 +1,13 @@
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { Wallet, MapPin, CloudSun } from 'lucide-react-native';
 import type { SlotWithCoords } from '@/types';
-import type { WeatherInfo } from '@/lib/api/weather';
+import type { DayWeather } from '@/lib/api/weather';
 
 interface DayTabsProps {
   slots: SlotWithCoords[];
   selectedDay: number;
   onSelectDay: (day: number) => void;
-  weatherByDate?: Record<string, WeatherInfo>;
+  weatherByDate?: Record<string, DayWeather>;
   startDate?: string;
   variant?: 'planner' | 'itinerary';
 }
@@ -31,7 +31,6 @@ export function DayTabs({ slots, selectedDay, onSelectDay, weatherByDate, startD
     .filter((s) => s.dayNumber === selectedDay)
     .reduce((sum, s) => sum + (s.estimatedCost ?? 0), 0);
 
-  const totalBudget = slots.reduce((sum, s) => sum + (s.estimatedCost ?? 0), 0);
   const daySlotCount = slots.filter((s) => s.dayNumber === selectedDay).length;
 
   const currentDateStr = startDate ? getDateForDay(startDate, selectedDay) : null;
@@ -96,13 +95,18 @@ export function DayTabs({ slots, selectedDay, onSelectDay, weatherByDate, startD
               <Text className="text-xs font-black text-slate-800 mt-0.5" numberOfLines={1}>
                 {weather.description} {weather.temp}°
               </Text>
+              {weather.rainyBlocks.length > 0 && weather.rainyBlocks.length < 3 && (
+                <Text className="text-[9px] text-sky-600 font-bold mt-0.5" numberOfLines={1}>
+                  {weather.rainyBlocks.join('·')} 비
+                </Text>
+              )}
             </View>
           ) : (
-            <View className="flex-1 bg-violet-50 rounded-xl p-3 items-center justify-center border border-violet-100">
-              <Wallet size={16} color="#8b5cf6" />
-              <Text className="text-[10px] text-slate-500 font-medium mt-1">총 예산</Text>
-              <Text className="text-xs font-black text-slate-800 mt-0.5" numberOfLines={1}>
-                {formatBudget(totalBudget)}
+            <View className="flex-1 bg-slate-50 rounded-xl p-3 items-center justify-center border border-slate-100">
+              <CloudSun size={16} color="#94a3b8" />
+              <Text className="text-[10px] text-slate-400 font-medium mt-1">날씨</Text>
+              <Text className="text-xs font-black text-slate-400 mt-0.5" numberOfLines={1}>
+                정보 없음
               </Text>
             </View>
           )}
@@ -127,13 +131,18 @@ export function DayTabs({ slots, selectedDay, onSelectDay, weatherByDate, startD
                 {weather.description} {weather.temp}°
               </Text>
               <Text className="text-slate-500 text-[10px] font-medium">여행 날씨</Text>
+              {weather.rainyBlocks.length > 0 && weather.rainyBlocks.length < 3 && (
+                <Text className="text-sky-600 text-[9px] font-bold" numberOfLines={1}>
+                  {weather.rainyBlocks.join('·')} 비
+                </Text>
+              )}
             </View>
           ) : (
-            <View className="flex-1 bg-violet-50 rounded-xl px-3 py-2 items-center">
-              <Text className="text-violet-600 font-black text-base" numberOfLines={1}>
-                {formatBudget(totalBudget)}
+            <View className="flex-1 bg-slate-50 rounded-xl px-3 py-2 items-center">
+              <Text className="text-slate-400 font-black text-base" numberOfLines={1}>
+                정보 없음
               </Text>
-              <Text className="text-slate-500 text-[10px] font-medium">여행 총 예산</Text>
+              <Text className="text-slate-400 text-[10px] font-medium">여행 날씨</Text>
             </View>
           )}
         </View>

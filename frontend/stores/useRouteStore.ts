@@ -4,11 +4,13 @@ import type { Route, RouteSlot } from '@/types';
 interface RouteStore {
   currentRoute: Route | null;
   streamingSlots: RouteSlot[];
+  daySummaries: Record<number, string>;
   isStreaming: boolean;
   selectedDay: number;
   mapViewMode: 'full' | 'day';
   setCurrentRoute: (route: Route) => void;
   appendStreamingSlot: (slot: RouteSlot) => void;
+  setDaySummary: (day: number, summary: string) => void;
   finalizeRoute: (routeId: string, destination: string, startDate: string, endDate: string) => void;
   setSelectedDay: (day: number) => void;
   toggleSlotPin: (day: number, order: number) => void;
@@ -21,6 +23,7 @@ interface RouteStore {
 export const useRouteStore = create<RouteStore>((set) => ({
   currentRoute: null,
   streamingSlots: [],
+  daySummaries: {},
   isStreaming: false,
   selectedDay: 1,
   mapViewMode: 'full',
@@ -35,6 +38,9 @@ export const useRouteStore = create<RouteStore>((set) => ({
       if (isDuplicate) return s;
       return { streamingSlots: [...s.streamingSlots, slot] };
     }),
+
+  setDaySummary: (day, summary) =>
+    set((s) => ({ daySummaries: { ...s.daySummaries, [day]: summary } })),
 
   finalizeRoute: (routeId, destination, startDate, endDate) =>
     set((s) => ({
@@ -84,5 +90,5 @@ export const useRouteStore = create<RouteStore>((set) => ({
   setIsStreaming: (v) => set({ isStreaming: v }),
 
   reset: () =>
-    set({ currentRoute: null, streamingSlots: [], isStreaming: false, selectedDay: 1 }),
+    set({ currentRoute: null, streamingSlots: [], daySummaries: {}, isStreaming: false, selectedDay: 1 }),
 }));
