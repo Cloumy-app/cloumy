@@ -1,17 +1,18 @@
 import json
 import logging
-from typing import Optional
 
-from fastapi import APIRouter
-from pydantic import BaseModel
+from fastapi import APIRouter, Request
+from pydantic import BaseModel, Field
 
-from app.config.settings import settings
+from app.config.city_centers import CITY_CENTERS
+from app.services.retrievers import PostgisTagRetriever
 from app.services.route_service import _anthropic
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ai", tags=["slot-alternatives"])
 
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
+ALTERNATIVES_RADIUS_M = 5000
 
 
 class NearbySlot(BaseModel):
@@ -24,12 +25,13 @@ class SlotAlternativesRequest(BaseModel):
     slot_id: str
     place_name: str
     destination: str
-    tags: list[str] = []
+    tags: list[str] = Field(default_factory=list)
     budget_level: str = "mid"
-    nearby_slots: list[NearbySlot] = []
+    nearby_slots: list[NearbySlot] = Field(default_factory=list)
 
 
 class AlternativePlace(BaseModel):
+    place_id: str
     place_name: str
     reason: str
     estimated_cost: int
@@ -44,25 +46,56 @@ BUDGET_GUIDE = {
 }
 
 SYSTEM_PROMPT = """\
-당신은 한국 여행 전문가입니다. 여행자의 현재 슬롯 장소를 대체할 수 있는 장소 3개를 추천합니다.
+당신은 한국 여행 전문가입니다. 여행자의 현재 슬롯 장소를 대체할 수 있는 장소를 후보 목록에서 최대 3개 선택합니다.
 
 출력 형식: JSON 배열 하나만 출력합니다. 다른 텍스트 없음.
 [
-  {"place_name": "장소명", "reason": "추천 이유 1문장", "estimated_cost": 15000, "lat": 35.17, "lng": 129.07},
+  {"place_id": "후보 목록의 실제 id", "reason": "추천 이유 1문장", "estimated_cost": 15000},
   ...
 ]
 
 규칙:
-- 대상 목적지와 인접 슬롯 좌표를 고려해 이동 동선이 효율적인 장소 추천
+- place_id는 반드시 후보 목록의 실제 id 값만 사용 (임의 생성 금지)
+- 대상 목적지와 인접 슬롯 좌표를 고려해 이동 동선이 효율적인 장소 선택
 - 예산 수준에 맞는 장소 선택
 - estimated_cost는 정수(원 단위)
-- lat/lng는 실제 해당 장소의 WGS84 좌표 (소수점 4자리)
 - JSON 외 텍스트 절대 금지\
 """
 
 
 @router.post("/routes/slots/alternatives", response_model=list[AlternativePlace])
-async def get_slot_alternatives(req: SlotAlternativesRequest):
+async def get_slot_alternatives(req: SlotAlternativesRequest, request: Request):
+    db = request.app.state.db
+
+    # 1. 인접 슬롯 좌표 주변(없으면 도시 중심) 실제 후보 조회 — LLM이 좌표를 지어내지 못하게
+    #    반드시 DB에 존재하는 장소만 후보로 준다.
+    center = (
+        (req.nearby_slots[0].lng, req.nearby_slots[0].lat)
+        if req.nearby_slots
+        else CITY_CENTERS.get(req.destination)
+    )
+    if center is None:
+        logger.warning("슬롯 대안 — 알 수 없는 목적지: %s", req.destination)
+        return []
+
+    candidates = await PostgisTagRetriever(
+        db=db,
+        city_coords=center,
+        tags=req.tags,
+        radius_m=ALTERNATIVES_RADIUS_M,
+    ).ainvoke("")
+
+    if not candidates:
+        logger.info("슬롯 대안 — 후보 0건, LLM 호출 생략: %s", req.destination)
+        return []
+
+    candidate_lookup = {doc.metadata["id"]: doc for doc in candidates}
+    candidates_text = "\n".join(
+        f"[{i + 1}] id={doc.metadata['id']} | {doc.page_content}"
+        for i, doc in enumerate(candidates)
+    )
+
+    # 2. 프롬프트 구성
     budget_str = BUDGET_GUIDE.get(req.budget_level, "2~4만원")
     nearby_desc = (
         ", ".join(f"{s.name}({s.lat:.4f},{s.lng:.4f})" for s in req.nearby_slots)
@@ -77,7 +110,8 @@ async def get_slot_alternatives(req: SlotAlternativesRequest):
         f"선호 태그: {tag_str}\n"
         f"예산 수준: {budget_str}\n"
         f"인접 슬롯(동선 참고): {nearby_desc}\n\n"
-        f"위 조건에 맞는 대체 장소 3개를 JSON 배열로 추천해주세요."
+        f"후보 장소 ({len(candidates)}곳):\n{candidates_text}\n\n"
+        f"위 후보 중 대체 장소 최대 3개를 JSON 배열로 추천해주세요."
     )
 
     response = await _anthropic.messages.create(
@@ -97,7 +131,28 @@ async def get_slot_alternatives(req: SlotAlternativesRequest):
 
     try:
         data: list[dict] = json.loads(raw)
-        return [AlternativePlace(**item) for item in data[:3]]
     except Exception as e:
         logger.error("슬롯 대안 파싱 실패: %s | raw=%s", e, raw[:200])
         return []
+
+    # 3. place_id를 실제 후보 DB 값으로 하이드레이션 — 후보에 없는 id(환각)는 스킵
+    result: list[AlternativePlace] = []
+    for item in data:
+        doc = candidate_lookup.get(item.get("place_id"))
+        if doc is None:
+            logger.warning("슬롯 대안 환각 감지 — 후보에 없는 place_id: %s", item.get("place_id"))
+            continue
+        result.append(
+            AlternativePlace(
+                place_id=doc.metadata["id"],
+                place_name=doc.metadata["name"],
+                reason=item.get("reason", ""),
+                estimated_cost=item.get("estimated_cost", 0),
+                lat=doc.metadata["lat"],
+                lng=doc.metadata["lng"],
+            )
+        )
+        if len(result) == 3:
+            break
+
+    return result
