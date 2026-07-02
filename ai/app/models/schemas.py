@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class RouteGenRequest(BaseModel):
@@ -9,7 +9,7 @@ class RouteGenRequest(BaseModel):
     nights: int
     group_type: Literal["solo", "couple", "friends", "family"]
     budget_level: Literal["tight", "budget", "mid", "premium", "luxury"]
-    themes: list[str] = []
+    themes: list[str] = Field(default_factory=list)
     hidden_gem_ratio: float | None = None  # 0.0(관광지 위주) ~ 1.0(숨은 명소 위주)
     start_date: date | None = None  # 여행 시작일 — 날씨 예보 조회에 사용
 
