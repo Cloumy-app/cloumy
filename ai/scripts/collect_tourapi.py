@@ -109,18 +109,37 @@ def parse_row(item: dict) -> dict | None:
 
 
 async def insert_places(pool: asyncpg.Pool, rows: list[dict]) -> int:
+    """유효한 행을 places에 삽입한다.
+    유니크 제약이 없으므로(마이그레이션 범위 밖), 이름 일치 + 30m 반경 내
+    기존 장소가 있으면 스킵해 재실행 시 중복 누적을 막는다.
+    """
     valid = [r for r in rows if r and r["name"]]
     if not valid:
         return 0
+    inserted = 0
     async with pool.acquire() as conn:
-        await conn.executemany(
-            """
-            INSERT INTO places (name, location, address, category_tags, source)
-            VALUES ($1, ST_MakePoint($2, $3)::geography, $4, $5, 'tourapi')
-            """,
-            [(r["name"], r["lng"], r["lat"], r["address"], r["tags"]) for r in valid],
-        )
-    return len(valid)
+        for r in valid:
+            exists = await conn.fetchval(
+                """
+                SELECT EXISTS(
+                    SELECT 1 FROM places
+                    WHERE name = $1
+                      AND ST_DWithin(location, ST_MakePoint($2, $3)::geography, 30)
+                )
+                """,
+                r["name"], r["lng"], r["lat"],
+            )
+            if exists:
+                continue
+            await conn.execute(
+                """
+                INSERT INTO places (name, location, address, category_tags, source)
+                VALUES ($1, ST_MakePoint($2, $3)::geography, $4, $5, 'tourapi')
+                """,
+                r["name"], r["lng"], r["lat"], r["address"], r["tags"],
+            )
+            inserted += 1
+    return inserted
 
 
 async def main() -> None:
