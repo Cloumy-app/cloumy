@@ -83,7 +83,7 @@ function EmptyTripCard() {
 
 export default function HomeScreen() {
   const user = useAuthStore((s) => s.user);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['routes', 'list'],
     queryFn: () => getMyRoutes(0, 5),
     staleTime: 1000 * 60 * 2,
@@ -154,6 +154,14 @@ export default function HomeScreen() {
               <View className="bg-slate-100 rounded-3xl p-8 items-center">
                 <ActivityIndicator size="small" color="#0ea5e9" />
               </View>
+            ) : isError ? (
+              <TouchableOpacity
+                className="bg-slate-100 rounded-3xl p-8 items-center"
+                onPress={() => refetch()}
+                activeOpacity={0.85}
+              >
+                <Text className="text-slate-500 text-sm">불러오지 못했어요, 다시 시도</Text>
+              </TouchableOpacity>
             ) : upcomingRoute ? (
               <UpcomingTripCard route={upcomingRoute} />
             ) : (

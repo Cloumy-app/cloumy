@@ -1,5 +1,5 @@
 import EventSource from 'react-native-sse';
-import { API_BASE, getAuthHeaders } from './client';
+import { API_BASE, getAuthHeaders, apiFetch } from './client';
 import type { PlaceDetail, RouteDaySummary, RouteGenRequest, RouteListItem, RouteSlot, SlotAlternative, SlotWithCoords } from '@/types';
 
 interface SpringPage<T> {
@@ -9,73 +9,54 @@ interface SpringPage<T> {
 }
 
 export async function getMyRoutes(page = 0, size = 10): Promise<SpringPage<RouteListItem>> {
-  const res = await fetch(`${API_BASE}/v1/routes?page=${page}&size=${size}`, {
-    headers: getAuthHeaders(),
-  });
+  const res = await apiFetch(`/v1/routes?page=${page}&size=${size}`);
   if (!res.ok) throw new Error(`${res.status}`);
   const body: { data: SpringPage<RouteListItem> } = await res.json();
   return body.data;
 }
 
 export async function getRoute(routeId: string): Promise<RouteListItem> {
-  const res = await fetch(`${API_BASE}/v1/routes/${routeId}`, {
-    headers: getAuthHeaders(),
-  });
+  const res = await apiFetch(`/v1/routes/${routeId}`);
   if (!res.ok) throw new Error(`${res.status}`);
   const body: { data: RouteListItem } = await res.json();
   return body.data;
 }
 
 export async function getRouteSlots(routeId: string): Promise<SlotWithCoords[]> {
-  const res = await fetch(`${API_BASE}/v1/routes/${routeId}/slots`, {
-    headers: getAuthHeaders(),
-  });
+  const res = await apiFetch(`/v1/routes/${routeId}/slots`);
   if (!res.ok) throw new Error(`${res.status}`);
   const body: { data: SlotWithCoords[] } = await res.json();
   return body.data;
 }
 
 export async function getRouteDaySummaries(routeId: string): Promise<RouteDaySummary[]> {
-  const res = await fetch(`${API_BASE}/v1/routes/${routeId}/day-summaries`, {
-    headers: getAuthHeaders(),
-  });
+  const res = await apiFetch(`/v1/routes/${routeId}/day-summaries`);
   if (!res.ok) throw new Error(`${res.status}`);
   const body: { data: RouteDaySummary[] } = await res.json();
   return body.data;
 }
 
 export async function toggleSlotPin(routeId: string, slotId: string): Promise<SlotWithCoords> {
-  const res = await fetch(`${API_BASE}/v1/routes/${routeId}/slots/${slotId}/pin`, {
-    method: 'PATCH',
-    headers: getAuthHeaders(),
-  });
+  const res = await apiFetch(`/v1/routes/${routeId}/slots/${slotId}/pin`, { method: 'PATCH' });
   if (!res.ok) throw new Error(`${res.status}`);
   const body: { data: SlotWithCoords } = await res.json();
   return body.data;
 }
 
 export async function deleteRouteSlot(routeId: string, slotId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/v1/routes/${routeId}/slots/${slotId}`, {
-    method: 'DELETE',
-    headers: getAuthHeaders(),
-  });
+  const res = await apiFetch(`/v1/routes/${routeId}/slots/${slotId}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`${res.status}`);
 }
 
 export async function getPlaceDetail(placeId: string): Promise<PlaceDetail> {
-  const res = await fetch(`${API_BASE}/v1/places/${placeId}`, {
-    headers: getAuthHeaders(),
-  });
+  const res = await apiFetch(`/v1/places/${placeId}`);
   if (!res.ok) throw new Error(`${res.status}`);
   const body: { data: PlaceDetail } = await res.json();
   return body.data;
 }
 
 export async function deleteRoute(routeId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/v1/routes/${routeId}`, {
-    method: 'DELETE',
-    headers: getAuthHeaders(),
-  });
+  const res = await apiFetch(`/v1/routes/${routeId}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`${res.status}`);
 }
 
@@ -83,10 +64,7 @@ export async function getSlotAlternatives(
   routeId: string,
   slotId: string,
 ): Promise<SlotAlternative[]> {
-  const res = await fetch(`${API_BASE}/v1/routes/${routeId}/slots/${slotId}/alternatives`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-  });
+  const res = await apiFetch(`/v1/routes/${routeId}/slots/${slotId}/alternatives`, { method: 'POST' });
   if (!res.ok) return [];
   const body: { data: SlotAlternative[] } = await res.json();
   return body.data ?? [];

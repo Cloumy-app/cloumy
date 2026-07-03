@@ -21,3 +21,14 @@ export async function devLogin(): Promise<DevLoginResponse> {
     clearTimeout(timer);
   }
 }
+
+export async function refreshAccessToken(refreshToken: string): Promise<{ accessToken: string }> {
+  const res = await fetch(`${API_BASE}/v1/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken }),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+  const body: { data: { accessToken: string } } = await res.json();
+  return body.data;
+}
