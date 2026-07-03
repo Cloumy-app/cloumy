@@ -210,7 +210,7 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 - [x] `RouteSlot`/`RouteSlotService`에 `transport_to_next`/`transport_minutes` 저장 로직 — AI ndjson에 실린 이동시간을 파싱해 저장. **이걸로 이동시간 표시 end-to-end 완성** — 2026-07-04
 
 **[Frontend]**
-- [ ] 숙소 검색 + 지도 핀 선택(fallback) UI, 루트 생성 폼에 스텝 추가
+- [x] 숙소 검색 + 지도 핀 선택(fallback) UI, 루트 생성 폼에 step-4 추가 (여행당 1건 스코프) — 부수로 백엔드 역지오코딩 엔드포인트도 신규 노출(기존에 구현만 되고 미사용) — 2026-07-04
 - [ ] `TripMap.tsx` 숙소 전용 마커 추가
 - [ ] 이동수단 선택 UI (여행 생성 폼 기본값) — `SlotCard.tsx`는 `transportToNext`/`transportMinutes` 표시 로직 기존재, 실값만 채워지면 반영됨
 
