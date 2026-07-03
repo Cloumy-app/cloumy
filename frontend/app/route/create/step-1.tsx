@@ -95,7 +95,7 @@ export default function RouteCreateStep1() {
           <ChevronLeft size={24} color="#475569" />
         </TouchableOpacity>
         <View className="flex-1">
-          <Text className="text-xs text-sky-500 font-bold mb-0.5">STEP 1 / 3</Text>
+          <Text className="text-xs text-sky-500 font-bold mb-0.5">STEP 1 / 4</Text>
           <Text className="text-xl font-bold text-slate-800">어디로 떠날까요?</Text>
         </View>
       </View>

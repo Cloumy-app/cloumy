@@ -29,6 +29,11 @@ public class AccommodationService {
         return kakaoLocalClient.searchAccommodation(keyword);
     }
 
+    // 지도 핀 선택 fallback용 — 좌표 -> 주소 문자열 (실패 시 null, 컨트롤러가 그대로 전달)
+    public String reverseGeocode(double lat, double lng) {
+        return kakaoLocalClient.reverseGeocode(lat, lng);
+    }
+
     @Transactional
     public AccommodationResponse create(UUID routeId, UUID userId, AccommodationCreateRequest req) {
         verifyOwner(routeId, userId);
