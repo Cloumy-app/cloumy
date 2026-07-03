@@ -41,7 +41,7 @@ TYPE_TAGS: dict[str, list[str]] = {
     "38": ["#쇼핑"],
     "39": ["#먹방", "#식당"],
 }
-CONTENT_TYPES = list(TYPE_TAGS.keys())  # 숙박(32) 제외
+CONTENT_TYPES = list(TYPE_TAGS.keys())  # 숙박(32) 제외 — 지역별 커버리지가 너무 낮음(서울 254/부산 79/제주 62건), 숙소 검색은 카카오 로컬 실시간 검색으로 대체
 
 
 async def fetch_page(client: httpx.AsyncClient, area_code: int, ct_id: str, page: int) -> dict:

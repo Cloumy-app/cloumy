@@ -39,6 +39,10 @@ public enum ErrorCode {
     GPS_VERIFICATION_FAILED(HttpStatus.BAD_REQUEST, "GPS_VERIFICATION_FAILED",
             "GPS 인증에 실패했습니다. 100m 이내에 위치해야 합니다"),
 
+    // 숙소
+    ACCOMMODATION_NOT_FOUND(HttpStatus.NOT_FOUND, "ACCOMMODATION_NOT_FOUND", "숙소를 찾을 수 없습니다"),
+    KAKAO_API_ERROR(HttpStatus.BAD_GATEWAY, "KAKAO_API_ERROR", "숙소 검색에 실패했습니다"),
+
     // 공통
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "INVALID_INPUT", "잘못된 입력값입니다"),
     FORBIDDEN(HttpStatus.FORBIDDEN, "FORBIDDEN", "접근 권한이 없습니다"),

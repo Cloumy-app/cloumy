@@ -71,6 +71,9 @@ app:
       client-id: ${NAVER_CLIENT_ID:}
       client-secret: ${NAVER_CLIENT_SECRET:}
       redirect-uri: ${NAVER_REDIRECT_URI:http://localhost:8080/auth/callback/naver}
+  kakao:
+    # KAKAO_CLIENT_ID와 동일한 앱의 REST API 키 — Kakao Local API(숙소 검색/역지오코딩)
+    rest-api-key: ${KAKAO_REST_API_KEY:}
   fastapi:
     url: ${FASTAPI_URL:http://localhost:8000}
   internal-api-key: ${INTERNAL_API_KEY}
