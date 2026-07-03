@@ -107,6 +107,7 @@ public class AiServiceClient {
             Double hidden_gem_ratio,
             LocalDate start_date,
             String density,
+            String transport_mode,
             List<AccommodationAnchorDto> accommodations
     ) {}
 
@@ -152,6 +153,7 @@ public class AiServiceClient {
                     req.hiddenGemRatio(),
                     req.startDate(),
                     req.density() != null ? req.density().toLowerCase() : "normal",
+                    req.transportMode() != null ? req.transportMode().toLowerCase() : null,
                     accommodations
             );
 
