@@ -121,10 +121,11 @@ public class AiServiceClient {
             Consumer<Throwable> onError
     ) {
         try {
-            // 숙소가 있으면 앵커가 결과에 반영되므로 캐시를 완전히 우회한다(날씨 민감 요청과 동일한 이유).
-            // 숙소 없는 요청까지 캐시를 안 타면 성능 손해라 이 경우에만 조회를 건너뛴다.
+            // 숙소/이동수단이 있으면 결과(앵커, 이동시간)가 캐시 키에 안 잡히므로 캐시를 완전히
+            // 우회한다(날씨 민감 요청과 동일한 이유) — 안 그러면 그 값이 없던 옛 캐시가 그대로 나간다.
             boolean hasAccommodations = !req.accommodationsOrEmpty().isEmpty();
-            if (!hasAccommodations) {
+            boolean hasTransportMode = req.transportMode() != null;
+            if (!hasAccommodations && !hasTransportMode) {
                 try {
                     String cached = redisTemplate.opsForValue().get(cacheKey(req));
                     if (cached != null && !cached.isBlank()) {
