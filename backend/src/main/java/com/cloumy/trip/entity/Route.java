@@ -58,6 +58,9 @@ public class Route extends BaseEntity {
     @Column(nullable = true)
     private String density;
 
+    @Column(name = "transport_mode")
+    private String transportMode;
+
     @Column(name = "is_public", nullable = false)
     private boolean isPublic = false;
 
@@ -67,7 +70,8 @@ public class Route extends BaseEntity {
     @Builder
     private Route(UUID userId, String title, String destination,
                   LocalDate startDate, LocalDate endDate, int nights,
-                  String groupType, String budgetLevel, String[] tags, String density) {
+                  String groupType, String budgetLevel, String[] tags, String density,
+                  String transportMode) {
         this.userId = userId;
         this.title = title;
         this.destination = destination;
@@ -78,6 +82,7 @@ public class Route extends BaseEntity {
         this.budgetLevel = budgetLevel;
         this.tags = tags != null ? tags : new String[]{};
         this.density = density;
+        this.transportMode = transportMode;
         this.isPublic = false;
         this.saveCount = 0;
     }

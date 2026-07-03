@@ -6,6 +6,7 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -20,6 +21,8 @@ public record RouteGenRequest(
         List<String> tags,
         @DecimalMin("0.0") @DecimalMax("1.0") Double hiddenGemRatio,
         String density,
+        @Pattern(regexp = "transit|car|walk", message = "transportMode는 transit/car/walk 중 하나여야 합니다")
+        String transportMode,
         List<@Valid AccommodationCreateRequest> accommodations
 ) {
     @AssertTrue(message = "종료일은 시작일 이후여야 합니다")
