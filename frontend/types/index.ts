@@ -86,6 +86,19 @@ export interface AccommodationInput {
   source: 'kakao' | 'manual';
 }
 
+export interface Accommodation {
+  id: string;
+  name: string;
+  address: string | null;
+  lat: number;
+  lng: number;
+  checkInDate: string;
+  checkOutDate: string;
+  source: 'kakao' | 'manual';
+}
+
+export type TransportMode = 'transit' | 'car' | 'walk';
+
 export interface RouteGenRequest {
   destination: string;
   startDate: string;
@@ -95,6 +108,7 @@ export interface RouteGenRequest {
   tags: string[];
   hiddenGemRatio?: number;
   density?: Density;
+  transportMode?: TransportMode;
   accommodations?: AccommodationInput[];
 }
 

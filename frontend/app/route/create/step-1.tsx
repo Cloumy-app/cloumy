@@ -4,7 +4,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { router } from 'expo-router';
-import { ChevronLeft, MapPin, Users, Calendar, ChevronRight } from 'lucide-react-native';
+import { ChevronLeft, MapPin, Users, Calendar, ChevronRight, Bus, Car, Footprints } from 'lucide-react-native';
 import { useState } from 'react';
 import DateTimePicker from '@expo/ui/community/datetime-picker';
 
@@ -16,9 +16,19 @@ const GROUP_TYPES = [
   { value: 'family', label: '가족' },
 ] as const;
 
+// 여행 전체 기본 이동수단 — 선택 사항(안 골라도 다음 단계 진행 가능).
+// 값이 있을 때만 이동시간 계산에 쓰이고, 대중교통은 Tmap 실API를 호출하므로
+// 기본 선택값을 두지 않는다(사용자가 명시적으로 고를 때만 호출 발생).
+const TRANSPORT_MODES = [
+  { value: 'transit', label: '대중교통', Icon: Bus },
+  { value: 'car', label: '자동차', Icon: Car },
+  { value: 'walk', label: '도보', Icon: Footprints },
+] as const;
+
 const step1Schema = z.object({
   destination: z.string().min(1, '목적지를 선택해주세요'),
   groupType: z.enum(['solo', 'couple', 'friends', 'family']),
+  transportMode: z.enum(['transit', 'car', 'walk']).optional(),
 });
 
 type Step1Form = z.infer<typeof step1Schema>;
@@ -275,6 +285,37 @@ export default function RouteCreateStep1() {
                     </Text>
                   </TouchableOpacity>
                 ))}
+              </View>
+            )}
+          />
+        </View>
+
+        {/* 이동수단 (선택) */}
+        <View className="mb-8">
+          <Text className="font-bold text-slate-700 mb-1">주로 어떻게 이동하세요?</Text>
+          <Text className="text-xs text-slate-400 mb-4">선택하면 장소 사이 이동시간을 계산해드려요 (선택 사항)</Text>
+          <Controller
+            control={control}
+            name="transportMode"
+            render={({ field: { value, onChange } }) => (
+              <View className="flex-row gap-2">
+                {TRANSPORT_MODES.map(({ value: modeValue, label, Icon }) => {
+                  const selected = value === modeValue;
+                  return (
+                    <TouchableOpacity
+                      key={modeValue}
+                      onPress={() => onChange(selected ? undefined : modeValue)}
+                      className={`flex-1 py-3 rounded-2xl border-2 items-center gap-1 ${
+                        selected ? 'border-sky-500 bg-sky-50' : 'border-slate-200 bg-white'
+                      }`}
+                    >
+                      <Icon size={18} color={selected ? '#0284c7' : '#94a3b8'} />
+                      <Text className={`font-semibold text-sm ${selected ? 'text-sky-600' : 'text-slate-500'}`}>
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             )}
           />
