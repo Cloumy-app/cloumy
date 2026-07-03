@@ -28,29 +28,44 @@ def _haversine_m(lat1: float, lng1: float, lat2: float, lng2: float) -> int:
     return int(R * 2 * math.asin(math.sqrt(max(0.0, a))))
 
 
-def _tsp_order(coords: list[tuple[float, float]]) -> list[int]:
+def _tsp_order(
+    coords: list[tuple[float, float]],
+    anchor: tuple[float, float] | None = None,
+) -> list[int]:
     """
     (lat, lng) 좌표 리스트의 최적 방문 순서 인덱스를 반환한다.
     OR-Tools PATH_CHEAPEST_ARC, 3초 제한.
     해를 못 찾으면 원본 순서(range(n))를 반환한다.
+
+    anchor가 주어지면(숙소 좌표) 그 지점을 시작=종료 고정점(depot)으로 하는
+    왕복 TSP로 푼다 — 숙소에서 출발해 숙소로 돌아오는 하루 동선.
+    anchor가 없으면 기존처럼 편도(open-path) 최적화(복귀 비용 없음).
+    둘 다 "가상 노드(인덱스 n)"를 추가하는 동일한 뼈대를 공유한다.
     """
     n = len(coords)
     if n <= 2:
+        # 앵커가 있어도 왕복 특성상(depot->A->B->depot == depot->B->A->depot)
+        # 실제 장소가 2개 이하면 순서가 총 이동거리에 영향을 주지 않는다.
         return list(range(n))
 
+    if anchor is not None:
+        nodes = coords + [anchor]
+        starts, ends = [n], [n]  # 숙소=depot, 시작·종료 동일 → 왕복
+    else:
+        nodes = coords + [(0.0, 0.0)]  # 더미 종점(좌표는 안 쓰임, 비용을 0으로 고정)
+        starts, ends = [0], [n]  # 기존 open-path: 0번에서 시작, 더미 종점에서 종료
+
     dist_matrix = [
-        [_haversine_m(*coords[i], *coords[j]) for j in range(n)]
-        for i in range(n)
+        [_haversine_m(*nodes[i], *nodes[j]) for j in range(n + 1)]
+        for i in range(n + 1)
     ]
+    if anchor is None:
+        # 편도 최적화: 더미 종점 도달 비용을 0으로 고정해 "복귀 비용 없음"을 구현
+        for row in dist_matrix:
+            row[-1] = 0
+        dist_matrix[-1] = [0] * (n + 1)
 
-    # 편도(open-path) 최적화: 하루 일정은 왕복이 아니므로 "마지막 지점 -> 시작점"
-    # 복귀 비용이 없어야 한다. 비용 0인 더미 종점 노드(인덱스 n)를 추가해
-    # 시작=0번(기존과 동일), 끝=더미로 고정하면 복귀 비용 없이 최단 편도 경로를 얻는다.
-    for row in dist_matrix:
-        row.append(0)
-    dist_matrix.append([0] * (n + 1))
-
-    manager = pywrapcp.RoutingIndexManager(n + 1, 1, [0], [n])
+    manager = pywrapcp.RoutingIndexManager(n + 1, 1, starts, ends)
     routing = pywrapcp.RoutingModel(manager)
 
     def dist_cb(from_idx: int, to_idx: int) -> int:
@@ -76,7 +91,9 @@ def _tsp_order(coords: list[tuple[float, float]]) -> list[int]:
     order: list[int] = []
     idx = routing.Start(0)
     while not routing.IsEnd(idx):
-        order.append(manager.IndexToNode(idx))
+        node = manager.IndexToNode(idx)
+        if node != n:  # 가상 노드(depot/더미 종점)는 실제 슬롯이 아니므로 결과에서 제외
+            order.append(node)
         idx = solution.Value(routing.NextVar(idx))
     return order
 
@@ -84,12 +101,15 @@ def _tsp_order(coords: list[tuple[float, float]]) -> list[int]:
 def reorder_slots(
     collected: list[str],
     coord_lookup: dict[str, tuple[float, float]],  # {place_id: (lat, lng)}
+    anchor: tuple[float, float] | None = None,  # 숙소 좌표 — 하루 시작/종료 고정점
 ) -> list[str]:
     """
     ndjson 슬롯 리스트를 day별 TSP 최적 순서로 재정렬해 반환한다.
     - day 단위로 분리해 각각 독립적으로 최적화
     - 좌표 있는 슬롯만 TSP로 재정렬하고, 좌표 없는 슬롯은 원본 상대순서를 유지한 채 뒤에 붙인다
     - order 필드를 1부터 재할당
+    - anchor는 호출부가 항상 "하루치 buffer"만 넘기는 현재 구조를 전제로 단일 값을 받는다
+      (여러 day를 한 번에 넘기는 호출부가 생기면 day별 dict로 확장 필요)
     """
     # 파싱
     slots: list[dict] = []
@@ -127,7 +147,7 @@ def reorder_slots(
 
         if len(with_coords) >= 2:
             coords = [coord_lookup[str(s["place_id"])] for s in with_coords]
-            order = _tsp_order(coords)
+            order = _tsp_order(coords, anchor=anchor)
             with_coords = [with_coords[i] for i in order]
 
         final = with_coords + without_coords

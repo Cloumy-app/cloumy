@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import date
+from datetime import date, timedelta
 from typing import AsyncGenerator
 
 import asyncpg
@@ -9,7 +9,7 @@ from openai import AsyncOpenAI
 
 from app.config.city_centers import CITY_CENTERS
 from app.config.settings import settings
-from app.models.schemas import RouteGenRequest
+from app.models.schemas import AccommodationAnchor, RouteGenRequest
 from app.services.geo_clustering import cluster_candidates, cluster_label
 from app.services.place_validator import validate_day_summary, validate_route_slot
 from app.services.retrievers import PostgisTagRetriever, PgvectorRetriever
@@ -90,6 +90,29 @@ def _is_weather_sensitive(start_date: date | None, today: date | None = None) ->
     if start_date is None:
         return False
     return (start_date - (today or date.today())).days <= FORECAST_WINDOW_DAYS
+
+
+def _build_accommodation_anchors(
+    accommodations: list[AccommodationAnchor],
+    start_date: date | None,
+    day_count: int,
+) -> dict[int, tuple[float, float]]:
+    """day 번호 → 숙소 좌표 매핑. start_date 없으면(day↔날짜 매핑 불가) 빈 dict.
+    day의 날짜가 [체크인, 체크아웃) 범위에 들면 그 숙소를 해당 day의 앵커로 쓴다
+    (체크아웃 당일은 더 이상 그 숙소에 머무르지 않으므로 제외)."""
+    if not accommodations or start_date is None:
+        return {}
+    anchors: dict[int, tuple[float, float]] = {}
+    for day in range(1, day_count + 1):
+        day_date = start_date + timedelta(days=day - 1)
+        for acc in accommodations:
+            if acc.check_in_date <= day_date < acc.check_out_date:
+                if day in anchors:
+                    logger.warning("day=%d: 숙소 여러 건과 겹침 — 먼저 매칭된 값 유지", day)
+                    break
+                anchors[day] = (acc.lat, acc.lng)
+                break
+    return anchors
 
 
 async def stream_route(
@@ -227,6 +250,9 @@ async def stream_route(
     # claude-sonnet-4-6 실제 출력 상한은 스트리밍 시 128,000토큰이라 아래 값은 전혀 근접하지 않음.
     day_count = request.nights + 1
     max_tokens = min(16000, 1500 + day_count * 1700)
+    accommodation_anchors = _build_accommodation_anchors(
+        request.accommodations, request.start_date, day_count
+    )
 
     buffer = ""
     collected: list[str] = []
@@ -241,7 +267,7 @@ async def stream_route(
         slot_day = json.loads(validated).get("day", 1)
         flushed: list[str] = []
         if current_day is not None and slot_day != current_day:
-            flushed = reorder_slots(day_buffer, coord_lookup)
+            flushed = reorder_slots(day_buffer, coord_lookup, anchor=accommodation_anchors.get(current_day))
             day_buffer = []
         current_day = slot_day
         day_buffer.append(validated)
@@ -317,7 +343,7 @@ async def stream_route(
                     max_tokens, request.nights, day_count,
                 )
         # 스트림 종료 — 마지막 day 플러시
-        for flushed_line in reorder_slots(day_buffer, coord_lookup):
+        for flushed_line in reorder_slots(day_buffer, coord_lookup, anchor=accommodation_anchors.get(current_day)):
             collected.append(flushed_line)
             yield flushed_line
     except GeneratorExit:
