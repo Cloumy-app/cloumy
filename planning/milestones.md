@@ -200,12 +200,12 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 > ~~TourAPI 숙박(contentType 32) 수집 후 시드 데이터로 검색~~ — 시도 후 철회(2026-07-03). 실측 결과 지역별 커버리지가 너무 낮음(서울 254 / 부산 79 / 제주 62건, `#숙박` 태그) — 숙소 검색은 카카오 로컬 검색 실시간 호출로만 처리하기로 변경. 관련 코드(`scripts/collect_tourapi.py`)와 테스트 데이터는 롤백함.
 
 **[FastAPI]**
-- [x] `RouteGenRequest`에 숙소 좌표 필드 추가 + TSP 시작/종료 앵커로 반영 (`models/schemas.py`, `services/tsp_service.py`, `services/route_service.py`) — 숙소=depot 왕복 TSP, 체크아웃 당일은 매핑 제외, 최적화는 Haversine 유지. **Spring이 아직 값을 안 채워 보내 end-to-end는 미완성**(후속 태스크 등록) — 2026-07-03
+- [x] `RouteGenRequest`에 숙소 좌표 필드 추가 + TSP 시작/종료 앵커로 반영 (`models/schemas.py`, `services/tsp_service.py`, `services/route_service.py`) — 숙소=depot 왕복 TSP, 체크아웃 당일은 매핑 제외, 최적화는 Haversine 유지 — 2026-07-03
 - [ ] 이동수단별 실 라우팅 클라이언트 신규 추가 — 자동차: 카카오모빌리티, 도보: Tmap, 대중교통: ODsay. day 확정 후 구간별 enrichment로 파이프라인 삽입 (호출량 최소화)
 
 **[Spring]**
 - [x] `Accommodation` 엔티티 + 마이그레이션(V7) + 실시간 숙소 검색 프록시 API — 카카오 로컬 검색 실시간 호출(TourAPI 시드 안 씀), route 전용 저장(공유 캐시 아님), 역지오코딩도 카카오 재사용 — 2026-07-03
-- [ ] 숙소 데이터를 AI 생성 요청에 전달 — `RouteGenRequest`/`FastApiRequest`에 `accommodations` 필드 추가 + routeId로 조회해 주입 (신규, 프론트 생성 플로우 재설계 선행 필요)
+- [x] 숙소 데이터를 AI 생성 요청에 전달 — Route 생성과 같은 트랜잭션으로 숙소 저장 + `AiServiceClient`가 FastAPI에 `accommodations`/`start_date` 전달, 숙소 있으면 캐시 우회. **이걸로 숙소 입력 → TSP 앵커 반영 end-to-end 완성** — 2026-07-03
 - [ ] `Route.transportMode` 필드 매핑 추가 + `RouteSlotService.saveStreamingSlot`에 `transport_to_next`/`transport_minutes` 저장 로직 반영 (현재 비어있음)
 
 **[Frontend]**

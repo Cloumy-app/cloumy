@@ -3,9 +3,11 @@ package com.cloumy.trip.service;
 import com.cloumy.common.exception.BusinessException;
 import com.cloumy.common.response.ErrorCode;
 import com.cloumy.payment.service.PassValidationService;
+import com.cloumy.trip.dto.AccommodationCreateRequest;
 import com.cloumy.trip.dto.RouteGenRequest;
 import com.cloumy.trip.dto.RouteListResponse;
 import com.cloumy.trip.entity.Route;
+import com.cloumy.trip.repository.AccommodationRepository;
 import com.cloumy.trip.repository.RouteRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -22,6 +24,7 @@ public class RouteService {
 
     private final PassValidationService passValidationService;
     private final RouteRepository routeRepository;
+    private final AccommodationRepository accommodationRepository;
 
     public Page<RouteListResponse> getMyRoutes(UUID userId, Pageable pageable) {
         return routeRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable)
@@ -65,7 +68,21 @@ public class RouteService {
                 .density(req.density() != null ? req.density().toLowerCase() : "normal")
                 .build();
 
-        return routeRepository.save(route);
+        Route saved = routeRepository.save(route);
+
+        // 숙소는 Route가 만들어진 뒤에만 route_id(FK)를 가질 수 있어 여기서 같이 저장한다.
+        // 메서드 전체가 @Transactional이라 숙소 저장 실패 시 Route 생성까지 롤백된다.
+        for (AccommodationCreateRequest acc : req.accommodationsOrEmpty()) {
+            if (!acc.checkOutDate().isAfter(acc.checkInDate())) {
+                throw new BusinessException(ErrorCode.INVALID_INPUT, "체크아웃 날짜는 체크인 날짜 이후여야 합니다");
+            }
+            accommodationRepository.insertWithLocation(
+                    UUID.randomUUID(), saved.getId(), acc.name(), acc.address(),
+                    acc.lng(), acc.lat(), acc.checkInDate(), acc.checkOutDate(), acc.source()
+            );
+        }
+
+        return saved;
     }
 
     @Transactional

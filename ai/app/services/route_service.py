@@ -121,9 +121,12 @@ async def stream_route(
     redis=None,
 ) -> AsyncGenerator[str, None]:
     weather_sensitive = _is_weather_sensitive(request.start_date)
+    # 숙소가 있으면 TSP 앵커가 결과에 반영되므로 캐시를 완전히 우회한다 — 그렇지 않으면
+    # 숙소 없이 생성된 옛 캐시가 앵커 무시된 채로 그대로 나갈 수 있다.
+    has_accommodations = bool(request.accommodations)
 
-    # 캐시 히트 시 Redis에서 즉시 반환 (날씨 민감 요청은 매번 최신 예보로 재생성)
-    if redis is not None and not weather_sensitive:
+    # 캐시 히트 시 Redis에서 즉시 반환 (날씨 민감/숙소 있는 요청은 매번 새로 생성)
+    if redis is not None and not weather_sensitive and not has_accommodations:
         try:
             cached = await redis.get(_cache_key(request))
             if cached:
@@ -355,7 +358,7 @@ async def stream_route(
 
     # Redis 캐시 저장 (TTL 24h) — collected는 이미 day별로 TSP 재정렬된 상태이므로
     # 그대로 저장하면 스트림으로 전달된 내용과 100% 동일
-    if redis is not None and collected and not weather_sensitive:
+    if redis is not None and collected and not weather_sensitive and not has_accommodations:
         try:
             await redis.setex(_cache_key(request), 86400, "".join(collected))
             logger.info("캐시 저장: key=%s lines=%d", _cache_key(request), len(collected))
