@@ -58,6 +58,15 @@ public class RouteController {
         return ApiResponse.ok(routeService.getMyRoutes(userId, pageable));
     }
 
+    @GetMapping("/routes/{routeId}")
+    public ApiResponse<RouteListResponse> getRoute(
+            @PathVariable UUID routeId,
+            @AuthenticationPrincipal CloudmyUserDetails user
+    ) {
+        UUID userId = UUID.fromString(user.userId());
+        return ApiResponse.ok(routeService.getRoute(routeId, userId));
+    }
+
     @GetMapping("/routes/{routeId}/day-summaries")
     public ApiResponse<List<DaySummaryResponse>> getDaySummaries(
             @PathVariable UUID routeId,

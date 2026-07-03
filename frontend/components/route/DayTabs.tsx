@@ -1,13 +1,13 @@
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { Wallet, MapPin, CloudSun } from 'lucide-react-native';
 import type { SlotWithCoords } from '@/types';
-import type { WeatherInfo } from '@/lib/api/weather';
+import type { DayWeather } from '@/lib/api/weather';
 
 interface DayTabsProps {
   slots: SlotWithCoords[];
   selectedDay: number;
   onSelectDay: (day: number) => void;
-  weatherByDate?: Record<string, WeatherInfo>;
+  weatherByDate?: Record<string, DayWeather>;
   startDate?: string;
   variant?: 'planner' | 'itinerary';
 }
@@ -95,6 +95,11 @@ export function DayTabs({ slots, selectedDay, onSelectDay, weatherByDate, startD
               <Text className="text-xs font-black text-slate-800 mt-0.5" numberOfLines={1}>
                 {weather.description} {weather.temp}°
               </Text>
+              {weather.rainyBlocks.length > 0 && weather.rainyBlocks.length < 3 && (
+                <Text className="text-[9px] text-sky-600 font-bold mt-0.5" numberOfLines={1}>
+                  {weather.rainyBlocks.join('·')} 비
+                </Text>
+              )}
             </View>
           ) : (
             <View className="flex-1 bg-slate-50 rounded-xl p-3 items-center justify-center border border-slate-100">
@@ -126,6 +131,11 @@ export function DayTabs({ slots, selectedDay, onSelectDay, weatherByDate, startD
                 {weather.description} {weather.temp}°
               </Text>
               <Text className="text-slate-500 text-[10px] font-medium">여행 날씨</Text>
+              {weather.rainyBlocks.length > 0 && weather.rainyBlocks.length < 3 && (
+                <Text className="text-sky-600 text-[9px] font-bold" numberOfLines={1}>
+                  {weather.rainyBlocks.join('·')} 비
+                </Text>
+              )}
             </View>
           ) : (
             <View className="flex-1 bg-slate-50 rounded-xl px-3 py-2 items-center">
