@@ -15,6 +15,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.Consumer;
@@ -51,6 +52,11 @@ public class AiServiceClient {
     }
 
     public record NearbySlotDto(String name, double lat, double lng) {}
+
+    // FastAPI AccommodationAnchor와 필드명을 맞춤(snake_case) — 숙소를 하루 시작/종료 고정점으로 사용
+    private record AccommodationAnchorDto(
+            double lat, double lng, LocalDate check_in_date, LocalDate check_out_date
+    ) {}
 
     private record SlotAlternativesReq(
             String slot_id,
@@ -99,7 +105,9 @@ public class AiServiceClient {
             String budget_level,
             List<String> themes,
             Double hidden_gem_ratio,
-            String density
+            LocalDate start_date,
+            String density,
+            List<AccommodationAnchorDto> accommodations
     ) {}
 
     /**
@@ -112,20 +120,28 @@ public class AiServiceClient {
             Consumer<Throwable> onError
     ) {
         try {
-            // Redis 캐시 확인 — FastAPI 호출 전 즉시 반환
-            try {
-                String cached = redisTemplate.opsForValue().get(cacheKey(req));
-                if (cached != null && !cached.isBlank()) {
-                    log.info("Spring 캐시 히트: {}", cacheKey(req));
-                    Arrays.stream(cached.split("\n"))
-                            .filter(l -> !l.isBlank())
-                            .forEach(onLine);
-                    onComplete.run();
-                    return;
+            // 숙소가 있으면 앵커가 결과에 반영되므로 캐시를 완전히 우회한다(날씨 민감 요청과 동일한 이유).
+            // 숙소 없는 요청까지 캐시를 안 타면 성능 손해라 이 경우에만 조회를 건너뛴다.
+            boolean hasAccommodations = !req.accommodationsOrEmpty().isEmpty();
+            if (!hasAccommodations) {
+                try {
+                    String cached = redisTemplate.opsForValue().get(cacheKey(req));
+                    if (cached != null && !cached.isBlank()) {
+                        log.info("Spring 캐시 히트: {}", cacheKey(req));
+                        Arrays.stream(cached.split("\n"))
+                                .filter(l -> !l.isBlank())
+                                .forEach(onLine);
+                        onComplete.run();
+                        return;
+                    }
+                } catch (Exception e) {
+                    log.warn("Redis 캐시 조회 실패 — FastAPI 호출로 폴백: {}", e.getMessage());
                 }
-            } catch (Exception e) {
-                log.warn("Redis 캐시 조회 실패 — FastAPI 호출로 폴백: {}", e.getMessage());
             }
+
+            List<AccommodationAnchorDto> accommodations = req.accommodationsOrEmpty().stream()
+                    .map(a -> new AccommodationAnchorDto(a.lat(), a.lng(), a.checkInDate(), a.checkOutDate()))
+                    .toList();
 
             FastApiRequest fastApiReq = new FastApiRequest(
                     req.destination(),
@@ -134,7 +150,9 @@ public class AiServiceClient {
                     req.budgetLevel().toLowerCase(),
                     req.tags() != null ? req.tags() : List.of(),
                     req.hiddenGemRatio(),
-                    req.density() != null ? req.density().toLowerCase() : "normal"
+                    req.startDate(),
+                    req.density() != null ? req.density().toLowerCase() : "normal",
+                    accommodations
             );
 
             String body = objectMapper.writeValueAsString(fastApiReq);

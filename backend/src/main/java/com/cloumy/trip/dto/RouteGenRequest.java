@@ -1,5 +1,6 @@
 package com.cloumy.trip.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -18,7 +19,8 @@ public record RouteGenRequest(
         @NotBlank String budgetLevel,
         List<String> tags,
         @DecimalMin("0.0") @DecimalMax("1.0") Double hiddenGemRatio,
-        String density
+        String density,
+        List<@Valid AccommodationCreateRequest> accommodations
 ) {
     @AssertTrue(message = "종료일은 시작일 이후여야 합니다")
     public boolean isDateRangeValid() {
@@ -27,5 +29,9 @@ public record RouteGenRequest(
 
     public int nights() {
         return (int) ChronoUnit.DAYS.between(startDate, endDate);
+    }
+
+    public List<AccommodationCreateRequest> accommodationsOrEmpty() {
+        return accommodations != null ? accommodations : List.of();
     }
 }
