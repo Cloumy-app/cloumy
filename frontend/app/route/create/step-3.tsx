@@ -51,6 +51,12 @@ export default function RouteCreateStep3() {
 
   const stopStreamRef = useRef<(() => void) | null>(null);
   const routeIdRef = useRef<string>('');
+  // 이 화면 인스턴스가 언마운트된 뒤에도(하드웨어 백/스와이프로 로딩 화면을 나가도)
+  // 스트림 자체는 백그라운드에서 계속 진행돼 DB 저장이 끝까지 되지만, 그 완료 콜백이
+  // 화면이 사라진 뒤에도 무조건 router.replace()를 쏘면 그사이 사용자가 연 다른 루트
+  // 화면을 조용히 덮어써 버려("나가기"가 엉뚱한 루트를 삭제하는 버그로 이어짐) — 그래서
+  // 언마운트 이후엔 상태 갱신/네비게이션에 전혀 관여하지 않도록 이 ref로 막는다.
+  const isMountedRef = useRef(true);
   const { appendStreamingSlot, setDaySummary, finalizeRoute, setIsStreaming, reset } = useRouteStore();
   const { setTokens, setUser } = useAuthStore();
   const queryClient = useQueryClient();
@@ -65,6 +71,7 @@ export default function RouteCreateStep3() {
 
   useEffect(() => {
     return () => {
+      isMountedRef.current = false;
       // 뒤로가기 등으로 언마운트 시 스트림 정리
       if (!routeIdRef.current) {
         stopStreamRef.current?.();
@@ -113,16 +120,19 @@ export default function RouteCreateStep3() {
         hiddenGemRatio: selectedRatio,
       },
       (slot: RouteSlot) => {
+        if (!isMountedRef.current) return;
         appendStreamingSlot(slot);
         setSlotCount((c) => c + 1);
       },
       (day: number, summary: string) => {
+        if (!isMountedRef.current) return;
         setDaySummary(day, summary);
       },
       (id: string) => {
-        routeIdRef.current = id;
+        routeIdRef.current = id; // 참조 저장은 유지 — unmount 여부와 무관하게 스트림/DB 저장엔 필요
       },
       () => {
+        if (!isMountedRef.current) return; // 화면이 이미 사라졌으면 네비게이션/전역 상태 갱신 금지
         const id = routeIdRef.current;
         finalizeRoute(id, params.destination ?? '서울', startDate, endDate);
         queryClient.invalidateQueries({ queryKey: ['routes'] });
@@ -136,6 +146,7 @@ export default function RouteCreateStep3() {
         }, 500);
       },
       (e) => {
+        if (!isMountedRef.current) return;
         setIsGenerating(false);
         setIsStreaming(false);
         const msg = e instanceof Error ? e.message : JSON.stringify(e);

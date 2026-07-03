@@ -17,6 +17,15 @@ export async function getMyRoutes(page = 0, size = 10): Promise<SpringPage<Route
   return body.data;
 }
 
+export async function getRoute(routeId: string): Promise<RouteListItem> {
+  const res = await fetch(`${API_BASE}/v1/routes/${routeId}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+  const body: { data: RouteListItem } = await res.json();
+  return body.data;
+}
+
 export async function getRouteSlots(routeId: string): Promise<SlotWithCoords[]> {
   const res = await fetch(`${API_BASE}/v1/routes/${routeId}/slots`, {
     headers: getAuthHeaders(),

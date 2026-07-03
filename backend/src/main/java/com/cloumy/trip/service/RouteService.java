@@ -32,6 +32,19 @@ public class RouteService {
                 ));
     }
 
+    public RouteListResponse getRoute(UUID routeId, UUID userId) {
+        Route route = routeRepository.findById(routeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
+        if (!route.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.ROUTE_ACCESS_DENIED);
+        }
+        return new RouteListResponse(
+                route.getId(), route.getTitle(), route.getDestination(),
+                route.getStartDate(), route.getEndDate(), route.getNights(),
+                route.getCreatedAt()
+        );
+    }
+
     @Transactional
     public Route createRoute(RouteGenRequest req, UUID userId) {
         passValidationService.validate(userId);

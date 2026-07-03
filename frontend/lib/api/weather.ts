@@ -2,33 +2,85 @@ const BASE = 'https://api.openweathermap.org/data/2.5/weather';
 const FORECAST_BASE = 'https://api.openweathermap.org/data/2.5/forecast';
 const KEY = process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY;
 
-const CITY_EN_MAP: Record<string, string> = {
-  서울: 'Seoul',
-  부산: 'Busan',
-  제주: 'Jeju Island',
-  경주: 'Gyeongju',
-  강릉: 'Gangneung',
-  전주: 'Jeonju',
-  여수: 'Yeosu',
-  속초: 'Sokcho',
-  춘천: 'Chuncheon',
-  거제: 'Geoje',
+// 도시명 문자열 검색(q=)은 OpenWeatherMap 도시 DB에 없는 이름(예: "Jeju Island", "Geoje")에서
+// 404가 나 신뢰할 수 없음 — ai/app/config/city_centers.py와 동일한 위경도로 좌표 검색(lat/lon)
+const CITY_CENTERS: Record<string, { lat: number; lng: number }> = {
+  서울: { lat: 37.5665, lng: 126.9780 },
+  부산: { lat: 35.1796, lng: 129.0756 },
+  제주: { lat: 33.4996, lng: 126.5312 },
+  경주: { lat: 35.8562, lng: 129.2114 },
+  강릉: { lat: 37.7519, lng: 128.8761 },
+  전주: { lat: 35.8242, lng: 127.1490 },
+  여수: { lat: 34.7604, lng: 127.6622 },
+  속초: { lat: 38.2070, lng: 128.5918 },
+  춘천: { lat: 37.8813, lng: 127.7298 },
+  거제: { lat: 34.8800, lng: 128.6211 },
 };
 
+// OpenWeatherMap 공식 컨디션 설명 전체(그룹 2xx~800) 매핑 — 일부만 매핑돼 있으면
+// 매핑 안 된 항목은 영어 원문이 그대로 노출됨(예: drizzle 계열 누락으로 어색한 문구가 보이던 문제)
 const WEATHER_KO: Record<string, string> = {
+  // 2xx 천둥번개
+  'thunderstorm with light rain': '약한 비를 동반한 천둥번개',
+  'thunderstorm with rain': '비를 동반한 천둥번개',
+  'thunderstorm with heavy rain': '폭우를 동반한 천둥번개',
+  'light thunderstorm': '약한 천둥번개',
+  'thunderstorm': '천둥번개',
+  'heavy thunderstorm': '강한 천둥번개',
+  'ragged thunderstorm': '불규칙한 천둥번개',
+  'thunderstorm with light drizzle': '약한 이슬비를 동반한 천둥번개',
+  'thunderstorm with drizzle': '이슬비를 동반한 천둥번개',
+  'thunderstorm with heavy drizzle': '강한 이슬비를 동반한 천둥번개',
+  // 3xx 이슬비
+  'light intensity drizzle': '약한 이슬비',
+  'drizzle': '이슬비',
+  'heavy intensity drizzle': '강한 이슬비',
+  'light intensity drizzle rain': '약한 이슬비',
+  'drizzle rain': '이슬비',
+  'heavy intensity drizzle rain': '강한 이슬비',
+  'shower rain and drizzle': '소나기와 이슬비',
+  'heavy shower rain and drizzle': '강한 소나기와 이슬비',
+  'shower drizzle': '이슬비 소나기',
+  // 5xx 비
+  'light rain': '약한 비',
+  'moderate rain': '비',
+  'heavy intensity rain': '강한 비',
+  'very heavy rain': '매우 강한 비',
+  'extreme rain': '폭우',
+  'freezing rain': '얼어붙는 비',
+  'light intensity shower rain': '약한 소나기',
+  'shower rain': '소나기',
+  'heavy intensity shower rain': '강한 소나기',
+  'ragged shower rain': '불규칙한 소나기',
+  // 6xx 눈
+  'light snow': '약한 눈',
+  'snow': '눈',
+  'heavy snow': '폭설',
+  'sleet': '진눈깨비',
+  'light shower sleet': '약한 진눈깨비',
+  'shower sleet': '진눈깨비',
+  'light rain and snow': '비와 눈',
+  'rain and snow': '비와 눈',
+  'light shower snow': '약한 눈발',
+  'shower snow': '눈발',
+  'heavy shower snow': '강한 눈발',
+  // 7xx 대기
+  'mist': '옅은 안개',
+  'smoke': '연기',
+  'haze': '연무',
+  'sand/dust whirls': '모래바람',
+  'fog': '짙은 안개',
+  'sand': '황사',
+  'dust': '먼지',
+  'volcanic ash': '화산재',
+  'squalls': '돌풍',
+  'tornado': '토네이도',
+  // 800~ 맑음/구름
   'clear sky': '맑음',
   'few clouds': '구름 조금',
   'scattered clouds': '구름',
   'broken clouds': '흐림',
   'overcast clouds': '흐림',
-  'light rain': '가랑비',
-  'moderate rain': '비',
-  'heavy intensity rain': '폭우',
-  'thunderstorm': '천둥번개',
-  'snow': '눈',
-  'mist': '안개',
-  'fog': '짙은 안개',
-  'haze': '연무',
 };
 
 export interface WeatherInfo {
@@ -59,10 +111,11 @@ export async function fetchForecast(
   dates: string[],
 ): Promise<Record<string, DayWeather>> {
   if (!KEY || dates.length === 0) return {};
-  const cityEn = CITY_EN_MAP[city] ?? city;
+  const coords = CITY_CENTERS[city];
+  if (!coords) return {};
   try {
     const res = await fetch(
-      `${FORECAST_BASE}?q=${encodeURIComponent(cityEn)}&units=metric&lang=kr&appid=${KEY}&cnt=40`,
+      `${FORECAST_BASE}?lat=${coords.lat}&lon=${coords.lng}&units=metric&lang=kr&appid=${KEY}&cnt=40`,
     );
     if (!res.ok) return {};
     const data = await res.json() as {
@@ -113,10 +166,11 @@ export async function fetchForecast(
 
 export async function fetchCurrentWeather(city: string): Promise<WeatherInfo | null> {
   if (!KEY) return null;
-  const cityEn = CITY_EN_MAP[city] ?? city;
+  const coords = CITY_CENTERS[city];
+  if (!coords) return null;
   try {
     const res = await fetch(
-      `${BASE}?q=${encodeURIComponent(cityEn)}&units=metric&lang=kr&appid=${KEY}`,
+      `${BASE}?lat=${coords.lat}&lon=${coords.lng}&units=metric&lang=kr&appid=${KEY}`,
     );
     if (!res.ok) return null;
     const data = await res.json() as {

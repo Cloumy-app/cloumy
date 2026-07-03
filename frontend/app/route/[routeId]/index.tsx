@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, Alert, StyleSheet } from 'react-native';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams, useNavigation, router } from 'expo-router';
 import { ChevronLeft, Sparkles, Wallet } from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { getRouteSlots, getRouteDaySummaries, toggleSlotPin as apiToggleSlotPin, deleteRouteSlot, deleteRoute } from '@/lib/api/routes';
+import { getRoute, getRouteSlots, getRouteDaySummaries, toggleSlotPin as apiToggleSlotPin, deleteRouteSlot, deleteRoute } from '@/lib/api/routes';
 import { fetchForecast } from '@/lib/api/weather';
 import { useRouteStore } from '@/stores/useRouteStore';
 import { TripMap } from '@/components/map/TripMap';
@@ -39,10 +39,12 @@ export default function RouteResultScreen() {
   }>();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const navigation = useNavigation();
   const [focusedSlotId, setFocusedSlotId] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const slotPositions = useRef<Record<string, number>>({});
+  const exitConfirmedRef = useRef(false);
 
   const isNewRoute = mode === 'new';
 
@@ -83,9 +85,33 @@ export default function RouteResultScreen() {
     isStreaming,
     selectedDay,
     setSelectedDay,
+    setCurrentRoute,
     toggleSlotPin,
     removeSlot,
   } = useRouteStore();
+
+  // 홈 목록에서 기존 루트를 다시 열면(신규 생성 플로우를 안 거치면) currentRoute가
+  // 비어 있어 destination/startDate가 빈 문자열이 되고 날씨 등이 영구 비활성화된다 —
+  // 그 경우에만 메타데이터를 별도로 조회해 currentRoute를 채운다.
+  const { data: routeMeta } = useQuery({
+    queryKey: ['route', routeId],
+    queryFn: () => getRoute(routeId!),
+    enabled: !!routeId && !isStreaming && currentRoute?.id !== routeId,
+  });
+
+  useEffect(() => {
+    if (routeMeta && currentRoute?.id !== routeId) {
+      setCurrentRoute({
+        id: routeMeta.id,
+        destination: routeMeta.destination,
+        startDate: routeMeta.startDate,
+        endDate: routeMeta.endDate,
+        slots: [],
+        createdAt: routeMeta.createdAt,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeMeta]);
 
   const destination = currentRoute?.destination ?? '';
   const routeStartDate = currentRoute?.startDate ?? '';
@@ -193,21 +219,39 @@ export default function RouteResultScreen() {
     }
   };
 
-  const handleExit = () => {
-    Alert.alert('루트 삭제', '나가면 생성된 루트가 삭제됩니다. 계속하시겠습니까?', [
-      { text: '취소', style: 'cancel' },
-      {
-        text: '삭제 후 나가기',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            if (routeId) await deleteRoute(routeId);
-          } catch {}
-          router.replace('/(tabs)');
+  // 신규 생성 직후 "저장하기"를 안 누르고 나가면(헤더 버튼/스와이프 제스처/하드웨어 백/
+  // 하단 "나가기" 버튼 전부 포함) 삭제 확인창을 띄우고 실제로 라우트를 지운다.
+  // beforeRemove로 모든 이탈 경로를 한 곳에서 가로채야, 뒤로가기 아이콘이 router.back()을
+  // 직접 호출해 확인창을 우회하던 문제가 재발하지 않는다.
+  useEffect(() => {
+    if (!isNewRoute) return;
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (exitConfirmedRef.current) return;
+      e.preventDefault();
+      Alert.alert('루트 삭제', '나가면 생성된 루트가 삭제됩니다. 계속하시겠습니까?', [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제 후 나가기',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (routeId) await deleteRoute(routeId);
+            } catch {}
+            // 삭제 성공 후에도 홈의 "다가오는 여행" 캐시가 무효화되지 않으면 방금
+            // 지운 루트가 계속 남아있는 것처럼 보인다 — 반드시 여기서 무효화한다.
+            queryClient.invalidateQueries({ queryKey: ['routes'] });
+            exitConfirmedRef.current = true;
+            // navigation.dispatch(e.data.action)로 원래 백 액션을 재개하면 step-3가
+            // router.replace()로 사라진 자리 아래 남아있는 step-2로 가버린다 —
+            // "첫 화면"(홈)으로 보내려면 명시적으로 이동해야 한다.
+            router.replace('/(tabs)');
+          },
         },
-      },
-    ]);
-  };
+      ]);
+    });
+    return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation, isNewRoute, routeId]);
 
   const handleEditCancel = () => {
     // 서버 원본으로 복구
@@ -511,7 +555,11 @@ export default function RouteResultScreen() {
             {isNewRoute && (
               <>
                 <TouchableOpacity
-                  onPress={() => router.replace('/(tabs)')}
+                  onPress={() => {
+                    // 명시적으로 저장을 선택했으니 이탈 시 삭제 확인창이 뜨면 안 됨
+                    exitConfirmedRef.current = true;
+                    router.replace('/(tabs)');
+                  }}
                   style={{
                     flex: 1,
                     backgroundColor: '#0ea5e9',
@@ -524,7 +572,7 @@ export default function RouteResultScreen() {
                   <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>저장하기</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={handleExit}
+                  onPress={() => router.back()}
                   style={{
                     flex: 1,
                     borderWidth: 2,
