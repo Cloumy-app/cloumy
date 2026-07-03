@@ -10,7 +10,8 @@ from openai import AsyncOpenAI
 from app.config.city_centers import CITY_CENTERS
 from app.config.settings import settings
 from app.models.schemas import RouteGenRequest
-from app.services.place_validator import validate_route_slot
+from app.services.geo_clustering import cluster_candidates, cluster_label
+from app.services.place_validator import validate_day_summary, validate_route_slot
 from app.services.retrievers import PostgisTagRetriever, PgvectorRetriever
 from app.services.tsp_service import reorder_slots
 from app.services.weather_service import FORECAST_WINDOW_DAYS, build_weather_forecast_text
@@ -26,7 +27,10 @@ _openai = AsyncOpenAI(api_key=settings.openai_api_key)
 ROUTE_GEN_SYSTEM_PROMPT = """당신은 한국 여행 전문 플래너입니다. 후보 장소 목록을 바탕으로 Day별 최적 여행 루트를 생성합니다.
 
 출력 형식: 한 줄에 하나의 JSON 객체만 출력합니다 (ndjson).
-{"day": 1, "order": 1, "place_id": "uuid", "place_name": "장소명", "tip": "현지 팁 1~2문장", "duration_minutes": 90, "budget_estimate": 15000}
+{"type": "slot", "day": 1, "order": 1, "place_id": "uuid", "place_name": "장소명", "tip": "현지 팁 1~2문장", "duration_minutes": 90, "budget_estimate": 15000}
+
+각 Day의 슬롯을 모두 출력한 직후, 그 Day를 요약하는 한 줄을 추가로 출력합니다:
+{"type": "day_summary", "day": 1, "summary": "그날 분위기를 담은 한 문장(20~40자, 장소명 나열 금지)"}
 
 규칙:
 - 하루 최대 5슬롯: 식사 2 + 관광/체험 2 + 카페/기타 1
@@ -42,10 +46,11 @@ ROUTE_GEN_SYSTEM_PROMPT = """당신은 한국 여행 전문 플래너입니다. 
 - 각 날의 budget_estimate 합계가 비슷하도록 분산할 것 (Day 1에 집중 금지)
 - 모든 날의 슬롯 수를 균등하게 배분 (±1 이내)
 
-[Day별 지역 집중]
-- 같은 날의 장소들은 이동 30분 이내 가까운 구역에 몰아서 배치
-- Day가 바뀌면 구역 전환 (Day 1 = A구역, Day 2 = B구역, ...)
-- 서로 멀리 떨어진 장소를 같은 날 배치하지 말 것
+[Day별 구역 강제 배치]
+- 후보 목록의 각 항목 앞에 [구역 A], [구역 B]... 라벨이 붙어 있으면, Day N은 반드시
+  N번째 알파벳 구역([구역 A]=Day 1, [구역 B]=Day 2, ...)의 후보 중에서만 선택할 것
+- 서로 다른 구역의 장소를 같은 Day에 섞지 말 것
+- 라벨이 없으면 기존처럼 이동 30분 이내로 가까운 장소끼리 묶어 배치할 것 (fallback)
 
 [날씨 반영]
 - user 메시지에 Day별 날씨 라벨이 주어지면, 슬롯 order를 대략적 시간대로 간주: 앞쪽(1~2번째)=오전, 중간(3번째)=오후, 뒤쪽(4~5번째)=저녁
@@ -148,11 +153,33 @@ async def stream_route(
         for doc in candidates
     }
 
-    # 5. 후보 장소 목록 텍스트 구성
-    candidates_text = "\n".join(
-        f"[{i + 1}] id={doc.metadata['id']} | {doc.page_content}"
-        for i, doc in enumerate(candidates)
-    )
+    # 5. 후보 장소 목록 텍스트 구성 — 지역 클러스터링으로 Day별 구역을 미리 나눔
+    clusters = cluster_candidates(candidates, k=request.nights + 1)
+    clustering_active = len(clusters) > 1
+
+    if clustering_active:
+        lines: list[str] = []
+        idx = 1
+        for c_idx, cluster in enumerate(clusters):
+            label = cluster_label(c_idx)
+            for doc in cluster:
+                lines.append(f"[구역 {label}] [{idx}] id={doc.metadata['id']} | {doc.page_content}")
+                idx += 1
+        candidates_text = "\n".join(lines)
+        mapping_desc = ", ".join(
+            f"Day {i + 1} = 구역 {cluster_label(i)} ({len(c)}곳)"
+            for i, c in enumerate(clusters)
+        )
+        day_region_line = f"Day-구역 매핑: {mapping_desc}\n"
+    else:
+        candidates_text = "\n".join(
+            f"[{i + 1}] id={doc.metadata['id']} | {doc.page_content}"
+            for i, doc in enumerate(candidates)
+        )
+        day_region_line = (
+            f"총 {request.nights}박이므로 {request.nights + 1}개 지역 구역으로 나눠 Day별 집중 배치할 것\n"
+        )
+
     ratio = request.hidden_gem_ratio if request.hidden_gem_ratio is not None else 0.2
     ratio_desc = "관광지 위주" if ratio < 0.3 else ("혼합" if ratio < 0.7 else "숨은 명소 위주")
     budget_hint = BUDGET_GUIDE.get(request.budget_level, "하루 활동비 목표 6만원 (슬롯당 12,000원)")
@@ -164,7 +191,7 @@ async def stream_route(
         f"도시: {request.city} | {request.nights}박{request.nights + 1}일 | "
         f"여행 유형: {request.group_type} | 예산: {request.budget_level} — {budget_hint}\n"
         f"Hidden Gem 비율 목표: {ratio:.0%} ({ratio_desc})\n"
-        f"총 {request.nights}박이므로 {request.nights + 1}개 지역 구역으로 나눠 Day별 집중 배치할 것\n\n"
+        f"{day_region_line}\n"
         f"{weather_hint}"
         f"후보 장소 ({len(candidates)}곳):\n{candidates_text}\n\n"
         f"{request.nights}박{request.nights + 1}일 루트를 생성하세요. "
@@ -179,6 +206,7 @@ async def stream_route(
     collected: list[str] = []
     day_buffer: list[str] = []
     current_day: int | None = None
+    valid_days = set(range(1, request.nights + 2))
 
     def _ingest(validated: str) -> list[str]:
         """day 경계를 넘으면 이전 day를 TSP 재정렬해 반환, 아니면 버퍼링만 하고 빈 리스트 반환."""
@@ -191,6 +219,24 @@ async def stream_route(
         current_day = slot_day
         day_buffer.append(validated)
         return flushed
+
+    async def _process_line(line: str) -> list[str]:
+        """한 줄을 타입별로 처리한다.
+        day_summary는 place_id가 없어 TSP 좌표 조회가 실패하므로,
+        day_buffer/_ingest()를 절대 거치지 않고 즉시 반환한다 — 섞이면 해당 day
+        전체가 TSP 미적용으로 회귀한다."""
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            logger.warning("JSON 파싱 실패 — 스킵: %.80s", line)
+            return []
+        if obj.get("type") == "day_summary":
+            validated = await validate_day_summary(line, valid_days)
+            return [validated] if validated else []
+        validated = await validate_route_slot(line, candidate_lookup)
+        if validated is None:
+            return []
+        return _ingest(validated)
 
     try:
         async with _anthropic.messages.stream(
@@ -212,18 +258,14 @@ async def stream_route(
                     line, buffer = buffer.split("\n", 1)
                     line = line.strip()
                     if line:
-                        validated = await validate_route_slot(line, candidate_lookup)
-                        if validated is not None:
-                            for flushed_line in _ingest(validated):
-                                collected.append(flushed_line)
-                                yield flushed_line
+                        for flushed_line in await _process_line(line):
+                            collected.append(flushed_line)
+                            yield flushed_line
             # 버퍼 잔여분 처리
             if buffer.strip():
-                validated = await validate_route_slot(buffer.strip(), candidate_lookup)
-                if validated is not None:
-                    for flushed_line in _ingest(validated):
-                        collected.append(flushed_line)
-                        yield flushed_line
+                for flushed_line in await _process_line(buffer.strip()):
+                    collected.append(flushed_line)
+                    yield flushed_line
         # 스트림 종료 — 마지막 day 플러시
         for flushed_line in reorder_slots(day_buffer, coord_lookup):
             collected.append(flushed_line)

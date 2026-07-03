@@ -46,7 +46,7 @@ export default function RouteCreateStep3() {
 
   const stopStreamRef = useRef<(() => void) | null>(null);
   const routeIdRef = useRef<string>('');
-  const { appendStreamingSlot, finalizeRoute, setIsStreaming, reset } = useRouteStore();
+  const { appendStreamingSlot, setDaySummary, finalizeRoute, setIsStreaming, reset } = useRouteStore();
   const { setTokens, setUser } = useAuthStore();
   const queryClient = useQueryClient();
 
@@ -120,6 +120,9 @@ export default function RouteCreateStep3() {
       (slot: RouteSlot) => {
         appendStreamingSlot(slot);
         setSlotCount((c) => c + 1);
+      },
+      (day: number, summary: string) => {
+        setDaySummary(day, summary);
       },
       (id: string) => {
         routeIdRef.current = id;

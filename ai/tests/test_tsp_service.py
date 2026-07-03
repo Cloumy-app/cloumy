@@ -60,8 +60,8 @@ def test_reorder_slots_multi_day_independent():
     assert 1 in days and 2 in days
 
 
-def test_reorder_slots_missing_coord_keeps_day_order():
-    # 좌표 없는 슬롯이 하나라도 있으면 해당 day 원본 순서 유지
+def test_reorder_slots_missing_coord_appended_at_end():
+    # 좌표 없는 슬롯은 최적화 대상에서 빠지고 순서 맨 뒤에 붙는다
     slots = [
         _make_slot(1, 1, "a"),
         _make_slot(1, 2, "missing"),
@@ -69,6 +69,31 @@ def test_reorder_slots_missing_coord_keeps_day_order():
     coord_lookup = {"a": (37.5, 126.9)}  # "missing"은 좌표 없음
     result = reorder_slots(slots, coord_lookup)
     assert len(result) == 2
+    assert json.loads(result[-1])["place_id"] == "missing"
+    assert json.loads(result[-1])["order"] == 2
+
+
+def test_reorder_slots_missing_coord_mixed_with_multiple_optimized():
+    # 좌표 있는 슬롯 3건은 TSP로 재정렬되고, 좌표 없는 슬롯 1건은 맨 뒤에 붙는다
+    slots = [
+        _make_slot(1, 1, "a", "A"),
+        _make_slot(1, 2, "b", "B"),
+        _make_slot(1, 3, "missing", "M"),
+        _make_slot(1, 4, "c", "C"),
+    ]
+    coord_lookup = {
+        "a": (37.5, 126.9),
+        "b": (37.6, 127.0),
+        "c": (37.55, 126.95),
+    }
+    result = reorder_slots(slots, coord_lookup)
+    assert len(result) == 4
+    orders = [json.loads(r)["order"] for r in result]
+    assert sorted(orders) == [1, 2, 3, 4]
+    assert json.loads(result[-1])["place_id"] == "missing"
+    assert json.loads(result[-1])["order"] == 4
+    optimized_ids = {json.loads(r)["place_id"] for r in result[:3]}
+    assert optimized_ids == {"a", "b", "c"}
 
 
 def test_reorder_invalid_json_skipped():

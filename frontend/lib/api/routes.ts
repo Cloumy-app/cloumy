@@ -1,6 +1,6 @@
 import EventSource from 'react-native-sse';
 import { API_BASE, getAuthHeaders } from './client';
-import type { PlaceDetail, RouteGenRequest, RouteListItem, RouteSlot, SlotAlternative, SlotWithCoords } from '@/types';
+import type { PlaceDetail, RouteDaySummary, RouteGenRequest, RouteListItem, RouteSlot, SlotAlternative, SlotWithCoords } from '@/types';
 
 interface SpringPage<T> {
   content: T[];
@@ -23,6 +23,15 @@ export async function getRouteSlots(routeId: string): Promise<SlotWithCoords[]> 
   });
   if (!res.ok) throw new Error(`${res.status}`);
   const body: { data: SlotWithCoords[] } = await res.json();
+  return body.data;
+}
+
+export async function getRouteDaySummaries(routeId: string): Promise<RouteDaySummary[]> {
+  const res = await fetch(`${API_BASE}/v1/routes/${routeId}/day-summaries`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+  const body: { data: RouteDaySummary[] } = await res.json();
   return body.data;
 }
 
@@ -77,6 +86,7 @@ export async function getSlotAlternatives(
 export function streamRoute(
   req: RouteGenRequest,
   onSlot: (slot: RouteSlot) => void,
+  onDaySummary: (day: number, summary: string) => void,
   onRouteId: (id: string) => void,
   onDone: () => void,
   onError: (err: Event) => void,
@@ -104,10 +114,19 @@ export function streamRoute(
   es.addEventListener('message', (e) => {
     if (!e.data) return;
     try {
-      const parsed = JSON.parse(e.data) as RouteSlot & { done?: boolean };
+      const parsed = JSON.parse(e.data) as RouteSlot & {
+        done?: boolean;
+        type?: string;
+        day?: number;
+        summary?: string;
+      };
       if (parsed.done) {
         // 서버가 보내는 스트림 종료 센티널
         settle(onDone);
+        return;
+      }
+      if (parsed.type === 'day_summary') {
+        if (parsed.day != null && parsed.summary) onDaySummary(parsed.day, parsed.summary);
         return;
       }
       if (!('error' in parsed)) onSlot(parsed);

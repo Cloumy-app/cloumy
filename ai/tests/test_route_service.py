@@ -136,6 +136,91 @@ async def test_stream_route_day_boundary_reorders_per_day_and_cache_matches_stre
     assert cached_arg == "".join(results)
 
 
+def _clustered_candidates() -> list[Document]:
+    # 서울 그룹 5곳 + 부산 그룹 5곳 = 총 10건 → 클러스터링 활성화 조건(>5건) 충족
+    seoul = [
+        Document(
+            page_content=f"S{i} | 주소 | 태그: 관광",
+            metadata={"id": f"s{i}", "name": f"S{i}", "lng": 127.0 + i * 0.001, "lat": 37.5 + i * 0.001,
+                      "avg_duration_minutes": 60, "is_hidden_gem": False},
+        )
+        for i in range(5)
+    ]
+    busan = [
+        Document(
+            page_content=f"B{i} | 주소 | 태그: 관광",
+            metadata={"id": f"b{i}", "name": f"B{i}", "lng": 129.0 + i * 0.001, "lat": 35.1 + i * 0.001,
+                      "avg_duration_minutes": 60, "is_hidden_gem": False},
+        )
+        for i in range(5)
+    ]
+    return seoul + busan
+
+
+@pytest.mark.asyncio
+async def test_stream_route_activates_clustering_and_labels_candidates():
+    mock_pgvector = MagicMock()
+    mock_pgvector.return_value.ainvoke = AsyncMock(return_value=_clustered_candidates())
+    fake_stream = _FakeAnthropicStream([])  # 빈 스트림 — 프롬프트 구성만 검증
+
+    with patch.object(route_service, "PgvectorRetriever", mock_pgvector), \
+         patch.object(route_service._anthropic.messages, "stream", return_value=fake_stream) as stream_mock:
+        async for _ in stream_route(_make_req(nights=1), db=MagicMock(), redis=None):
+            pass
+
+    _, kwargs = stream_mock.call_args
+    user_message = kwargs["messages"][0]["content"]
+    assert "[구역 A]" in user_message
+    assert "[구역 B]" in user_message
+    assert "Day-구역 매핑" in user_message
+
+
+@pytest.mark.asyncio
+async def test_stream_route_day_summary_does_not_break_tsp_reorder():
+    # day_summary 라인이 슬롯 사이에 섞여도 TSP day_buffer를 오염시키지 않고,
+    # 슬롯들은 여전히 정상적으로 day별 TSP 재정렬 대상이 돼야 한다 (핵심 회귀 시나리오).
+    day1 = (
+        '{"type":"slot","day":1,"order":1,"place_id":"p1","place_name":"A","tip":"","duration_minutes":60,"budget_estimate":5000}\n'
+        '{"type":"slot","day":1,"order":2,"place_id":"p2","place_name":"B","tip":"","duration_minutes":60,"budget_estimate":5000}\n'
+        '{"type":"day_summary","day":1,"summary":"부산 해운대 일대를 둘러보는 하루"}\n'
+    )
+    day2 = (
+        '{"type":"slot","day":2,"order":1,"place_id":"p3","place_name":"C","tip":"","duration_minutes":60,"budget_estimate":5000}\n'
+        '{"type":"slot","day":2,"order":2,"place_id":"p4","place_name":"D","tip":"","duration_minutes":60,"budget_estimate":5000}\n'
+        '{"type":"day_summary","day":2,"summary":"감천문화마을과 근처 카페 골목을 둘러보는 하루"}\n'
+    )
+    fake_stream = _FakeAnthropicStream([day1, day2])
+
+    mock_pgvector = MagicMock()
+    mock_pgvector.return_value.ainvoke = AsyncMock(return_value=_candidates())
+
+    redis_mock = AsyncMock()
+    redis_mock.get = AsyncMock(return_value=None)
+    redis_mock.setex = AsyncMock()
+
+    with patch.object(route_service, "PgvectorRetriever", mock_pgvector), \
+         patch.object(route_service._anthropic.messages, "stream", return_value=fake_stream), \
+         patch.object(route_service, "reorder_slots", wraps=route_service.reorder_slots) as reorder_spy:
+        results = []
+        async for line in stream_route(_make_req(), db=MagicMock(), redis=redis_mock):
+            results.append(line)
+
+    # day_summary 2건 + 슬롯 4건 = 6줄 모두 결과에 포함돼야 함
+    assert len(results) == 6
+    summaries = [json.loads(r) for r in results if json.loads(r).get("type") == "day_summary"]
+    assert len(summaries) == 2
+    assert {s["day"] for s in summaries} == {1, 2}
+
+    # reorder_slots(TSP)에 넘겨진 인자에는 day_summary 라인이 절대 섞이지 않아야 함
+    for call in reorder_spy.call_args_list:
+        day_buffer_arg = call[0][0]
+        for line in day_buffer_arg:
+            assert json.loads(line).get("type") != "day_summary"
+
+    # 슬롯들은 여전히 day별로 정상 TSP 재정렬 대상이 됨 (회귀 없음)
+    assert reorder_spy.call_count == 2
+
+
 @pytest.mark.asyncio
 async def test_pgvector_failure_falls_back_with_request_themes():
     req = _make_req(themes=["카페", "등산"])
