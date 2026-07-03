@@ -1,14 +1,9 @@
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, Sparkles } from 'lucide-react-native';
-import { useState, useRef, useEffect } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { streamRoute } from '@/lib/api/routes';
-import { devLogin } from '@/lib/api/auth';
-import { useAuthStore } from '@/stores/useAuthStore';
-import { useRouteStore } from '@/stores/useRouteStore';
-import type { GroupType, BudgetLevel, Density, RouteSlot } from '@/types';
+import { ChevronLeft } from 'lucide-react-native';
+import { useState } from 'react';
+import type { BudgetLevel, Density } from '@/types';
 import { BUDGET_LABEL } from '@/types';
 
 const RATIO_OPTIONS = [
@@ -23,22 +18,6 @@ const DENSITY_OPTIONS = [
   { label: '알차게',   desc: '하루 6곳까지 알차게 이동', density: 'packed' as const },
 ] as const;
 
-const DENSITY_SLOTS_PER_DAY: Record<Density, number> = { relaxed: 3, normal: 4.5, packed: 6 };
-
-// 진행률·장소 성향에 맞춰 로딩 문구를 파생시킨다 — 독립 타이머로 순환하면
-// 실제 진행 상태와 무관한 문구(예: 0%에서 "거의 완성")가 뜰 수 있어 이렇게 계산한다.
-function getLoadingMessage(progress: number, ratio: number, destination: string): string {
-  if (progress < 20) return `${destination} 후보 장소를 살펴보고 있어요`;
-  if (progress < 50) {
-    if (ratio >= 0.6) return `${destination}의 숨은 명소를 찾고 있어요`;
-    if (ratio <= 0.3) return `${destination}의 인기 명소를 찾고 있어요`;
-    return '명소와 로컬 스팟을 균형 있게 담고 있어요';
-  }
-  if (progress < 80) return '최적의 이동 동선을 계산하고 있어요';
-  if (progress < 95) return '예산과 일정을 다듬고 있어요';
-  return '완벽한 여행 루트가 거의 완성됐어요!';
-}
-
 export default function RouteCreateStep3() {
   const params = useLocalSearchParams<{
     destination: string;
@@ -50,146 +29,19 @@ export default function RouteCreateStep3() {
     budgetLevel: string;
   }>();
 
-  const destination = params.destination ?? '여행지';
-
   const [selectedRatio, setSelectedRatio] = useState(0.5);
   const [selectedDensity, setSelectedDensity] = useState<Density>('normal');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [slotCount, setSlotCount] = useState(0);
-  const [progress, setProgress] = useState(0);
 
-  const stopStreamRef = useRef<(() => void) | null>(null);
-  const routeIdRef = useRef<string>('');
-  // 이 화면 인스턴스가 언마운트된 뒤에도(하드웨어 백/스와이프로 로딩 화면을 나가도)
-  // 스트림 자체는 백그라운드에서 계속 진행돼 DB 저장이 끝까지 되지만, 그 완료 콜백이
-  // 화면이 사라진 뒤에도 무조건 router.replace()를 쏘면 그사이 사용자가 연 다른 루트
-  // 화면을 조용히 덮어써 버려("나가기"가 엉뚱한 루트를 삭제하는 버그로 이어짐) — 그래서
-  // 언마운트 이후엔 상태 갱신/네비게이션에 전혀 관여하지 않도록 이 ref로 막는다.
-  const isMountedRef = useRef(true);
-  const { appendStreamingSlot, setDaySummary, finalizeRoute, setIsStreaming, reset } = useRouteStore();
-  const { setTokens, setUser } = useAuthStore();
-  const queryClient = useQueryClient();
-
-  // 슬롯 수에 따른 프로그레스 계산 — 실제 날 수(nights+1)와 선택된 밀도 기준
-  useEffect(() => {
-    if (!isGenerating) return;
-    const nights = Number(params.nights ?? 2);
-    const days = nights + 1;
-    const estimated = Math.max(1, Math.round(days * DENSITY_SLOTS_PER_DAY[selectedDensity]));
-    setProgress(Math.min(95, Math.round((slotCount / estimated) * 100)));
-  }, [slotCount, isGenerating, selectedDensity]);
-
-  useEffect(() => {
-    return () => {
-      isMountedRef.current = false;
-      // 뒤로가기 등으로 언마운트 시 스트림 정리
-      if (!routeIdRef.current) {
-        stopStreamRef.current?.();
-        setIsStreaming(false);
-      }
-    };
-  }, []);
-
-  const onGenerate = async () => {
-    if (__DEV__) {
-      try {
-        const data = await devLogin();
-        setTokens(data.accessToken, data.refreshToken);
-        setUser(data.user);
-      } catch {
-        Alert.alert('서버 연결 실패', 'Spring 서버가 실행 중인지 확인해주세요.');
-        return;
-      }
-    }
-
-    const nights = Number(params.nights ?? 2);
-    const startDate = params.startDate ?? new Date().toISOString().split('T')[0];
-    const endDate = params.endDate ?? new Date(Date.now() + nights * 86400000).toISOString().split('T')[0];
-    let tags: string[] = [];
-    try {
-      tags = params.tags ? (JSON.parse(params.tags) as string[]) : [];
-    } catch {
-      tags = [];
-    }
-
-    reset();
-    routeIdRef.current = '';
-    setSlotCount(0);
-    setProgress(0);
-    setIsGenerating(true);
-    setIsStreaming(true);
-
-    stopStreamRef.current = streamRoute(
-      {
-        destination: params.destination ?? '서울',
-        startDate,
-        endDate,
-        groupType: (params.groupType ?? 'friends') as GroupType,
-        budgetLevel: (params.budgetLevel ?? 'mid') as BudgetLevel,
-        tags,
-        hiddenGemRatio: selectedRatio,
+  const onNext = () => {
+    router.push({
+      pathname: '/route/create/step-4',
+      params: {
+        ...params,
+        hiddenGemRatio: String(selectedRatio),
         density: selectedDensity,
       },
-      (slot: RouteSlot) => {
-        if (!isMountedRef.current) return;
-        appendStreamingSlot(slot);
-        setSlotCount((c) => c + 1);
-      },
-      (day: number, summary: string) => {
-        if (!isMountedRef.current) return;
-        setDaySummary(day, summary);
-      },
-      (id: string) => {
-        routeIdRef.current = id; // 참조 저장은 유지 — unmount 여부와 무관하게 스트림/DB 저장엔 필요
-      },
-      () => {
-        if (!isMountedRef.current) return; // 화면이 이미 사라졌으면 네비게이션/전역 상태 갱신 금지
-        const id = routeIdRef.current;
-        finalizeRoute(id, params.destination ?? '서울', startDate, endDate);
-        queryClient.invalidateQueries({ queryKey: ['routes'] });
-        setProgress(100);
-        setTimeout(() => {
-          setIsGenerating(false);
-          router.replace({
-            pathname: '/route/[routeId]',
-            params: { routeId: id, budgetLevel: params.budgetLevel ?? 'mid', mode: 'new' },
-          });
-        }, 500);
-      },
-      (e) => {
-        if (!isMountedRef.current) return;
-        setIsGenerating(false);
-        setIsStreaming(false);
-        const msg = e instanceof Error ? e.message : JSON.stringify(e);
-        Alert.alert('루트 생성 실패', `오류가 발생했어요.\n${msg}`);
-      },
-    );
+    });
   };
-
-  // 로딩 화면
-  if (isGenerating) {
-    return (
-      <SafeAreaView className="flex-1 bg-white items-center justify-center px-8">
-        <View className="w-24 h-24 bg-sky-50 rounded-full items-center justify-center mb-8">
-          <Sparkles size={40} color="#0ea5e9" />
-        </View>
-
-        <Text className="text-2xl font-black text-slate-800 mb-2 text-center">루트 생성 중</Text>
-        <Text className="text-slate-500 text-center mb-10 text-sm px-4">
-          {getLoadingMessage(progress, selectedRatio, destination)}
-        </Text>
-
-        {/* 프로그레스 바 */}
-        <View className="w-full bg-slate-100 rounded-full h-2 mb-3">
-          <View
-            className="bg-sky-500 h-2 rounded-full"
-            style={{ width: `${progress}%` }}
-          />
-        </View>
-        <Text className="text-sky-500 font-bold text-lg">{progress}%</Text>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -199,7 +51,7 @@ export default function RouteCreateStep3() {
           <ChevronLeft size={24} color="#475569" />
         </TouchableOpacity>
         <View className="flex-1">
-          <Text className="text-xs text-sky-500 font-bold mb-0.5">STEP 3 / 3</Text>
+          <Text className="text-xs text-sky-500 font-bold mb-0.5">STEP 3 / 4</Text>
           <Text className="text-xl font-bold text-slate-800">어떤 장소를 원하세요?</Text>
         </View>
       </View>
@@ -283,15 +135,14 @@ export default function RouteCreateStep3() {
         <View className="h-4" />
       </ScrollView>
 
-      {/* 루트 생성 버튼 */}
+      {/* 다음 버튼 */}
       <View className="px-6 pb-8">
         <TouchableOpacity
-          onPress={onGenerate}
-          className="bg-sky-500 py-4 rounded-2xl items-center flex-row justify-center gap-2"
+          onPress={onNext}
+          className="bg-sky-500 py-4 rounded-2xl items-center"
           activeOpacity={0.9}
         >
-          <Sparkles size={20} color="#ffffff" />
-          <Text className="text-white font-bold text-base">AI 루트 생성하기</Text>
+          <Text className="text-white font-bold text-base">다음 단계</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

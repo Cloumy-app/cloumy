@@ -76,6 +76,16 @@ export interface SlotAlternative {
   lng: number;
 }
 
+export interface AccommodationInput {
+  name: string;
+  address: string | null;
+  lat: number;
+  lng: number;
+  checkInDate: string;
+  checkOutDate: string;
+  source: 'kakao' | 'manual';
+}
+
 export interface RouteGenRequest {
   destination: string;
   startDate: string;
@@ -85,6 +95,7 @@ export interface RouteGenRequest {
   tags: string[];
   hiddenGemRatio?: number;
   density?: Density;
+  accommodations?: AccommodationInput[];
 }
 
 export type GroupType = 'solo' | 'couple' | 'friends' | 'family';
