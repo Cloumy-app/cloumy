@@ -37,6 +37,7 @@ ROUTE_GEN_SYSTEM_PROMPT = """당신은 한국 여행 전문 플래너입니다. 
 - 동선 효율 최우선 (같은 구역끼리 묶기)
 - budget_level 기준 (슬롯당 budget_estimate): tight(초절약)=~4,000원 | budget(알뜰)=~6,000원 | mid(여유롭게)=~12,000원 | premium(풍족하게)=~20,000원 | luxury(특별하게)=30,000원 이상
 - place_id는 반드시 후보 목록의 실제 id 값만 사용 (임의 생성 금지)
+- 같은 place_id를 루트 전체에서(하루 안에서든 다른 날이든) 두 번 이상 배치하지 말 것
 - tip은 실용적인 현지 정보 (영업시간, 주차, 대기시간 등)
 - JSON 문자열 내 개행은 반드시 \\n으로 이스케이프 (리터럴 개행문자 금지)
 - JSON 외 다른 텍스트 출력 금지 — 오직 JSON 줄만
@@ -220,12 +221,19 @@ async def stream_route(
     # day 경계마다 그 day를 TSP로 재정렬한 뒤 yield — 스트림/DB(Spring이 즉시 저장)/캐시가
     # 전부 동일한(=이미 최적화된) 순서를 보게 하기 위함. Day 1은 여전히 Day 2/3보다 먼저
     # 도착하므로 스트리밍의 체감 지연 이점은 유지된다.
+    # 여행 일수(day 수)에 비례해 출력 토큰 확보 — 슬롯당 ~200토큰 + day_summary ~90토큰 기준.
+    # 고정값(4096)이었을 때는 "type"/day_summary 추가로 늘어난 출력이 3일 이상 루트에서
+    # max_tokens에 걸려 뒷부분 day가 통째로 유실되는 문제가 있었음.
+    # claude-sonnet-4-6 실제 출력 상한은 스트리밍 시 128,000토큰이라 아래 값은 전혀 근접하지 않음.
+    day_count = request.nights + 1
+    max_tokens = min(16000, 1500 + day_count * 1700)
+
     buffer = ""
     collected: list[str] = []
     day_buffer: list[str] = []
     current_day: int | None = None
     valid_days = set(range(1, request.nights + 2))
-    day_used_ids: dict[int, set[str]] = {}
+    used_place_ids: set[str] = set()  # 루트 전체에서 이미 배치된 장소 추적 — 중복 슬롯 방지
 
     def _ingest(validated: str) -> list[str]:
         """day 경계를 넘으면 이전 day를 TSP 재정렬해 반환, 아니면 버퍼링만 하고 빈 리스트 반환."""
@@ -253,18 +261,18 @@ async def stream_route(
             validated = await validate_day_summary(line, valid_days)
             return [validated] if validated else []
         day = obj.get("day", 1)
+        # Day별 구역 강제 배치를 어기지 않도록, 환각/중복 치환도 그 Day에 배정된
+        # 구역 후보로만 한정한다(day_candidate_lookup) — 사용 여부는 루트 전체에서 추적.
         lookup = day_candidate_lookup.get(day) or candidate_lookup
-        used = day_used_ids.setdefault(day, set())
-        validated = await validate_route_slot(line, lookup, used)
+        validated = await validate_route_slot(line, lookup, used_place_ids)
         if validated is None:
             return []
-        used.add(json.loads(validated)["place_id"])
         return _ingest(validated)
 
     try:
         async with _anthropic.messages.stream(
             model="claude-sonnet-4-6",
-            max_tokens=4096,
+            max_tokens=max_tokens,
             system=[
                 {
                     "type": "text",
@@ -290,15 +298,24 @@ async def stream_route(
                     collected.append(flushed_line)
                     yield flushed_line
 
+            final_message = await stream.get_final_message()
+
             # 프롬프트 캐싱 히트 여부 로깅 — cache_read_input_tokens가 계속 0이면
             # 캐시가 생성되지 않고 있다는 뜻(시스템 프롬프트가 모델 최소 캐시 토큰 미달 등)
-            usage = (await stream.get_final_message()).usage
+            usage = final_message.usage
             logger.info(
                 "Claude 캐시 사용량: cache_creation=%d cache_read=%d input=%d",
                 usage.cache_creation_input_tokens or 0,
                 usage.cache_read_input_tokens or 0,
                 usage.input_tokens,
             )
+
+            if final_message.stop_reason == "max_tokens":
+                logger.error(
+                    "Sonnet 응답이 max_tokens(%d)에서 잘림 — nights=%d, day_count=%d, "
+                    "일부 day 데이터가 유실됐을 수 있음",
+                    max_tokens, request.nights, day_count,
+                )
         # 스트림 종료 — 마지막 day 플러시
         for flushed_line in reorder_slots(day_buffer, coord_lookup):
             collected.append(flushed_line)

@@ -1,3 +1,4 @@
+import itertools
 import json
 from itertools import permutations
 
@@ -126,6 +127,37 @@ def test_reorder_slots_missing_coord_mixed_with_multiple_optimized():
     assert json.loads(result[-1])["order"] == 4
     optimized_ids = {json.loads(r)["place_id"] for r in result[:3]}
     assert optimized_ids == {"a", "b", "c"}
+
+
+def test_tsp_order_finds_near_optimal_tour_not_just_greedy_first_solution():
+    # 그리디(PATH_CHEAPEST_ARC) 첫 해만으로는 비효율 경로가 나오기 쉬운 배치 —
+    # 4점 격자 + 멀리 떨어진 한 점(그리디가 방향을 잘못 잡기 쉬운 지그재그 유발 요인)
+    coords = [
+        (37.50, 127.00),
+        (37.50, 127.03),
+        (37.53, 127.00),
+        (37.53, 127.03),
+        (37.51, 127.10),
+    ]
+
+    order = _tsp_order(coords)
+    assert sorted(order) == list(range(len(coords)))  # 모든 노드 정확히 한 번씩 방문
+
+    def closed_tour_length(seq):
+        # RoutingIndexManager(n, 1, 0)는 depot(0)에서 출발해 depot으로 복귀하는 폐곡선을
+        # 최적화한다 — order 리스트 자체엔 복귀 구간이 없지만 비용 계산에는 포함되므로
+        # 비교도 폐곡선 기준으로 해야 한다.
+        open_length = sum(_haversine_m(*coords[a], *coords[b]) for a, b in zip(seq, seq[1:]))
+        return open_length + _haversine_m(*coords[seq[-1]], *coords[seq[0]])
+
+    result_length = closed_tour_length(order)
+    # depot(0)에서 시작하는 모든 순열 중 브루트포스 최적해와 비교
+    optimal_length = min(
+        closed_tour_length([0, *perm]) for perm in itertools.permutations(range(1, len(coords)))
+    )
+
+    # local_search_metaheuristic(GUIDED_LOCAL_SEARCH) 덕분에 브루트포스 최적해에 근접해야 함
+    assert result_length <= optimal_length * 1.05
 
 
 def test_reorder_invalid_json_skipped():

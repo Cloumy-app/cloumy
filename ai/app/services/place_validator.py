@@ -7,12 +7,10 @@ logger = logging.getLogger(__name__)
 async def validate_route_slot(
     line: str,
     candidate_lookup: dict[str, str],  # {place_id: place_name}
-    used_place_ids: set[str] | None = None,
+    used_place_ids: set[str],
 ) -> str | None:
-    """ndjson 한 줄의 place_id를 검증한다. 환각 감지 시 유효 후보로 교체.
-    JSON 파싱 실패 시 None 반환 — 호출 측에서 캐싱 및 yield 제외.
-    used_place_ids가 주어지면, 같은 Day에서 이미 배치된 장소로는 교체하지 않는다
-    (환각이 여러 번 나와도 매번 같은 첫 번째 후보로 몰려 중복 배치되는 것을 방지)."""
+    """ndjson 한 줄의 place_id를 검증한다. 환각이거나 루트 내에서 이미 쓰인 장소(중복)면
+    아직 안 쓴 후보로 교체한다. JSON 파싱 실패 시 None 반환 — 호출 측에서 캐싱 및 yield 제외."""
     try:
         slot = json.loads(line)
     except json.JSONDecodeError:
@@ -20,33 +18,33 @@ async def validate_route_slot(
         return None
 
     place_id = slot.get("place_id")
-    used = used_place_ids or set()
-
     if not place_id:
         return json.dumps(slot, ensure_ascii=False) + "\n"
 
-    is_hallucination = place_id not in candidate_lookup
-    if not is_hallucination and place_id not in used:
+    if place_id in candidate_lookup and place_id not in used_place_ids:
+        used_place_ids.add(place_id)
         return json.dumps(slot, ensure_ascii=False) + "\n"
 
-    if is_hallucination:
+    if place_id not in candidate_lookup:
         logger.warning("환각 감지: place_id=%s name=%s", place_id, slot.get("place_name"))
     else:
-        # LLM이 같은 Day에서 유효한 place_id를 직접 중복 선택한 경우 — 환각은 아니지만
-        # 그대로 두면 같은 장소가 두 슬롯에 배치되므로 미사용 후보로 치환한다.
-        logger.warning("같은 Day 중복 감지: place_id=%s name=%s", place_id, slot.get("place_name"))
+        logger.warning("중복 감지: place_id=%s name=%s", place_id, slot.get("place_name"))
 
-    # Phase A: 후보 중 첫 번째(미사용 우선)로 교체 (Phase B: pgvector 유사도 검색으로 교체 예정)
     if not candidate_lookup:
         return json.dumps(slot, ensure_ascii=False) + "\n"
-    replacement_id, replacement_name = next(
-        ((pid, name) for pid, name in candidate_lookup.items() if pid not in used),
-        next(iter(candidate_lookup.items())),  # 미사용 후보가 없으면 폴백(중복 허용)
-    )
-    slot["place_id"] = replacement_id
-    slot["place_name"] = replacement_name
 
-    logger.info("장소 교체: %s → %s (%s)", place_id, replacement_id, replacement_name)
+    # 아직 안 쓴 후보로 교체 — 항상 같은 후보로 치환하면 그 자체가 중복을 유발하므로
+    # used_place_ids에 없는 첫 후보를 찾는다.
+    replacement = next((pid for pid in candidate_lookup if pid not in used_place_ids), None)
+    if replacement is None:
+        logger.warning("교체 가능한 미사용 후보 없음 — 슬롯 스킵")
+        return None
+
+    slot["place_id"] = replacement
+    slot["place_name"] = candidate_lookup[replacement]
+    used_place_ids.add(replacement)
+
+    logger.info("환각/중복 교체: %s → %s (%s)", place_id, replacement, candidate_lookup[replacement])
     return json.dumps(slot, ensure_ascii=False) + "\n"
 
 

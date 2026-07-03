@@ -25,6 +25,20 @@ const DENSITY_OPTIONS = [
 
 const DENSITY_SLOTS_PER_DAY: Record<Density, number> = { relaxed: 3, normal: 4.5, packed: 6 };
 
+// 진행률·장소 성향에 맞춰 로딩 문구를 파생시킨다 — 독립 타이머로 순환하면
+// 실제 진행 상태와 무관한 문구(예: 0%에서 "거의 완성")가 뜰 수 있어 이렇게 계산한다.
+function getLoadingMessage(progress: number, ratio: number, destination: string): string {
+  if (progress < 20) return `${destination} 후보 장소를 살펴보고 있어요`;
+  if (progress < 50) {
+    if (ratio >= 0.6) return `${destination}의 숨은 명소를 찾고 있어요`;
+    if (ratio <= 0.3) return `${destination}의 인기 명소를 찾고 있어요`;
+    return '명소와 로컬 스팟을 균형 있게 담고 있어요';
+  }
+  if (progress < 80) return '최적의 이동 동선을 계산하고 있어요';
+  if (progress < 95) return '예산과 일정을 다듬고 있어요';
+  return '완벽한 여행 루트가 거의 완성됐어요!';
+}
+
 export default function RouteCreateStep3() {
   const params = useLocalSearchParams<{
     destination: string;
@@ -38,20 +52,11 @@ export default function RouteCreateStep3() {
 
   const destination = params.destination ?? '여행지';
 
-  const LOADING_MESSAGES = [
-    `${destination}의 숨은 명소를 찾고 있어요`,
-    '최적의 이동 동선을 계산하고 있어요',
-    '맛집과 관광지를 균형 있게 배치해요',
-    '이동 시간을 최소화하고 있어요',
-    '완벽한 여행 루트가 거의 완성됐어요!',
-  ];
-
   const [selectedRatio, setSelectedRatio] = useState(0.5);
   const [selectedDensity, setSelectedDensity] = useState<Density>('normal');
   const [isGenerating, setIsGenerating] = useState(false);
   const [slotCount, setSlotCount] = useState(0);
   const [progress, setProgress] = useState(0);
-  const messageIndex = Math.min(LOADING_MESSAGES.length - 1, Math.floor(progress / 20));
 
   const stopStreamRef = useRef<(() => void) | null>(null);
   const routeIdRef = useRef<string>('');
@@ -141,7 +146,7 @@ export default function RouteCreateStep3() {
         if (!isMountedRef.current) return; // 화면이 이미 사라졌으면 네비게이션/전역 상태 갱신 금지
         const id = routeIdRef.current;
         finalizeRoute(id, params.destination ?? '서울', startDate, endDate);
-        queryClient.invalidateQueries({ queryKey: ['routes', 'all'] });
+        queryClient.invalidateQueries({ queryKey: ['routes'] });
         setProgress(100);
         setTimeout(() => {
           setIsGenerating(false);
@@ -171,7 +176,7 @@ export default function RouteCreateStep3() {
 
         <Text className="text-2xl font-black text-slate-800 mb-2 text-center">루트 생성 중</Text>
         <Text className="text-slate-500 text-center mb-10 text-sm px-4">
-          {LOADING_MESSAGES[messageIndex]}
+          {getLoadingMessage(progress, selectedRatio, destination)}
         </Text>
 
         {/* 프로그레스 바 */}

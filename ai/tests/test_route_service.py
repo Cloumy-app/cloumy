@@ -86,11 +86,20 @@ def _candidates() -> list[Document]:
     ]
 
 
+class _FakeFinalMessage:
+    def __init__(self, stop_reason: str = "end_turn"):
+        self.stop_reason = stop_reason
+        self.usage = MagicMock(
+            cache_creation_input_tokens=0, cache_read_input_tokens=0, input_tokens=0
+        )
+
+
 class _FakeAnthropicStream:
     """_anthropic.messages.stream()이 반환하는 async context manager를 흉내."""
 
-    def __init__(self, chunks: list[str]):
+    def __init__(self, chunks: list[str], stop_reason: str = "end_turn"):
         self._chunks = chunks
+        self._stop_reason = stop_reason
 
     async def __aenter__(self):
         return self
@@ -107,11 +116,7 @@ class _FakeAnthropicStream:
         return self._gen()
 
     async def get_final_message(self):
-        message = MagicMock()
-        message.usage = MagicMock(
-            cache_creation_input_tokens=0, cache_read_input_tokens=0, input_tokens=0
-        )
-        return message
+        return _FakeFinalMessage(self._stop_reason)
 
 
 @pytest.mark.asyncio
@@ -271,6 +276,37 @@ async def test_stream_route_day_summary_does_not_break_tsp_reorder():
 
     # 슬롯들은 여전히 day별로 정상 TSP 재정렬 대상이 됨 (회귀 없음)
     assert reorder_spy.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_stream_route_scales_max_tokens_by_day_count():
+    # nights=2 → day_count=3 → max_tokens = min(16000, 1500 + 3*1700) = 6600
+    fake_stream = _FakeAnthropicStream([])
+    mock_pgvector = MagicMock()
+    mock_pgvector.return_value.ainvoke = AsyncMock(return_value=_candidates())
+
+    with patch.object(route_service, "PgvectorRetriever", mock_pgvector), \
+         patch.object(route_service._anthropic.messages, "stream", return_value=fake_stream) as stream_mock:
+        async for _ in stream_route(_make_req(nights=2), db=MagicMock(), redis=None):
+            pass
+
+    _, kwargs = stream_mock.call_args
+    assert kwargs["max_tokens"] == 6600
+
+
+@pytest.mark.asyncio
+async def test_stream_route_logs_error_when_truncated_by_max_tokens(caplog):
+    fake_stream = _FakeAnthropicStream([], stop_reason="max_tokens")
+    mock_pgvector = MagicMock()
+    mock_pgvector.return_value.ainvoke = AsyncMock(return_value=_candidates())
+
+    with patch.object(route_service, "PgvectorRetriever", mock_pgvector), \
+         patch.object(route_service._anthropic.messages, "stream", return_value=fake_stream):
+        with caplog.at_level("ERROR"):
+            async for _ in stream_route(_make_req(), db=MagicMock(), redis=None):
+                pass
+
+    assert any("max_tokens" in record.message for record in caplog.records)
 
 
 @pytest.mark.asyncio
