@@ -17,6 +17,20 @@ const RATIO_OPTIONS = [
   { label: '숨은 명소 위주', desc: '현지인만 아는 특별한 장소', ratio: 0.9 },
 ] as const;
 
+// 진행률·장소 성향에 맞춰 로딩 문구를 파생시킨다 — 독립 타이머로 순환하면
+// 실제 진행 상태와 무관한 문구(예: 0%에서 "거의 완성")가 뜰 수 있어 이렇게 계산한다.
+function getLoadingMessage(progress: number, ratio: number, destination: string): string {
+  if (progress < 20) return `${destination} 후보 장소를 살펴보고 있어요`;
+  if (progress < 50) {
+    if (ratio >= 0.6) return `${destination}의 숨은 명소를 찾고 있어요`;
+    if (ratio <= 0.3) return `${destination}의 인기 명소를 찾고 있어요`;
+    return '명소와 로컬 스팟을 균형 있게 담고 있어요';
+  }
+  if (progress < 80) return '최적의 이동 동선을 계산하고 있어요';
+  if (progress < 95) return '예산과 일정을 다듬고 있어요';
+  return '완벽한 여행 루트가 거의 완성됐어요!';
+}
+
 export default function RouteCreateStep3() {
   const params = useLocalSearchParams<{
     destination: string;
@@ -30,18 +44,9 @@ export default function RouteCreateStep3() {
 
   const destination = params.destination ?? '여행지';
 
-  const LOADING_MESSAGES = [
-    `${destination}의 숨은 명소를 찾고 있어요`,
-    '최적의 이동 동선을 계산하고 있어요',
-    '맛집과 관광지를 균형 있게 배치해요',
-    '이동 시간을 최소화하고 있어요',
-    '완벽한 여행 루트가 거의 완성됐어요!',
-  ];
-
   const [selectedRatio, setSelectedRatio] = useState(0.5);
   const [isGenerating, setIsGenerating] = useState(false);
   const [slotCount, setSlotCount] = useState(0);
-  const [messageIndex, setMessageIndex] = useState(0);
   const [progress, setProgress] = useState(0);
 
   const stopStreamRef = useRef<(() => void) | null>(null);
@@ -50,20 +55,11 @@ export default function RouteCreateStep3() {
   const { setTokens, setUser } = useAuthStore();
   const queryClient = useQueryClient();
 
-  // 생성 중 메시지 순환
-  useEffect(() => {
-    if (!isGenerating) return;
-    const interval = setInterval(() => {
-      setMessageIndex((i) => (i + 1) % LOADING_MESSAGES.length);
-    }, 2500);
-    return () => clearInterval(interval);
-  }, [isGenerating]);
-
   // 슬롯 수에 따른 프로그레스 계산
   useEffect(() => {
     if (!isGenerating) return;
     const nights = Number(params.nights ?? 2);
-    const estimated = nights * 4;
+    const estimated = (nights + 1) * 4;
     setProgress(Math.min(95, Math.round((slotCount / estimated) * 100)));
   }, [slotCount, isGenerating]);
 
@@ -103,7 +99,6 @@ export default function RouteCreateStep3() {
     routeIdRef.current = '';
     setSlotCount(0);
     setProgress(0);
-    setMessageIndex(0);
     setIsGenerating(true);
     setIsStreaming(true);
 
@@ -130,7 +125,7 @@ export default function RouteCreateStep3() {
       () => {
         const id = routeIdRef.current;
         finalizeRoute(id, params.destination ?? '서울', startDate, endDate);
-        queryClient.invalidateQueries({ queryKey: ['routes', 'all'] });
+        queryClient.invalidateQueries({ queryKey: ['routes'] });
         setProgress(100);
         setTimeout(() => {
           setIsGenerating(false);
@@ -159,7 +154,7 @@ export default function RouteCreateStep3() {
 
         <Text className="text-2xl font-black text-slate-800 mb-2 text-center">루트 생성 중</Text>
         <Text className="text-slate-500 text-center mb-10 text-sm px-4">
-          {LOADING_MESSAGES[messageIndex]}
+          {getLoadingMessage(progress, selectedRatio, destination)}
         </Text>
 
         {/* 프로그레스 바 */}

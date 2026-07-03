@@ -52,6 +52,19 @@ def test_cluster_count_matches_k_for_well_separated_points():
     assert names_per_cluster[0] != names_per_cluster[1]
 
 
+def test_cluster_candidates_prevents_extreme_imbalance():
+    # 실측 사례(50건 → 3구역이 34/14/2로 쏠림) 재현: 도심에 30곳 밀집 + 외곽에 4곳뿐
+    center = [_doc(37.50 + (i % 6) * 0.002, 127.00 + (i // 6) * 0.002, f"c{i}") for i in range(30)]
+    outskirt = [_doc(37.55, 127.05, f"o{i}") for i in range(4)]
+    candidates = center + outskirt
+
+    result = cluster_candidates(candidates, k=3)
+
+    sizes = [len(c) for c in result]
+    assert sum(sizes) == len(candidates)
+    assert max(sizes) <= len(candidates) * 0.7  # 34/50=68%였던 실측 사례 같은 극단적 쏠림 방지
+
+
 def test_cluster_preserves_relative_order_within_cluster():
     # 서울 그룹에 인위적 순서(유사도 랭킹 흉내)를 부여
     seoul = [_doc(37.50 + i * 0.001, 127.00 + i * 0.001, f"s{i}") for i in range(5)]

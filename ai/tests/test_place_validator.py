@@ -11,7 +11,7 @@ VALID_SLOT = json.dumps({
 
 
 async def test_valid_slot_pass_through():
-    result = await validate_route_slot(VALID_SLOT, CANDIDATES)
+    result = await validate_route_slot(VALID_SLOT, CANDIDATES, set())
     assert result is not None
     assert '"uuid-a"' in result
 
@@ -21,14 +21,14 @@ async def test_hallucinated_place_id_replaced():
         "day": 1, "order": 1, "place_id": "fake-uuid",
         "place_name": "없는 곳", "tip": "", "duration_minutes": 60, "budget_estimate": 5000,
     })
-    result = await validate_route_slot(line, CANDIDATES)
+    result = await validate_route_slot(line, CANDIDATES, set())
     assert result is not None
     assert "fake-uuid" not in result
-    assert "uuid-a" in result  # 후보 첫 번째 항목으로 교체
+    assert "uuid-a" in result  # 미사용 후보 중 첫 번째로 교체
 
 
 async def test_invalid_json_returns_none():
-    result = await validate_route_slot("not-json", CANDIDATES)
+    result = await validate_route_slot("not-json", CANDIDATES, set())
     assert result is None
 
 
@@ -38,12 +38,12 @@ async def test_empty_candidate_lookup_returns_slot():
         "day": 1, "order": 1, "place_id": "any-id",
         "place_name": "장소", "tip": "", "duration_minutes": 60, "budget_estimate": 5000,
     })
-    result = await validate_route_slot(line, {})
+    result = await validate_route_slot(line, {}, set())
     assert result is not None
 
 
 async def test_output_ends_with_newline():
-    result = await validate_route_slot(VALID_SLOT, CANDIDATES)
+    result = await validate_route_slot(VALID_SLOT, CANDIDATES, set())
     assert result is not None
     assert result.endswith("\n")
 
@@ -54,8 +54,39 @@ async def test_missing_place_id_returns_slot():
         "day": 1, "order": 1,
         "place_name": "카페 A", "tip": "", "duration_minutes": 60, "budget_estimate": 10000,
     })
-    result = await validate_route_slot(line, CANDIDATES)
+    result = await validate_route_slot(line, CANDIDATES, set())
     assert result is not None
+
+
+async def test_duplicate_place_id_replaced_with_unused_candidate():
+    # place_id가 candidate_lookup에는 있지만 이미 used_place_ids에 있으면(중복) 교체
+    used = {"uuid-a"}
+    line = json.dumps({
+        "day": 1, "order": 2, "place_id": "uuid-a",
+        "place_name": "카페 A", "tip": "", "duration_minutes": 60, "budget_estimate": 10000,
+    })
+    result = await validate_route_slot(line, CANDIDATES, used)
+    assert result is not None
+    obj = json.loads(result)
+    assert obj["place_id"] == "uuid-b"  # 유일하게 안 쓴 후보로 교체
+    assert used == {"uuid-a", "uuid-b"}
+
+
+async def test_valid_slot_marks_place_id_as_used():
+    used: set[str] = set()
+    await validate_route_slot(VALID_SLOT, CANDIDATES, used)
+    assert used == {"uuid-a"}
+
+
+async def test_no_unused_candidate_left_returns_none():
+    # 후보 전부 이미 사용됨 — 교체할 곳이 없으므로 슬롯 스킵
+    used = {"uuid-a", "uuid-b"}
+    line = json.dumps({
+        "day": 1, "order": 3, "place_id": "uuid-a",  # 이미 쓰인 장소 재등장(중복)
+        "place_name": "카페 A", "tip": "", "duration_minutes": 60, "budget_estimate": 10000,
+    })
+    result = await validate_route_slot(line, CANDIDATES, used)
+    assert result is None
 
 
 VALID_DAYS = {1, 2, 3}
