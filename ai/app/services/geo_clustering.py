@@ -4,6 +4,7 @@ day별 지역 분리를 프롬프트 텍스트 지시에만 맡기지 않고, �
 구역으로 나눠 LLM에 "Day N = 구역 N"을 구조적으로 강제하기 위함.
 """
 import logging
+import math
 
 import numpy as np
 from langchain_core.documents import Document
@@ -14,6 +15,9 @@ logger = logging.getLogger(__name__)
 
 _MIN_CANDIDATES_FOR_CLUSTERING = 5
 _KMEANS_MAX_ITER = 20
+# 완전 균등(n/k)보다 50% 여유를 둔 상한 — 억지로 맞추면 지리적으로 안 맞는 재배정이 늘어남.
+# 실측 사례(50건 → 3구역이 34/14/2로 쏠림)처럼 극단적인 불균형만 완화하는 게 목적.
+_CAPACITY_SLACK = 1.5
 
 
 def cluster_label(idx: int) -> str:
@@ -57,6 +61,43 @@ def _kmeans_labels(coords: np.ndarray, k: int, seed: int) -> np.ndarray:
             centroids = new_centroids
             break
         centroids = new_centroids
+
+    return labels
+
+
+def _rebalance_labels(coords: np.ndarray, labels: np.ndarray, k: int) -> np.ndarray:
+    """순수 k-means는 클러스터 크기에 제약이 없어 한쪽으로 극단적으로 쏠릴 수 있다
+    (예: 50건 → 34/14/2). 용량을 초과한 클러스터에서 centroid로부터 가장 먼 포인트부터
+    용량이 남은 가장 가까운 클러스터로 이관해 완화한다."""
+    n = coords.shape[0]
+    cap = math.ceil(n / k * _CAPACITY_SLACK)
+    labels = labels.copy()
+
+    for _ in range(k):
+        sizes = np.bincount(labels, minlength=k)
+        overflowing = [i for i in range(k) if sizes[i] > cap]
+        if not overflowing:
+            break
+        centroids = np.array([
+            coords[labels == i].mean(axis=0) if sizes[i] > 0 else coords.mean(axis=0)
+            for i in range(k)
+        ])
+        for oi in overflowing:
+            idxs = np.where(labels == oi)[0]
+            dists = np.linalg.norm(coords[idxs] - centroids[oi], axis=1)
+            farthest_first = idxs[np.argsort(-dists)]
+            excess = int(np.bincount(labels, minlength=k)[oi] - cap)
+            moved = 0
+            for pt_idx in farthest_first:
+                if moved >= excess:
+                    break
+                sizes_now = np.bincount(labels, minlength=k)
+                room = [j for j in range(k) if j != oi and sizes_now[j] < cap]
+                if not room:
+                    break
+                nearest_j = min(room, key=lambda j: np.linalg.norm(coords[pt_idx] - centroids[j]))
+                labels[pt_idx] = nearest_j
+                moved += 1
 
     return labels
 
@@ -105,6 +146,7 @@ def cluster_candidates(
 
     coords = np.array([[c.metadata["lat"], c.metadata["lng"]] for c in candidates])
     labels = _kmeans_labels(coords, k, seed)
+    labels = _rebalance_labels(coords, labels, k)
 
     clusters = [
         [c for c, lbl in zip(candidates, labels) if lbl == i] for i in range(k)

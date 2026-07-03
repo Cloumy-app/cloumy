@@ -54,6 +54,10 @@ def _tsp_order(coords: list[tuple[float, float]]) -> list[int]:
 
     params = pywrapcp.DefaultRoutingSearchParameters()
     params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+    # local_search_metaheuristic 없이는 첫 해(그리디)가 나오는 즉시 반환되어 time_limit이
+    # 사실상 무시된다 — 마지막에 멀리 남은 노드를 억지로 방문하는 비효율 경로가 생기는 원인.
+    # GUIDED_LOCAL_SEARCH로 2-opt/Or-opt류 개선 탐색을 time_limit 동안 수행하게 한다.
+    params.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
     params.time_limit.seconds = TSP_TIME_LIMIT_SECONDS
     params.log_search = False
 
