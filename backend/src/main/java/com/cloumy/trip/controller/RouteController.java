@@ -2,10 +2,12 @@ package com.cloumy.trip.controller;
 
 import com.cloumy.auth.security.CloudmyUserDetails;
 import com.cloumy.common.response.ApiResponse;
+import com.cloumy.trip.dto.DaySummaryResponse;
 import com.cloumy.trip.dto.RouteGenRequest;
 import com.cloumy.trip.dto.RouteListResponse;
 import com.cloumy.trip.entity.Route;
 import com.cloumy.trip.service.AiServiceClient;
+import com.cloumy.trip.service.RouteDaySummaryService;
 import com.cloumy.trip.service.RouteService;
 import com.cloumy.trip.service.RouteSlotService;
 import jakarta.validation.Valid;
@@ -29,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -41,6 +44,7 @@ public class RouteController {
 
     private final RouteService routeService;
     private final RouteSlotService routeSlotService;
+    private final RouteDaySummaryService routeDaySummaryService;
     private final AiServiceClient aiServiceClient;
 
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
@@ -52,6 +56,15 @@ public class RouteController {
     ) {
         UUID userId = UUID.fromString(user.userId());
         return ApiResponse.ok(routeService.getMyRoutes(userId, pageable));
+    }
+
+    @GetMapping("/routes/{routeId}/day-summaries")
+    public ApiResponse<List<DaySummaryResponse>> getDaySummaries(
+            @PathVariable UUID routeId,
+            @AuthenticationPrincipal CloudmyUserDetails user
+    ) {
+        UUID userId = UUID.fromString(user.userId());
+        return ApiResponse.ok(routeDaySummaryService.getSummaries(routeId, userId));
     }
 
     @DeleteMapping("/routes/{routeId}")
@@ -91,7 +104,7 @@ public class RouteController {
                             }
                             // SSE 전송과 별개로 슬롯 저장 — 저장 실패는 스트림에 영향 없음
                             try {
-                                routeSlotService.saveStreamingSlot(route.getId(), line);
+                                routeSlotService.saveStreamingLine(route.getId(), line);
                             } catch (Exception e) {
                                 log.warn("슬롯 저장 실패 (무시): {}", e.getMessage());
                             }

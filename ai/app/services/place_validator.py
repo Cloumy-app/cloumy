@@ -32,3 +32,21 @@ async def validate_route_slot(
 
     logger.info("환각 교체: %s → %s (%s)", place_id, replacement_id, replacement_name)
     return json.dumps(slot, ensure_ascii=False) + "\n"
+
+
+async def validate_day_summary(line: str, valid_days: set[int]) -> str | None:
+    """ndjson 한 줄의 day_summary를 검증한다.
+    JSON 파싱 실패, 빈 summary, 범위를 벗어난 day(환각 day)는 None 반환."""
+    try:
+        obj = json.loads(line)
+    except json.JSONDecodeError:
+        logger.warning("day_summary JSON 파싱 실패 — 스킵: %.60s", line)
+        return None
+
+    summary = (obj.get("summary") or "").strip()
+    day = obj.get("day")
+    if not summary or day not in valid_days:
+        logger.warning("day_summary 유효성 실패: day=%s summary_len=%d", day, len(summary))
+        return None
+
+    return json.dumps({"type": "day_summary", "day": day, "summary": summary}, ensure_ascii=False) + "\n"

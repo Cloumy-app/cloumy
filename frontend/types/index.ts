@@ -24,6 +24,11 @@ export interface Route {
   createdAt: string;
 }
 
+export interface RouteDaySummary {
+  dayNumber: number;
+  summary: string;
+}
+
 export interface RouteListItem {
   id: string;
   title: string;

@@ -1,6 +1,6 @@
 import json
 import pytest
-from app.services.place_validator import validate_route_slot
+from app.services.place_validator import validate_day_summary, validate_route_slot
 
 CANDIDATES = {"uuid-a": "카페 A", "uuid-b": "식당 B"}
 
@@ -56,3 +56,45 @@ async def test_missing_place_id_returns_slot():
     })
     result = await validate_route_slot(line, CANDIDATES)
     assert result is not None
+
+
+VALID_DAYS = {1, 2, 3}
+
+
+async def test_valid_day_summary_pass_through():
+    line = json.dumps({"type": "day_summary", "day": 1, "summary": "해운대 해변과 감천문화마을을 둘러보는 하루"})
+    result = await validate_day_summary(line, VALID_DAYS)
+    assert result is not None
+    obj = json.loads(result)
+    assert obj == {"type": "day_summary", "day": 1, "summary": "해운대 해변과 감천문화마을을 둘러보는 하루"}
+
+
+async def test_day_summary_empty_summary_rejected():
+    line = json.dumps({"type": "day_summary", "day": 1, "summary": "   "})
+    result = await validate_day_summary(line, VALID_DAYS)
+    assert result is None
+
+
+async def test_day_summary_missing_summary_rejected():
+    line = json.dumps({"type": "day_summary", "day": 1})
+    result = await validate_day_summary(line, VALID_DAYS)
+    assert result is None
+
+
+async def test_day_summary_out_of_range_day_rejected():
+    # 환각 day (요청 범위를 벗어남) 거부
+    line = json.dumps({"type": "day_summary", "day": 99, "summary": "정상 문장"})
+    result = await validate_day_summary(line, VALID_DAYS)
+    assert result is None
+
+
+async def test_day_summary_invalid_json_rejected():
+    result = await validate_day_summary("not-json", VALID_DAYS)
+    assert result is None
+
+
+async def test_day_summary_output_ends_with_newline():
+    line = json.dumps({"type": "day_summary", "day": 2, "summary": "정상 문장"})
+    result = await validate_day_summary(line, VALID_DAYS)
+    assert result is not None
+    assert result.endswith("\n")

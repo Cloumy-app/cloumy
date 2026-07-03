@@ -1,7 +1,7 @@
 """
 OR-Tools TSP 동선 최적화 서비스.
 Sonnet 스트리밍이 끝난 뒤 day별 슬롯을 Haversine 거리 기준으로 재정렬한다.
-좌표 없는 슬롯이 있으면 해당 day는 원본 LLM 순서를 유지한다.
+좌표 없는 슬롯은 최적화 대상에서 제외하고 순서 뒤쪽에 붙인다.
 """
 import json
 import logging
@@ -77,7 +77,7 @@ def reorder_slots(
     """
     ndjson 슬롯 리스트를 day별 TSP 최적 순서로 재정렬해 반환한다.
     - day 단위로 분리해 각각 독립적으로 최적화
-    - 좌표 조회 실패 시 해당 day는 LLM 원본 순서 유지
+    - 좌표 있는 슬롯만 TSP로 재정렬하고, 좌표 없는 슬롯은 원본 상대순서를 유지한 채 뒤에 붙인다
     - order 필드를 1부터 재할당
     """
     # 파싱
@@ -103,30 +103,28 @@ def reorder_slots(
                 result.append(json.dumps(s, ensure_ascii=False) + "\n")
             continue
 
-        # 좌표 추출 — 하나라도 없으면 day 전체 원본 유지
-        coords: list[tuple[float, float]] = []
-        has_missing = False
-        for s in day_slots:
-            pid = str(s.get("place_id", ""))
-            if pid not in coord_lookup:
-                logger.warning("day=%d: place_id=%s 좌표 없음 — day 원본 순서 유지", day, pid)
-                has_missing = True
-                break
-            coords.append(coord_lookup[pid])
+        # 좌표 있는 슬롯만 TSP 대상으로 분리 (원본 상대순서 유지)
+        with_coords = [s for s in day_slots if str(s.get("place_id", "")) in coord_lookup]
+        without_coords = [s for s in day_slots if str(s.get("place_id", "")) not in coord_lookup]
 
-        if has_missing:
-            for s in day_slots:
-                result.append(json.dumps(s, ensure_ascii=False) + "\n")
-            continue
+        if without_coords:
+            missing_ids = [str(s.get("place_id", "")) for s in without_coords]
+            logger.warning(
+                "day=%d: 좌표 없는 슬롯 %d건(%s) — 해당 슬롯 제외하고 TSP 최적화, 뒤에 추가",
+                day, len(without_coords), missing_ids,
+            )
 
-        order = _tsp_order(coords)
-        reordered = [day_slots[i] for i in order]
+        if len(with_coords) >= 2:
+            coords = [coord_lookup[str(s["place_id"])] for s in with_coords]
+            order = _tsp_order(coords)
+            with_coords = [with_coords[i] for i in order]
 
-        for new_order, slot in enumerate(reordered, start=1):
+        final = with_coords + without_coords
+        for new_order, slot in enumerate(final, start=1):
             slot = dict(slot)
             slot["order"] = new_order
             result.append(json.dumps(slot, ensure_ascii=False) + "\n")
 
-        logger.info("day=%d: %d슬롯 TSP 재정렬 완료", day, len(day_slots))
+        logger.info("day=%d: %d슬롯 TSP 재정렬 완료 (좌표없음 %d건)", day, len(day_slots), len(without_coords))
 
     return result

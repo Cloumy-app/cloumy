@@ -6,13 +6,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { getRouteSlots, toggleSlotPin as apiToggleSlotPin, deleteRouteSlot, deleteRoute } from '@/lib/api/routes';
+import { getRouteSlots, getRouteDaySummaries, toggleSlotPin as apiToggleSlotPin, deleteRouteSlot, deleteRoute } from '@/lib/api/routes';
 import { fetchForecast } from '@/lib/api/weather';
 import { useRouteStore } from '@/stores/useRouteStore';
 import { TripMap } from '@/components/map/TripMap';
 import { DayTabs } from '@/components/route/DayTabs';
 import { SlotCard } from '@/components/route/SlotCard';
-import type { BudgetLevel, SlotAlternative, SlotWithCoords } from '@/types';
+import type { BudgetLevel, RouteDaySummary, SlotAlternative, SlotWithCoords } from '@/types';
 import type { DayWeather, RainBlock } from '@/lib/api/weather';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -76,8 +76,16 @@ export default function RouteResultScreen() {
     transform: [{ translateY: sheetY.value }],
   }));
 
-  const { currentRoute, streamingSlots, isStreaming, selectedDay, setSelectedDay, toggleSlotPin, removeSlot } =
-    useRouteStore();
+  const {
+    currentRoute,
+    streamingSlots,
+    daySummaries: streamingDaySummaries,
+    isStreaming,
+    selectedDay,
+    setSelectedDay,
+    toggleSlotPin,
+    removeSlot,
+  } = useRouteStore();
 
   const destination = currentRoute?.destination ?? '';
   const routeStartDate = currentRoute?.startDate ?? '';
@@ -106,6 +114,17 @@ export default function RouteResultScreen() {
     enabled: !!destination && travelDates.length > 0 && !isStreaming,
     staleTime: 1000 * 60 * 60,
   });
+
+  const { data: daySummaries } = useQuery<RouteDaySummary[]>({
+    queryKey: ['day-summaries', routeId],
+    queryFn: () => getRouteDaySummaries(routeId!),
+    enabled: !!routeId && !isStreaming,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const currentDaySummary = hasApiSlots
+    ? daySummaries?.find((d) => d.dayNumber === selectedDay)?.summary
+    : streamingDaySummaries[selectedDay];
 
   const currentDateStr = routeStartDate ? getDateForDay(routeStartDate, selectedDay) : null;
   const currentDayWeather = currentDateStr ? weatherByDate?.[currentDateStr] : undefined;
@@ -346,8 +365,11 @@ export default function RouteResultScreen() {
                 )}
                 {isStreaming && <ActivityIndicator size="small" color="#0ea5e9" />}
               </View>
-              <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '500', marginTop: 2 }}>
-                위로 당기면 상세 일정이 펼쳐져요
+              <Text
+                style={{ fontSize: 11, color: '#94a3b8', fontWeight: '500', marginTop: 2 }}
+                numberOfLines={1}
+              >
+                {currentDaySummary ?? '위로 당기면 상세 일정이 펼쳐져요'}
               </Text>
             </View>
 
