@@ -6,21 +6,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, MapPin, Calendar, Sparkles, Trash2 } from 'lucide-react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { getMyRoutes, deleteRoute } from '@/lib/api/routes';
+import { getTripStatusLabel } from '@/lib/date';
 import type { RouteListItem } from '@/types';
 
 interface SpringPage<T> {
   content: T[];
   totalElements: number;
   totalPages: number;
-}
-
-function calcDDay(startDate: string): string {
-  const diff = Math.ceil(
-    (new Date(startDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
-  );
-  if (diff < 0) return '여행 완료';
-  if (diff === 0) return 'D-Day';
-  return `D-${diff}`;
 }
 
 function formatDateRange(start: string, end: string): string {
@@ -30,7 +22,7 @@ function formatDateRange(start: string, end: string): string {
 }
 
 function RouteCard({ route }: { route: RouteListItem }) {
-  const dday = calcDDay(route.startDate);
+  const dday = getTripStatusLabel(route.startDate, route.endDate);
   const isPast = dday === '여행 완료';
 
   return (

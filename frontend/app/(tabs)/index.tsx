@@ -4,6 +4,7 @@ import { Search, MapPin, Sparkles, Navigation, Calendar } from 'lucide-react-nat
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { getMyRoutes } from '@/lib/api/routes';
+import { getTripStatusLabel } from '@/lib/date';
 import { useAuthStore } from '@/stores/useAuthStore';
 import type { RouteListItem } from '@/types';
 
@@ -21,15 +22,6 @@ const RECOMMENDED_CITIES = [
   { id: '4', title: '제주 힐링 코스', emoji: '🏔️', bg: '#fef9c3' },
 ];
 
-function calcDDay(startDate: string): string {
-  const diff = Math.ceil(
-    (new Date(startDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
-  );
-  if (diff < 0) return '여행 중';
-  if (diff === 0) return 'D-Day';
-  return `D-${diff}`;
-}
-
 function formatDateRange(start: string, end: string): string {
   const s = new Date(start);
   const e = new Date(end);
@@ -37,7 +29,7 @@ function formatDateRange(start: string, end: string): string {
 }
 
 function UpcomingTripCard({ route }: { route: RouteListItem }) {
-  const dday = calcDDay(route.startDate);
+  const dday = getTripStatusLabel(route.startDate, route.endDate);
   return (
     <TouchableOpacity
       className="bg-slate-800 rounded-3xl overflow-hidden"
