@@ -10,7 +10,7 @@ import { devLogin } from '@/lib/api/auth';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useRouteStore } from '@/stores/useRouteStore';
 import { useAccommodationPinStore } from '@/stores/useAccommodationPinStore';
-import type { GroupType, BudgetLevel, Density, RouteSlot, AccommodationInput } from '@/types';
+import type { GroupType, BudgetLevel, Density, RouteSlot, AccommodationInput, TransportMode } from '@/types';
 import { BUDGET_LABEL } from '@/types';
 
 type SelectedAccommodation = { name: string; address: string | null; lat: number; lng: number; source: 'kakao' | 'manual' };
@@ -40,6 +40,7 @@ export default function RouteCreateStep4() {
     budgetLevel: string;
     hiddenGemRatio: string;
     density: string;
+    transportMode?: string;
   }>();
 
   const destination = params.destination ?? '여행지';
@@ -165,6 +166,7 @@ export default function RouteCreateStep4() {
         tags,
         hiddenGemRatio: selectedRatio,
         density: selectedDensity,
+        transportMode: params.transportMode as TransportMode | undefined,
         accommodations,
       },
       (slot: RouteSlot) => {

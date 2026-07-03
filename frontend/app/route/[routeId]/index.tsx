@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { getRoute, getRouteSlots, getRouteDaySummaries, toggleSlotPin as apiToggleSlotPin, deleteRouteSlot, deleteRoute } from '@/lib/api/routes';
+import { getRouteAccommodations } from '@/lib/api/accommodations';
 import { fetchForecast } from '@/lib/api/weather';
 import { useRouteStore } from '@/stores/useRouteStore';
 import { TripMap } from '@/components/map/TripMap';
@@ -119,6 +120,13 @@ export default function RouteResultScreen() {
   const { data: apiSlots, isLoading: slotsLoading } = useQuery({
     queryKey: ['route-slots', routeId],
     queryFn: () => getRouteSlots(routeId!),
+    enabled: !!routeId && !isStreaming,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const { data: accommodations } = useQuery({
+    queryKey: ['route-accommodations', routeId],
+    queryFn: () => getRouteAccommodations(routeId!),
     enabled: !!routeId && !isStreaming,
     staleTime: 1000 * 60 * 5,
   });
@@ -269,6 +277,7 @@ export default function RouteResultScreen() {
       <View style={StyleSheet.absoluteFill}>
         <TripMap
           slots={displaySlots}
+          accommodations={accommodations ?? []}
           selectedDay={selectedDay}
           height={SCREEN_HEIGHT}
           focusedSlotId={focusedSlotId ?? undefined}

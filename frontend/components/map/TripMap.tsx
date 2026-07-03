@@ -1,19 +1,20 @@
 import { useRef, useEffect } from 'react';
 import { View, Text } from 'react-native';
 import MapView, { Marker, Polyline, type MapViewMethods, type Region } from 'react-native-maps';
-import type { SlotWithCoords } from '@/types';
+import type { Accommodation, SlotWithCoords } from '@/types';
 
 const DAY_COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6'];
 
 interface TripMapProps {
   slots: SlotWithCoords[];
+  accommodations?: Accommodation[];
   selectedDay: number;
   height?: number;
   focusedSlotId?: string;
   onSlotPress?: (slotId: string) => void;
 }
 
-export function TripMap({ slots, selectedDay, height = 300, focusedSlotId, onSlotPress }: TripMapProps) {
+export function TripMap({ slots, accommodations = [], selectedDay, height = 300, focusedSlotId, onSlotPress }: TripMapProps) {
   const mapRef = useRef<MapViewMethods>(null);
 
   const days = [...new Set(slots.map((s) => s.dayNumber))].sort();
@@ -123,6 +124,26 @@ export function TripMap({ slots, selectedDay, height = 300, focusedSlotId, onSlo
           </Marker>
         );
       })}
+
+      {/* 숙소 마커 — day에 종속되지 않으므로 DAY_COLORS 안 쓰고 고정 색상, 슬롯 마커에 안 가리게 zIndex 우선 */}
+      {accommodations
+        .filter((a) => a.lat !== 0 && a.lng !== 0)
+        .map((acc) => (
+          <Marker
+            key={acc.id}
+            coordinate={{ latitude: acc.lat, longitude: acc.lng }}
+            anchor={{ x: 0.5, y: 0.5 }}
+            title={acc.name}
+            zIndex={999}
+          >
+            <View
+              className="rounded-full items-center justify-center bg-indigo-600"
+              style={{ width: 30, height: 30, borderWidth: 2, borderColor: '#ffffff' }}
+            >
+              <Text style={{ fontSize: 14 }}>🏨</Text>
+            </View>
+          </Marker>
+        ))}
     </MapView>
   );
 }
