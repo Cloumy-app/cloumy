@@ -1,5 +1,5 @@
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
-import { Wallet, MapPin, CloudSun } from 'lucide-react-native';
+import { Wallet, MapPin, CloudSun, Sun, Cloud, CloudRain } from 'lucide-react-native';
 import type { SlotWithCoords } from '@/types';
 import type { DayWeather } from '@/lib/api/weather';
 
@@ -22,6 +22,18 @@ function getDateForDay(startDate: string, dayNumber: number): string {
   const date = new Date(startDate);
   date.setDate(date.getDate() + dayNumber - 1);
   return date.toISOString().split('T')[0];
+}
+
+const WEATHER_THEME = {
+  sun:   { Icon: Sun,      bg: 'bg-amber-50',  text: 'text-amber-600', color: '#d97706' },
+  cloud: { Icon: Cloud,    bg: 'bg-slate-100', text: 'text-slate-500', color: '#64748b' },
+  rain:  { Icon: CloudRain, bg: 'bg-sky-50',   text: 'text-sky-600',   color: '#0284c7' },
+} as const;
+
+function getWeatherTheme(weather: DayWeather) {
+  if (weather.rainyBlocks.length >= 2) return WEATHER_THEME.rain;
+  if (weather.rainyBlocks.length === 0 && weather.description.includes('맑음')) return WEATHER_THEME.sun;
+  return WEATHER_THEME.cloud;
 }
 
 export function DayTabs({ slots, selectedDay, onSelectDay, weatherByDate, startDate, variant = 'planner' }: DayTabsProps) {
@@ -115,30 +127,33 @@ export function DayTabs({ slots, selectedDay, onSelectDay, weatherByDate, startD
 
       {daySlotCount > 0 && variant === 'planner' && (
         <View className="flex-row gap-2 px-6 pb-2">
-          <View className="flex-1 bg-sky-50 rounded-xl px-3 py-2 items-center">
+          <View className="flex-1 bg-sky-50 rounded-xl px-3 py-2 items-center justify-center">
             <Text className="text-sky-600 font-black text-base" numberOfLines={1}>
               {formatBudget(dayBudget)}
             </Text>
             <Text className="text-slate-500 text-[10px] font-medium">일별 예상비용</Text>
           </View>
-          <View className="flex-1 bg-emerald-50 rounded-xl px-3 py-2 items-center">
+          <View className="flex-1 bg-emerald-50 rounded-xl px-3 py-2 items-center justify-center">
             <Text className="text-emerald-600 font-black text-base">{daySlotCount}곳</Text>
             <Text className="text-slate-500 text-[10px] font-medium">방문장소</Text>
           </View>
-          {weather ? (
-            <View className="flex-1 bg-amber-50 rounded-xl px-3 py-2 items-center">
-              <Text className="text-amber-600 font-black text-base" numberOfLines={1}>
-                {weather.description} {weather.temp}°
-              </Text>
-              <Text className="text-slate-500 text-[10px] font-medium">여행 날씨</Text>
-              {weather.rainyBlocks.length > 0 && weather.rainyBlocks.length < 3 && (
-                <Text className="text-sky-600 text-[9px] font-bold" numberOfLines={1}>
-                  {weather.rainyBlocks.join('·')} 비
+          {weather ? (() => {
+            const theme = getWeatherTheme(weather);
+            return (
+              <View className={`flex-1 ${theme.bg} rounded-xl px-3 py-2 items-center justify-center`}>
+                <Text className={`${theme.text} font-black text-base`} numberOfLines={1}>
+                  {weather.description} {weather.temp}°
                 </Text>
-              )}
-            </View>
-          ) : (
-            <View className="flex-1 bg-slate-50 rounded-xl px-3 py-2 items-center">
+                <theme.Icon size={14} color={theme.color} />
+                {weather.rainyBlocks.length > 0 && weather.rainyBlocks.length < 3 && (
+                  <Text className="text-sky-600 text-[9px] font-bold" numberOfLines={1}>
+                    {weather.rainyBlocks.join('·')} 비
+                  </Text>
+                )}
+              </View>
+            );
+          })() : (
+            <View className="flex-1 bg-slate-50 rounded-xl px-3 py-2 items-center justify-center">
               <Text className="text-slate-400 font-black text-base" numberOfLines={1}>
                 정보 없음
               </Text>

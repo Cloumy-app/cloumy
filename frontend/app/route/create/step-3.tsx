@@ -8,7 +8,7 @@ import { streamRoute } from '@/lib/api/routes';
 import { devLogin } from '@/lib/api/auth';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useRouteStore } from '@/stores/useRouteStore';
-import type { GroupType, BudgetLevel, RouteSlot } from '@/types';
+import type { GroupType, BudgetLevel, Density, RouteSlot } from '@/types';
 import { BUDGET_LABEL } from '@/types';
 
 const RATIO_OPTIONS = [
@@ -16,6 +16,14 @@ const RATIO_OPTIONS = [
   { label: '혼합',       desc: '관광지와 숨은 명소 균형 있게', ratio: 0.5 },
   { label: '숨은 명소 위주', desc: '현지인만 아는 특별한 장소', ratio: 0.9 },
 ] as const;
+
+const DENSITY_OPTIONS = [
+  { label: '널널하게', desc: '여유롭게 하루 3곳 정도', density: 'relaxed' as const },
+  { label: '보통',     desc: '하루 4~5곳, 기존과 동일', density: 'normal' as const },
+  { label: '알차게',   desc: '하루 6곳까지 알차게 이동', density: 'packed' as const },
+] as const;
+
+const DENSITY_SLOTS_PER_DAY: Record<Density, number> = { relaxed: 3, normal: 4.5, packed: 6 };
 
 export default function RouteCreateStep3() {
   const params = useLocalSearchParams<{
@@ -39,10 +47,11 @@ export default function RouteCreateStep3() {
   ];
 
   const [selectedRatio, setSelectedRatio] = useState(0.5);
+  const [selectedDensity, setSelectedDensity] = useState<Density>('normal');
   const [isGenerating, setIsGenerating] = useState(false);
   const [slotCount, setSlotCount] = useState(0);
-  const [messageIndex, setMessageIndex] = useState(0);
   const [progress, setProgress] = useState(0);
+  const messageIndex = Math.min(LOADING_MESSAGES.length - 1, Math.floor(progress / 20));
 
   const stopStreamRef = useRef<(() => void) | null>(null);
   const routeIdRef = useRef<string>('');
@@ -56,22 +65,14 @@ export default function RouteCreateStep3() {
   const { setTokens, setUser } = useAuthStore();
   const queryClient = useQueryClient();
 
-  // 생성 중 메시지 순환
-  useEffect(() => {
-    if (!isGenerating) return;
-    const interval = setInterval(() => {
-      setMessageIndex((i) => (i + 1) % LOADING_MESSAGES.length);
-    }, 2500);
-    return () => clearInterval(interval);
-  }, [isGenerating]);
-
-  // 슬롯 수에 따른 프로그레스 계산
+  // 슬롯 수에 따른 프로그레스 계산 — 실제 날 수(nights+1)와 선택된 밀도 기준
   useEffect(() => {
     if (!isGenerating) return;
     const nights = Number(params.nights ?? 2);
-    const estimated = nights * 4;
+    const days = nights + 1;
+    const estimated = Math.max(1, Math.round(days * DENSITY_SLOTS_PER_DAY[selectedDensity]));
     setProgress(Math.min(95, Math.round((slotCount / estimated) * 100)));
-  }, [slotCount, isGenerating]);
+  }, [slotCount, isGenerating, selectedDensity]);
 
   useEffect(() => {
     return () => {
@@ -110,7 +111,6 @@ export default function RouteCreateStep3() {
     routeIdRef.current = '';
     setSlotCount(0);
     setProgress(0);
-    setMessageIndex(0);
     setIsGenerating(true);
     setIsStreaming(true);
 
@@ -123,6 +123,7 @@ export default function RouteCreateStep3() {
         budgetLevel: (params.budgetLevel ?? 'mid') as BudgetLevel,
         tags,
         hiddenGemRatio: selectedRatio,
+        density: selectedDensity,
       },
       (slot: RouteSlot) => {
         if (!isMountedRef.current) return;
@@ -219,6 +220,39 @@ export default function RouteCreateStep3() {
                 <TouchableOpacity
                   key={option.ratio}
                   onPress={() => setSelectedRatio(option.ratio)}
+                  className={`flex-row items-center px-4 py-4 rounded-2xl border-2 ${
+                    selected ? 'border-sky-500 bg-sky-50' : 'border-slate-200 bg-white'
+                  }`}
+                  activeOpacity={0.8}
+                >
+                  <View className="flex-1">
+                    <Text className={`font-bold text-sm ${selected ? 'text-sky-700' : 'text-slate-700'}`}>
+                      {option.label}
+                    </Text>
+                    <Text className="text-xs text-slate-500 mt-0.5">{option.desc}</Text>
+                  </View>
+                  <View className={`w-5 h-5 rounded-full border-2 items-center justify-center ${
+                    selected ? 'border-sky-500 bg-sky-500' : 'border-slate-300'
+                  }`}>
+                    {selected && <View className="w-2 h-2 rounded-full bg-white" />}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* 일정 밀도 선택 */}
+        <View className="mb-8">
+          <Text className="font-bold text-slate-700 mb-1">일정 밀도</Text>
+          <Text className="text-xs text-slate-400 mb-4">하루에 몇 곳을 둘러볼지 선택하세요</Text>
+          <View className="gap-3">
+            {DENSITY_OPTIONS.map((option) => {
+              const selected = selectedDensity === option.density;
+              return (
+                <TouchableOpacity
+                  key={option.density}
+                  onPress={() => setSelectedDensity(option.density)}
                   className={`flex-row items-center px-4 py-4 rounded-2xl border-2 ${
                     selected ? 'border-sky-500 bg-sky-50' : 'border-slate-200 bg-white'
                   }`}
