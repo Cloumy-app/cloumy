@@ -36,6 +36,16 @@ public class AccommodationController {
         return ApiResponse.ok(accommodationService.search(keyword));
     }
 
+    public record ReverseGeocodeResponse(String address) {}
+
+    // 지도 핀 선택 fallback용 — 좌표 -> 주소
+    @GetMapping("/accommodations/reverse-geocode")
+    public ApiResponse<ReverseGeocodeResponse> reverseGeocode(
+            @RequestParam double lat, @RequestParam double lng
+    ) {
+        return ApiResponse.ok(new ReverseGeocodeResponse(accommodationService.reverseGeocode(lat, lng)));
+    }
+
     @PostMapping("/routes/{routeId}/accommodations")
     public ApiResponse<AccommodationResponse> create(
             @PathVariable UUID routeId,
