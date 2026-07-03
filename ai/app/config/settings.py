@@ -12,6 +12,7 @@ class Settings(BaseSettings):
 
     # 선택값 — 배치 수집기·Phase 2에서 사용
     kakao_rest_api_key: str = ""
+    tmap_api_key: str = ""  # 대중교통 이동시간 계산 (자동차/도보는 거리 근사치라 API 불필요)
     google_maps_api_key: str = ""
     openweathermap_api_key: str = ""
     tourapi_key: str = ""

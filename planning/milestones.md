@@ -201,12 +201,13 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 
 **[FastAPI]**
 - [x] `RouteGenRequest`에 숙소 좌표 필드 추가 + TSP 시작/종료 앵커로 반영 (`models/schemas.py`, `services/tsp_service.py`, `services/route_service.py`) — 숙소=depot 왕복 TSP, 체크아웃 당일은 매핑 제외, 최적화는 Haversine 유지 — 2026-07-03
-- [ ] 이동수단별 실 라우팅 클라이언트 신규 추가 — 자동차: 카카오모빌리티, 도보: Tmap, 대중교통: ODsay. day 확정 후 구간별 enrichment로 파이프라인 삽입(호출량 최소화). Spring이 이미 `transport_mode`를 요청에 실어 보내는 중(현재는 무시됨) — 이 태스크에서 소비 + ndjson에 `transport_to_next`/`transport_minutes` 실어서 스트리밍, Spring `saveStreamingSlot`이 파싱해 저장하는 부분까지 포함
+- [x] 이동수단별 이동시간 반영 — 자동차/도보는 거리 근사치(Haversine×1.3÷평균속도, 외부 API 불필요), 대중교통만 Tmap 대중교통 API 실호출(`services/transport_service.py` 신규). 카카오모빌리티/네이버/ODsay/구글은 검토 후 배제(도보·대중교통 오픈API 부재 또는 한국 도보길찾기 자체 규제) — 2026-07-04
 
 **[Spring]**
 - [x] `Accommodation` 엔티티 + 마이그레이션(V7) + 실시간 숙소 검색 프록시 API — 카카오 로컬 검색 실시간 호출(TourAPI 시드 안 씀), route 전용 저장(공유 캐시 아님), 역지오코딩도 카카오 재사용 — 2026-07-03
 - [x] 숙소 데이터를 AI 생성 요청에 전달 — Route 생성과 같은 트랜잭션으로 숙소 저장 + `AiServiceClient`가 FastAPI에 `accommodations`/`start_date` 전달, 숙소 있으면 캐시 우회. **이걸로 숙소 입력 → TSP 앵커 반영 end-to-end 완성** — 2026-07-03
-- [x] `Route.transportMode` 필드 매핑 + AI 요청에 `transport_mode` 전달 — 2026-07-04. `route_slots.transport_to_next`/`transport_minutes` 저장은 실 데이터 소스가 없어(AI ndjson에 필드 자체가 없음) 위 `[FastAPI]` 이동수단 라우팅 태스크로 이관
+- [x] `Route.transportMode` 필드 매핑 + AI 요청에 `transport_mode` 전달 — 2026-07-04
+- [x] `RouteSlot`/`RouteSlotService`에 `transport_to_next`/`transport_minutes` 저장 로직 — AI ndjson에 실린 이동시간을 파싱해 저장. **이걸로 이동시간 표시 end-to-end 완성** — 2026-07-04
 
 **[Frontend]**
 - [ ] 숙소 검색 + 지도 핀 선택(fallback) UI, 루트 생성 폼에 스텝 추가
