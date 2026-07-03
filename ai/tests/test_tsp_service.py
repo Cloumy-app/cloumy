@@ -1,6 +1,8 @@
 import json
+from itertools import permutations
+
 import pytest
-from app.services.tsp_service import _haversine_m, reorder_slots
+from app.services.tsp_service import _haversine_m, _tsp_order, reorder_slots
 
 
 def _make_slot(day: int, order: int, place_id: str, place_name: str = "X") -> str:
@@ -18,6 +20,36 @@ def test_haversine_seoul_to_nearby():
 
 def test_haversine_same_point():
     assert _haversine_m(37.0, 127.0, 37.0, 127.0) == 0
+
+
+def _path_distance(coords: list[tuple[float, float]], order: list[int]) -> int:
+    return sum(
+        _haversine_m(*coords[order[i]], *coords[order[i + 1]])
+        for i in range(len(order) - 1)
+    )
+
+
+def test_tsp_order_minimizes_open_path_not_round_trip():
+    # 시작점(0번)을 고정하고 나머지 순열을 전수조사해 "진짜 최단 편도 거리"를 구한 뒤,
+    # _tsp_order()가 이 편도 거리를 최소화하는지 검증한다.
+    # (폐루프로 최적화하면 "마지막 지점 -> 시작점 복귀" 비용까지 고려하게 되어
+    # 편도 기준 최적해와 다른 순서를 반환할 수 있다.)
+    coords = [
+        (37.6724338655586, 126.95140605674521),
+        (37.48455135331991, 127.02674126124717),
+        (37.5855106990026, 126.87515190240873),
+        (37.67292387679047, 127.09483564281129),
+        (37.64306517079898, 127.07064978513188),
+    ]
+    order = _tsp_order(coords)
+    assert sorted(order) == list(range(len(coords)))  # 모든 지점을 정확히 한 번씩 방문
+
+    got_distance = _path_distance(coords, order)
+    best_distance = min(
+        _path_distance(coords, [0, *perm])
+        for perm in permutations(range(1, len(coords)))
+    )
+    assert got_distance == best_distance
 
 
 def test_reorder_slots_one_slot_unchanged():

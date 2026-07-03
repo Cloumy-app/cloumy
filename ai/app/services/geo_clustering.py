@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 _MIN_CANDIDATES_FOR_CLUSTERING = 5
 _KMEANS_MAX_ITER = 20
+_MIN_CLUSTER_SIZE = 3
 
 
 def cluster_label(idx: int) -> str:
@@ -105,6 +106,21 @@ def cluster_candidates(
 
     coords = np.array([[c.metadata["lat"], c.metadata["lng"]] for c in candidates])
     labels = _kmeans_labels(coords, k, seed)
+
+    # 최소 클러스터 크기 보장: k-means 수렴 후 특정 구역이 극단적으로 작으면
+    # (예: 후보 1건짜리 고립 구역) 가장 큰 클러스터에서 지리적으로 가장 가까운
+    # 포인트를 이관한다. 수렴 루프 내부가 아니라 후처리로 한 번만 적용해 진동을 피한다.
+    sizes = np.bincount(labels, minlength=k)
+    for i in range(k):
+        while sizes[i] < _MIN_CLUSTER_SIZE:
+            biggest = sizes.argmax()
+            if biggest == i or sizes[biggest] <= _MIN_CLUSTER_SIZE:
+                break  # 이관할 여유 있는 클러스터가 없음
+            biggest_idx = np.where(labels == biggest)[0]
+            centroid_i = coords[labels == i].mean(axis=0)
+            nearest = biggest_idx[np.argmin(np.linalg.norm(coords[biggest_idx] - centroid_i, axis=1))]
+            labels[nearest] = i
+            sizes = np.bincount(labels, minlength=k)
 
     clusters = [
         [c for c, lbl in zip(candidates, labels) if lbl == i] for i in range(k)

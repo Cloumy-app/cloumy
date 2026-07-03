@@ -7,6 +7,7 @@ from langchain_core.documents import Document
 
 import app.services.route_service as route_service
 from app.services.route_service import _cache_key, _is_weather_sensitive, stream_route
+from app.services.geo_clustering import cluster_candidates
 from app.models.schemas import RouteGenRequest
 
 
@@ -33,7 +34,16 @@ def test_cache_key_themes_sorted():
 def test_cache_key_default_ratio():
     # hidden_gem_ratio=None → 기본값 0.2
     key = _cache_key(_make_req(hidden_gem_ratio=None))
-    assert key.endswith(":0.2")
+    assert ":0.2:" in key
+
+
+def test_cache_key_density_distinguishes():
+    # density가 다르면 다른 캐시 키를 가져야 함 (밀도별 캐시 오염 방지)
+    key_normal = _cache_key(_make_req(density="normal"))
+    key_packed = _cache_key(_make_req(density="packed"))
+    assert key_normal != key_packed
+    assert key_normal.endswith(":normal")
+    assert key_packed.endswith(":packed")
 
 
 def test_is_weather_sensitive_none_start_date():
@@ -95,6 +105,13 @@ class _FakeAnthropicStream:
     @property
     def text_stream(self):
         return self._gen()
+
+    async def get_final_message(self):
+        message = MagicMock()
+        message.usage = MagicMock(
+            cache_creation_input_tokens=0, cache_read_input_tokens=0, input_tokens=0
+        )
+        return message
 
 
 @pytest.mark.asyncio
@@ -173,6 +190,41 @@ async def test_stream_route_activates_clustering_and_labels_candidates():
     assert "[구역 A]" in user_message
     assert "[구역 B]" in user_message
     assert "Day-구역 매핑" in user_message
+
+
+@pytest.mark.asyncio
+async def test_stream_route_hallucination_replacement_respects_day_region():
+    # 클러스터링이 활성화된 상태에서 환각(hallucination) place_id가 발생하면,
+    # 전체 후보가 아니라 그 Day에 배정된 구역(클러스터) 안에서만 대체돼야 한다.
+    candidates = _clustered_candidates()
+    clusters = cluster_candidates(candidates, k=2)  # route_service와 동일한 기본 seed(42)
+    # 이 fixture/seed 조합에서 clusters[0]=서울(day1), clusters[1]=부산(day2)이다.
+    # candidate_lookup의 "전체 후보 중 첫 번째" 항목(s0)은 day1(서울) 소속이므로,
+    # 일부러 day2(부산)에서 환각을 발생시켜 지역 무시 버그가 있으면 s0(day1 소속)으로
+    # 새는 것을 잡아낸다.
+    day1_ids = {doc.metadata["id"] for doc in clusters[0]}
+    day2_ids = {doc.metadata["id"] for doc in clusters[1]}
+
+    valid_id = next(iter(day2_ids))
+    day2 = (
+        f'{{"day":2,"order":1,"place_id":"{valid_id}","place_name":"V","tip":"","duration_minutes":60,"budget_estimate":5000}}\n'
+        '{"day":2,"order":2,"place_id":"fake-id","place_name":"없는 곳","tip":"","duration_minutes":60,"budget_estimate":5000}\n'
+    )
+    fake_stream = _FakeAnthropicStream([day2])
+
+    mock_pgvector = MagicMock()
+    mock_pgvector.return_value.ainvoke = AsyncMock(return_value=candidates)
+
+    with patch.object(route_service, "PgvectorRetriever", mock_pgvector), \
+         patch.object(route_service._anthropic.messages, "stream", return_value=fake_stream):
+        results = []
+        async for line in stream_route(_make_req(nights=1), db=MagicMock(), redis=None):
+            results.append(line)
+
+    ids = {json.loads(r)["place_id"] for r in results}
+    assert "fake-id" not in ids
+    assert ids <= day2_ids
+    assert not (ids & day1_ids)
 
 
 @pytest.mark.asyncio

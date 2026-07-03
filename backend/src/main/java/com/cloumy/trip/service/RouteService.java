@@ -62,6 +62,7 @@ public class RouteService {
                 .groupType(req.groupType().toLowerCase())
                 .budgetLevel(req.budgetLevel().toLowerCase())
                 .tags(tags)
+                .density(req.density() != null ? req.density().toLowerCase() : "normal")
                 .build();
 
         return routeRepository.save(route);

@@ -43,7 +43,14 @@ def _tsp_order(coords: list[tuple[float, float]]) -> list[int]:
         for i in range(n)
     ]
 
-    manager = pywrapcp.RoutingIndexManager(n, 1, 0)
+    # 편도(open-path) 최적화: 하루 일정은 왕복이 아니므로 "마지막 지점 -> 시작점"
+    # 복귀 비용이 없어야 한다. 비용 0인 더미 종점 노드(인덱스 n)를 추가해
+    # 시작=0번(기존과 동일), 끝=더미로 고정하면 복귀 비용 없이 최단 편도 경로를 얻는다.
+    for row in dist_matrix:
+        row.append(0)
+    dist_matrix.append([0] * (n + 1))
+
+    manager = pywrapcp.RoutingIndexManager(n + 1, 1, [0], [n])
     routing = pywrapcp.RoutingModel(manager)
 
     def dist_cb(from_idx: int, to_idx: int) -> int:

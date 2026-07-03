@@ -23,6 +23,9 @@ class PostgisTagRetriever(BaseRetriever):
     async def _fetch(self, radius_m: int, use_tags: bool) -> list[asyncpg.Record]:
         lng, lat = self.city_coords
         if use_tags:
+            # places.category_tags는 항상 "#"로 시작(예: #관광, #야경)하는데, 호출부(프론트
+            # 테마 선택 등)가 "#" 없이 넘기는 경우가 있어 그대로 비교하면 항상 0건이 된다.
+            normalized_tags = [t if t.startswith("#") else f"#{t}" for t in self.tags]
             return await self.db.fetch(
                 """
                 SELECT
@@ -39,9 +42,9 @@ class PostgisTagRetriever(BaseRetriever):
                 AND category_tags && $4::text[]
                 AND is_active = true
                 ORDER BY RANDOM()
-                LIMIT 50
+                LIMIT 80
                 """,
-                lng, lat, radius_m, self.tags,
+                lng, lat, radius_m, normalized_tags,
             )
         return await self.db.fetch(
             """
@@ -58,7 +61,7 @@ class PostgisTagRetriever(BaseRetriever):
             )
             AND is_active = true
             ORDER BY RANDOM()
-            LIMIT 50
+            LIMIT 80
             """,
             lng, lat, radius_m,
         )
@@ -67,14 +70,14 @@ class PostgisTagRetriever(BaseRetriever):
         use_tags = bool(self.tags)
         rows = await self._fetch(self.radius_m, use_tags)
 
-        # 후보 0건 → 반경 50km로 자동 확장
-        if not rows and self.radius_m < 50000:
-            logger.info("후보 0건 — 반경 %dm → 50000m 확장", self.radius_m)
+        # 후보 3건 미만 → 반경 50km로 자동 확장 (대안 추천 등 최소 개수 보장이 필요한 호출부 대응)
+        if len(rows) < 3 and self.radius_m < 50000:
+            logger.info("후보 %d건 — 반경 %dm → 50000m 확장", len(rows), self.radius_m)
             rows = await self._fetch(50000, use_tags)
 
-        # 여전히 0건이고 태그 필터를 썼다면 태그 제거 후 재시도
-        if not rows and use_tags:
-            logger.info("태그 적용 후에도 0건 — 태그 필터 제거 재시도")
+        # 여전히 3건 미만이고 태그 필터를 썼다면 태그 제거 후 재시도
+        if len(rows) < 3 and use_tags:
+            logger.info("확장 후에도 %d건 — 태그 필터 제거 재시도", len(rows))
             rows = await self._fetch(50000, use_tags=False)
 
         return [
@@ -139,7 +142,7 @@ class PgvectorRetriever(BaseRetriever):
                     AND is_active = true
                     AND embedding IS NOT NULL
                     ORDER BY embedding <=> $1::vector
-                    LIMIT 50
+                    LIMIT 80
                     """,
                     query_vec, lng, lat, radius_m,
                 )
