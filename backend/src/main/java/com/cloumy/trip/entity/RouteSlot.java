@@ -58,7 +58,8 @@ public class RouteSlot {
 
     @Builder
     private RouteSlot(UUID routeId, UUID placeId, int dayNumber, int orderIndex,
-                      Integer durationMinutes, Integer estimatedCost, String tips) {
+                      Integer durationMinutes, Integer estimatedCost, String tips,
+                      String transportToNext, Integer transportMinutes) {
         this.routeId = routeId;
         this.placeId = placeId;
         this.dayNumber = dayNumber;
@@ -66,6 +67,8 @@ public class RouteSlot {
         this.durationMinutes = durationMinutes;
         this.estimatedCost = estimatedCost;
         this.tips = tips;
+        this.transportToNext = transportToNext;
+        this.transportMinutes = transportMinutes;
         this.pinned = false;
     }
 

@@ -68,6 +68,11 @@ public class RouteSlotService {
             return;
         }
 
+        // transport_minutes는 필드 자체가 없는 경우(대부분의 슬롯 — 이동수단 미지정 요청)와
+        // 0분인 경우를 구분해야 해서 asInt(0) 대신 has()로 먼저 존재를 확인한다.
+        Integer transportMinutes = node.has("transport_minutes")
+                ? node.path("transport_minutes").asInt() : null;
+
         RouteSlot slot = RouteSlot.builder()
                 .routeId(routeId)
                 .placeId(UUID.fromString(placeIdStr))
@@ -76,6 +81,8 @@ public class RouteSlotService {
                 .durationMinutes(node.path("duration_minutes").asInt(0))
                 .estimatedCost(node.path("budget_estimate").asInt(0))
                 .tips(node.path("tip").asText(null))
+                .transportToNext(node.path("transport_to_next").asText(null))
+                .transportMinutes(transportMinutes)
                 .build();
         routeSlotRepository.save(slot);
     }
