@@ -12,6 +12,7 @@ class RouteGenRequest(BaseModel):
     themes: list[str] = Field(default_factory=list)
     hidden_gem_ratio: float | None = None  # 0.0(관광지 위주) ~ 1.0(숨은 명소 위주)
     start_date: date | None = None  # 여행 시작일 — 날씨 예보 조회에 사용
+    density: Literal["relaxed", "normal", "packed"] = "normal"
 
     @field_validator("nights")
     @classmethod

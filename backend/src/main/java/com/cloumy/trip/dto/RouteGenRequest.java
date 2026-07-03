@@ -17,7 +17,8 @@ public record RouteGenRequest(
         @NotBlank String groupType,
         @NotBlank String budgetLevel,
         List<String> tags,
-        @DecimalMin("0.0") @DecimalMax("1.0") Double hiddenGemRatio
+        @DecimalMin("0.0") @DecimalMax("1.0") Double hiddenGemRatio,
+        String density
 ) {
     @AssertTrue(message = "종료일은 시작일 이후여야 합니다")
     public boolean isDateRangeValid() {

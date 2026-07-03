@@ -48,6 +48,30 @@ async def test_output_ends_with_newline():
     assert result.endswith("\n")
 
 
+async def test_duplicate_valid_place_replaced():
+    # 유효한 place_id지만 같은 Day에서 이미 사용된 장소면 다른 후보로 교체
+    line = json.dumps({
+        "day": 1, "order": 2, "place_id": "uuid-a",
+        "place_name": "카페 A", "tip": "", "duration_minutes": 60, "budget_estimate": 10000,
+    })
+    result = await validate_route_slot(line, CANDIDATES, used_place_ids={"uuid-a"})
+    assert result is not None
+    assert '"uuid-a"' not in result
+    assert "uuid-b" in result
+
+
+async def test_hallucination_avoids_already_used_place():
+    # 환각 place_id를 교체할 때, 같은 Day에서 이미 쓰인 후보는 피해야 함
+    line = json.dumps({
+        "day": 1, "order": 2, "place_id": "fake-uuid",
+        "place_name": "없는 곳", "tip": "", "duration_minutes": 60, "budget_estimate": 5000,
+    })
+    result = await validate_route_slot(line, CANDIDATES, used_place_ids={"uuid-a"})
+    assert result is not None
+    assert "uuid-b" in result
+    assert '"uuid-a"' not in result
+
+
 async def test_missing_place_id_returns_slot():
     # place_id 필드 자체가 없으면 pass-through
     line = json.dumps({

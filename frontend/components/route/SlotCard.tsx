@@ -239,12 +239,17 @@ export function SlotCard({
       >
         {/* 번호 원 */}
         <View className="items-center">
-          <View className={`w-10 h-10 rounded-full items-center justify-center z-10 shadow-sm ${
+          <View className={`relative w-10 h-10 rounded-full items-center justify-center z-10 shadow-sm ${
             pinned ? 'bg-sky-500 shadow-sky-500/30' : 'bg-white border border-slate-200'
           }`}>
             <Text className={`font-black text-sm ${pinned ? 'text-white' : 'text-slate-500'}`}>
               {index + 1}
             </Text>
+            {isRainy && (
+              <View className="absolute -top-2 -right-2 z-20">
+                <CloudRain size={19} color="#0ea5e9" />
+              </View>
+            )}
           </View>
           {startTime && (
             <Text className="text-[10px] font-bold text-slate-500 mt-2 whitespace-nowrap">{startTime}</Text>
@@ -301,7 +306,6 @@ export function SlotCard({
           )}
 
           <View className="flex-row gap-3 mt-1 items-center flex-wrap">
-            {isRainy && <CloudRain size={12} color="#0ea5e9" />}
             {!startTime && duration != null && (
               <Text className="text-xs text-slate-400">⏱ {duration}분</Text>
             )}

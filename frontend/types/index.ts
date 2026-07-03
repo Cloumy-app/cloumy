@@ -84,10 +84,12 @@ export interface RouteGenRequest {
   budgetLevel: BudgetLevel;
   tags: string[];
   hiddenGemRatio?: number;
+  density?: Density;
 }
 
 export type GroupType = 'solo' | 'couple' | 'friends' | 'family';
 export type BudgetLevel = 'tight' | 'budget' | 'mid' | 'premium' | 'luxury';
+export type Density = 'relaxed' | 'normal' | 'packed';
 export type PassType = 'free' | 'basic' | 'premium';
 export type BudgetStatus = 'ok' | 'soft' | 'hard';
 

@@ -33,7 +33,7 @@ ROUTE_GEN_SYSTEM_PROMPT = """당신은 한국 여행 전문 플래너입니다. 
 {"type": "day_summary", "day": 1, "summary": "그날 분위기를 담은 한 문장(20~40자, 장소명 나열 금지)"}
 
 규칙:
-- 하루 최대 5슬롯: 식사 2 + 관광/체험 2 + 카페/기타 1
+- 슬롯 수는 density 기준: relaxed=하루 3슬롯(여유롭게) | normal=하루 4~5슬롯(식사 2+관광/체험 2+카페/기타 1) | packed=하루 6슬롯(알차게)
 - 동선 효율 최우선 (같은 구역끼리 묶기)
 - budget_level 기준 (슬롯당 budget_estimate): tight(초절약)=~4,000원 | budget(알뜰)=~6,000원 | mid(여유롭게)=~12,000원 | premium(풍족하게)=~20,000원 | luxury(특별하게)=30,000원 이상
 - place_id는 반드시 후보 목록의 실제 id 값만 사용 (임의 생성 금지)
@@ -54,9 +54,9 @@ ROUTE_GEN_SYSTEM_PROMPT = """당신은 한국 여행 전문 플래너입니다. 
 - 라벨이 없으면 기존처럼 이동 30분 이내로 가까운 장소끼리 묶어 배치할 것 (fallback)
 
 [날씨 반영]
-- user 메시지에 Day별 날씨 라벨이 주어지면, 슬롯 order를 대략적 시간대로 간주: 앞쪽(1~2번째)=오전, 중간(3번째)=오후, 뒤쪽(4~5번째)=저녁
-- 라벨에 포함된 시간대의 슬롯만 실내 장소(카페/식당/박물관/미술관/쇼핑몰 등) 위주로 배치 (예: "오후 한때 비"면 3번째 슬롯만 실내 위주)
-- "종일 비"는 모든 슬롯 실내 위주, "맑음"은 제약 없음"""
+- user 메시지에 Day별 날씨 라벨이 주어지면, 슬롯 order를 균등 3분할해 시간대로 간주: 앞쪽 1/3=오전, 중간 1/3=오후, 뒤쪽 1/3=저녁
+- 해당 시간대 슬롯은 후보 목록의 "태그: ..." 표기에 #실내가 포함된 장소만 배치, #액티비티/#자연/#이벤트 등 실외 태그 장소는 그 시간대에 배치 금지
+- "종일 비"는 모든 슬롯 #실내 태그 장소만, "맑음"은 제약 없음"""
 
 BUDGET_GUIDE: dict[str, str] = {
     "tight":   "하루 활동비 목표 2만원 (슬롯당 4,000원 이하)",
@@ -64,6 +64,12 @@ BUDGET_GUIDE: dict[str, str] = {
     "mid":     "하루 활동비 목표 6만원 (슬롯당 12,000원)",
     "premium": "하루 활동비 목표 10만원 (슬롯당 20,000원)",
     "luxury":  "하루 활동비 목표 15만원 이상 (슬롯당 30,000원+)",
+}
+
+DENSITY_GUIDE: dict[str, str] = {
+    "relaxed": "하루 3슬롯 목표 — 여유롭게 둘러보기",
+    "normal":  "하루 4~5슬롯 — 식사 2 + 관광/체험 2 + 카페/기타 1",
+    "packed":  "하루 6슬롯까지 — 알차게 이동",
 }
 
 
@@ -76,7 +82,7 @@ async def close_ai_clients() -> None:
 def _cache_key(req: RouteGenRequest) -> str:
     themes = ":".join(sorted(req.themes))
     ratio = req.hidden_gem_ratio if req.hidden_gem_ratio is not None else 0.2
-    return f"route:{req.city}:{req.nights}:{req.group_type}:{req.budget_level}:{themes}:{ratio:.1f}"
+    return f"route:{req.city}:{req.nights}:{req.group_type}:{req.budget_level}:{themes}:{ratio:.1f}:{req.density}"
 
 
 def _is_weather_sensitive(start_date: date | None, today: date | None = None) -> bool:
@@ -158,6 +164,16 @@ async def stream_route(
     clusters = cluster_candidates(candidates, k=request.nights + 1)
     clustering_active = len(clusters) > 1
 
+    # 환각(hallucination) 대체 시 전체 후보가 아니라 그 Day에 배정된 구역
+    # 안에서만 교체되도록, Day → 구역 후보 lookup을 미리 만들어둔다.
+    # clusters[i] = Day (i+1)의 구역이라는 대응은 프롬프트의 Day-구역 매핑과 동일하다.
+    day_candidate_lookup: dict[int, dict[str, str]] = {}
+    if clustering_active:
+        for c_idx, cluster in enumerate(clusters):
+            day_candidate_lookup[c_idx + 1] = {
+                doc.metadata["id"]: doc.metadata["name"] for doc in cluster
+            }
+
     if clustering_active:
         lines: list[str] = []
         idx = 1
@@ -184,13 +200,15 @@ async def stream_route(
     ratio = request.hidden_gem_ratio if request.hidden_gem_ratio is not None else 0.2
     ratio_desc = "관광지 위주" if ratio < 0.3 else ("혼합" if ratio < 0.7 else "숨은 명소 위주")
     budget_hint = BUDGET_GUIDE.get(request.budget_level, "하루 활동비 목표 6만원 (슬롯당 12,000원)")
+    density_hint = DENSITY_GUIDE.get(request.density, DENSITY_GUIDE["normal"])
     weather_hint = (
         f"Day별 날씨:\n{weather_forecast_text}\n\n"
         if weather_forecast_text else ""
     )
     user_message = (
         f"도시: {request.city} | {request.nights}박{request.nights + 1}일 | "
-        f"여행 유형: {request.group_type} | 예산: {request.budget_level} — {budget_hint}\n"
+        f"여행 유형: {request.group_type} | 예산: {request.budget_level} — {budget_hint} | "
+        f"밀도: {request.density} — {density_hint}\n"
         f"Hidden Gem 비율 목표: {ratio:.0%} ({ratio_desc})\n"
         f"{day_region_line}\n"
         f"{weather_hint}"
@@ -242,7 +260,11 @@ async def stream_route(
         if obj.get("type") == "day_summary":
             validated = await validate_day_summary(line, valid_days)
             return [validated] if validated else []
-        validated = await validate_route_slot(line, candidate_lookup, used_place_ids)
+        day = obj.get("day", 1)
+        # Day별 구역 강제 배치를 어기지 않도록, 환각/중복 치환도 그 Day에 배정된
+        # 구역 후보로만 한정한다(day_candidate_lookup) — 사용 여부는 루트 전체에서 추적.
+        lookup = day_candidate_lookup.get(day) or candidate_lookup
+        validated = await validate_route_slot(line, lookup, used_place_ids)
         if validated is None:
             return []
         return _ingest(validated)
@@ -277,6 +299,17 @@ async def stream_route(
                     yield flushed_line
 
             final_message = await stream.get_final_message()
+
+            # 프롬프트 캐싱 히트 여부 로깅 — cache_read_input_tokens가 계속 0이면
+            # 캐시가 생성되지 않고 있다는 뜻(시스템 프롬프트가 모델 최소 캐시 토큰 미달 등)
+            usage = final_message.usage
+            logger.info(
+                "Claude 캐시 사용량: cache_creation=%d cache_read=%d input=%d",
+                usage.cache_creation_input_tokens or 0,
+                usage.cache_read_input_tokens or 0,
+                usage.input_tokens,
+            )
+
             if final_message.stop_reason == "max_tokens":
                 logger.error(
                     "Sonnet 응답이 max_tokens(%d)에서 잘림 — nights=%d, day_count=%d, "

@@ -4,6 +4,7 @@ import { Search, MapPin, Sparkles, Navigation, Calendar } from 'lucide-react-nat
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { getMyRoutes } from '@/lib/api/routes';
+import { getTripStatusLabel } from '@/lib/date';
 import { useAuthStore } from '@/stores/useAuthStore';
 import type { RouteListItem } from '@/types';
 
@@ -21,15 +22,6 @@ const RECOMMENDED_CITIES = [
   { id: '4', title: '제주 힐링 코스', emoji: '🏔️', bg: '#fef9c3' },
 ];
 
-function calcDDay(startDate: string): string {
-  const diff = Math.ceil(
-    (new Date(startDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
-  );
-  if (diff < 0) return '여행 중';
-  if (diff === 0) return 'D-Day';
-  return `D-${diff}`;
-}
-
 function formatDateRange(start: string, end: string): string {
   const s = new Date(start);
   const e = new Date(end);
@@ -37,7 +29,7 @@ function formatDateRange(start: string, end: string): string {
 }
 
 function UpcomingTripCard({ route }: { route: RouteListItem }) {
-  const dday = calcDDay(route.startDate);
+  const dday = getTripStatusLabel(route.startDate, route.endDate);
   return (
     <TouchableOpacity
       className="bg-slate-800 rounded-3xl overflow-hidden"
@@ -91,7 +83,7 @@ function EmptyTripCard() {
 
 export default function HomeScreen() {
   const user = useAuthStore((s) => s.user);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['routes', 'list'],
     queryFn: () => getMyRoutes(0, 5),
     staleTime: 1000 * 60 * 2,
@@ -162,6 +154,14 @@ export default function HomeScreen() {
               <View className="bg-slate-100 rounded-3xl p-8 items-center">
                 <ActivityIndicator size="small" color="#0ea5e9" />
               </View>
+            ) : isError ? (
+              <TouchableOpacity
+                className="bg-slate-100 rounded-3xl p-8 items-center"
+                onPress={() => refetch()}
+                activeOpacity={0.85}
+              >
+                <Text className="text-slate-500 text-sm">불러오지 못했어요, 다시 시도</Text>
+              </TouchableOpacity>
             ) : upcomingRoute ? (
               <UpcomingTripCard route={upcomingRoute} />
             ) : (

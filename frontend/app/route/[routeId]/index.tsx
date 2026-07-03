@@ -558,7 +558,8 @@ export default function RouteResultScreen() {
                   onPress={() => {
                     // 명시적으로 저장을 선택했으니 이탈 시 삭제 확인창이 뜨면 안 됨
                     exitConfirmedRef.current = true;
-                    router.replace('/(tabs)');
+                    queryClient.invalidateQueries({ queryKey: ['routes'] });
+                    router.replace('/routes' as never);
                   }}
                   style={{
                     flex: 1,

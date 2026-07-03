@@ -6,21 +6,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, MapPin, Calendar, Sparkles, Trash2 } from 'lucide-react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { getMyRoutes, deleteRoute } from '@/lib/api/routes';
+import { getTripStatusLabel } from '@/lib/date';
 import type { RouteListItem } from '@/types';
 
 interface SpringPage<T> {
   content: T[];
   totalElements: number;
   totalPages: number;
-}
-
-function calcDDay(startDate: string): string {
-  const diff = Math.ceil(
-    (new Date(startDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
-  );
-  if (diff < 0) return '여행 완료';
-  if (diff === 0) return 'D-Day';
-  return `D-${diff}`;
 }
 
 function formatDateRange(start: string, end: string): string {
@@ -30,7 +22,7 @@ function formatDateRange(start: string, end: string): string {
 }
 
 function RouteCard({ route }: { route: RouteListItem }) {
-  const dday = calcDDay(route.startDate);
+  const dday = getTripStatusLabel(route.startDate, route.endDate);
   const isPast = dday === '여행 완료';
 
   return (
@@ -119,6 +111,23 @@ function SwipeableRouteCard({
   );
 }
 
+function ErrorState({ onRetry }: { onRetry: () => void }) {
+  return (
+    <View className="flex-1 items-center justify-center px-8 mt-24">
+      <Text className="text-slate-500 text-sm text-center mb-6">
+        루트를 불러오지 못했어요
+      </Text>
+      <TouchableOpacity
+        className="bg-slate-800 px-6 py-3 rounded-2xl"
+        onPress={onRetry}
+        activeOpacity={0.85}
+      >
+        <Text className="text-white font-bold">다시 시도</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 function EmptyState() {
   return (
     <View className="flex-1 items-center justify-center px-8 mt-24">
@@ -142,7 +151,7 @@ function EmptyState() {
 
 export default function RoutesScreen() {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['routes', 'all'],
     queryFn: () => getMyRoutes(0, 50),
     staleTime: 1000 * 60 * 5,
@@ -185,6 +194,8 @@ export default function RoutesScreen() {
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#0ea5e9" />
         </View>
+      ) : isError ? (
+        <ErrorState onRetry={() => refetch()} />
       ) : routes.length === 0 ? (
         <EmptyState />
       ) : (

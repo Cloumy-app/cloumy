@@ -45,8 +45,9 @@ public class AiServiceClient {
         String ratio = req.hiddenGemRatio() != null
                 ? String.format(":%.1f", req.hiddenGemRatio())
                 : ":0.2";
-        return String.format("route:%s:%d:%s:%s:%s%s",
-                req.destination(), req.nights(), req.groupType(), req.budgetLevel(), themes, ratio);
+        String density = req.density() != null ? req.density().toLowerCase() : "normal";
+        return String.format("route:%s:%d:%s:%s:%s%s:%s",
+                req.destination(), req.nights(), req.groupType(), req.budgetLevel(), themes, ratio, density);
     }
 
     public record NearbySlotDto(String name, double lat, double lng) {}
@@ -97,7 +98,8 @@ public class AiServiceClient {
             String group_type,
             String budget_level,
             List<String> themes,
-            Double hidden_gem_ratio
+            Double hidden_gem_ratio,
+            String density
     ) {}
 
     /**
@@ -131,7 +133,8 @@ public class AiServiceClient {
                     req.groupType().toLowerCase(),
                     req.budgetLevel().toLowerCase(),
                     req.tags() != null ? req.tags() : List.of(),
-                    req.hiddenGemRatio()
+                    req.hiddenGemRatio(),
+                    req.density() != null ? req.density().toLowerCase() : "normal"
             );
 
             String body = objectMapper.writeValueAsString(fastApiReq);
