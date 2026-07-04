@@ -3,6 +3,7 @@ package com.cloumy.trip.service;
 import com.cloumy.trip.dto.RouteGenRequest;
 import com.cloumy.trip.dto.SlotAlternativeResponse;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -100,8 +101,11 @@ public class AiServiceClient {
 
     public record TransportSlotDto(String place_id, double lat, double lng) {}
 
+    // transit_detail은 백엔드가 구조를 알 필요 없이 그대로 저장/응답에 흘려보내기만 하므로
+    // 전용 DTO 없이 JsonNode(불투명 JSON blob)로 받는다 — places.business_hours를 다루는 방식과 동일.
     public record TransportSlotResult(
-            String place_id, String transport_to_next, Integer transport_minutes, String transit_summary) {}
+            String place_id, String transport_to_next, Integer transport_minutes,
+            String transit_summary, JsonNode transit_detail) {}
 
     private record SlotTransportReq(String transport_mode, List<TransportSlotDto> slots) {}
 

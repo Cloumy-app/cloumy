@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Alert, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, Sparkles, Search, MapPin, X } from 'lucide-react-native';
+import { ChevronLeft, Plane, Sparkles, Cloud, Search, MapPin, X } from 'lucide-react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming, Easing } from 'react-native-reanimated';
 import { useQueryClient } from '@tanstack/react-query';
 import { streamRoute } from '@/lib/api/routes';
 import { searchAccommodations, type KakaoPlaceResult } from '@/lib/api/accommodations';
@@ -16,6 +17,14 @@ import { BUDGET_LABEL } from '@/types';
 type SelectedAccommodation = { name: string; address: string | null; lat: number; lng: number; source: 'kakao' | 'manual' };
 
 const DENSITY_SLOTS_PER_DAY: Record<Density, number> = { relaxed: 3, normal: 4.5, packed: 6 };
+
+// 로딩 화면 아이콘 순환 — 비행기(45도 회전)→반짝임→구름 순으로 조금씩 바뀜
+const LOADING_ICONS = [
+  { Icon: Plane, rotate: '45deg' },
+  { Icon: Sparkles, rotate: '0deg' },
+  { Icon: Cloud, rotate: '0deg' },
+] as const;
+const LOADING_PROGRESS_FLOOR = 8; // 0%로 시작하면 멈춘 것처럼 보여서 처음부터 이 값으로 시작
 
 function getLoadingMessage(progress: number, ratio: number, destination: string): string {
   if (progress < 20) return `${destination} 후보 장소를 살펴보고 있어요`;
@@ -57,6 +66,29 @@ export default function RouteCreateStep4() {
   const [slotCount, setSlotCount] = useState(0);
   const [progress, setProgress] = useState(0);
 
+  // 로딩 화면 비행기 아이콘 통통 튀는 애니메이션(무한 반복)
+  const bounce = useSharedValue(0);
+  useEffect(() => {
+    bounce.value = withRepeat(
+      withSequence(
+        withTiming(-14, { duration: 500, easing: Easing.out(Easing.quad) }),
+        withTiming(0, { duration: 500, easing: Easing.in(Easing.quad) }),
+      ),
+      -1,
+    );
+  }, []);
+  const bounceStyle = useAnimatedStyle(() => ({ transform: [{ translateY: bounce.value }] }));
+
+  // 로딩 중에만 아이콘을 순서대로 순환
+  const [iconIndex, setIconIndex] = useState(0);
+  useEffect(() => {
+    if (!isGenerating) return;
+    const interval = setInterval(() => {
+      setIconIndex((i) => (i + 1) % LOADING_ICONS.length);
+    }, 1800);
+    return () => clearInterval(interval);
+  }, [isGenerating]);
+
   const stopStreamRef = useRef<(() => void) | null>(null);
   const routeIdRef = useRef<string>('');
   const isMountedRef = useRef(true);
@@ -94,7 +126,7 @@ export default function RouteCreateStep4() {
     const nights = Number(params.nights ?? 2);
     const days = nights + 1;
     const estimated = Math.max(1, Math.round(days * DENSITY_SLOTS_PER_DAY[selectedDensity]));
-    setProgress(Math.min(95, Math.round((slotCount / estimated) * 100)));
+    setProgress(Math.max(LOADING_PROGRESS_FLOOR, Math.min(95, Math.round((slotCount / estimated) * 100))));
   }, [slotCount, isGenerating, selectedDensity]);
 
   useEffect(() => {
@@ -152,7 +184,7 @@ export default function RouteCreateStep4() {
     reset();
     routeIdRef.current = '';
     setSlotCount(0);
-    setProgress(0);
+    setProgress(LOADING_PROGRESS_FLOOR);
     setIsGenerating(true);
     setIsStreaming(true);
 
@@ -208,9 +240,17 @@ export default function RouteCreateStep4() {
   if (isGenerating) {
     return (
       <SafeAreaView className="flex-1 bg-white items-center justify-center px-8">
-        <View className="w-24 h-24 bg-sky-50 rounded-full items-center justify-center mb-8">
-          <Sparkles size={40} color="#0ea5e9" />
-        </View>
+        <Animated.View style={bounceStyle} className="w-24 h-24 bg-sky-50 rounded-full items-center justify-center mb-8">
+          {(() => {
+            const { Icon, rotate } = LOADING_ICONS[iconIndex];
+            // 회전은 아이콘(SVG, 자기 viewBox 경계에서 잘림)이 아니라 감싸는 일반 View에 적용 — View는 안 잘림
+            return (
+              <View style={{ transform: [{ rotate }] }}>
+                <Icon size={40} color="#0ea5e9" />
+              </View>
+            );
+          })()}
+        </Animated.View>
         <Text className="text-2xl font-black text-slate-800 mb-2 text-center">루트 생성 중</Text>
         <Text className="text-slate-500 text-center mb-10 text-sm px-4">
           {getLoadingMessage(progress, selectedRatio, destination)}

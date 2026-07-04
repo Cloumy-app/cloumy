@@ -1,7 +1,12 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from app.services.transport_service import _build_transit_summary, _estimate_minutes, enrich_transport
+from app.services.transport_service import (
+    _build_transit_detail,
+    _build_transit_summary,
+    _estimate_minutes,
+    enrich_transport,
+)
 
 # 강남역 -> 서울역 직선거리 약 8.4km
 _GANGNAM = (37.4979, 127.0276)
@@ -53,6 +58,7 @@ async def test_enrich_transport_transit_without_key_falls_back_to_approximation(
     assert result[0]["transport_to_next"] == "transit"
     assert result[0]["transport_minutes"] > 0  # 근사치로 채워짐
     assert result[0]["transit_summary"] is None  # 키 없으면 노선 요약도 없음
+    assert result[0]["transit_detail"] is None
 
 
 async def test_enrich_transport_transit_api_error_falls_back_to_approximation():
@@ -65,6 +71,7 @@ async def test_enrich_transport_transit_api_error_falls_back_to_approximation():
         result = await enrich_transport(slots, coord_lookup, "transit", "dummy-key")
     assert result[0]["transport_minutes"] > 0  # 예외 발생해도 근사치로 폴백, 크래시 없음
     assert result[0]["transit_summary"] is None
+    assert result[0]["transit_detail"] is None
 
 
 async def test_enrich_transport_missing_coord_skips_pair():
@@ -98,3 +105,39 @@ def test_build_transit_summary_unknown_mode_skipped():
         {"mode": "BUS", "route": "143"},
     ]}
     assert _build_transit_summary(itinerary) == "버스 143"
+
+
+def test_build_transit_detail_bus_to_subway_one_transfer():
+    itinerary = {"legs": [
+        {"mode": "WALK", "sectionTime": 143},
+        {"mode": "BUS", "route": "143", "sectionTime": 629,
+         "start": {"name": "강남역9번출구"}, "end": {"name": "교대역"}},
+        {"mode": "SUBWAY", "route": "2호선", "sectionTime": 900,
+         "start": {"name": "교대역"}, "end": {"name": "서울역"}},
+    ]}
+    assert _build_transit_detail(itinerary) == [
+        {"mode": "버스", "route": "143", "board_stop": "강남역9번출구", "alight_stop": "교대역", "minutes": 10},
+        {"mode": "지하철", "route": "2호선", "board_stop": "교대역", "alight_stop": "서울역", "minutes": 15},
+    ]
+
+
+def test_build_transit_detail_all_walk_returns_none():
+    itinerary = {"legs": [{"mode": "WALK", "sectionTime": 300}]}
+    assert _build_transit_detail(itinerary) is None
+
+
+def test_build_transit_detail_missing_optional_fields_no_keyerror():
+    itinerary = {"legs": [{"mode": "BUS"}]}  # route/start/end/sectionTime 전부 없음
+    assert _build_transit_detail(itinerary) == [
+        {"mode": "버스", "route": "", "board_stop": "", "alight_stop": "", "minutes": 0}
+    ]
+
+
+def test_build_transit_detail_unknown_mode_skipped():
+    itinerary = {"legs": [
+        {"mode": "FERRY", "route": "여객선", "start": {"name": "A"}, "end": {"name": "B"}, "sectionTime": 600},
+        {"mode": "BUS", "route": "143", "start": {"name": "C"}, "end": {"name": "D"}, "sectionTime": 300},
+    ]}
+    assert _build_transit_detail(itinerary) == [
+        {"mode": "버스", "route": "143", "board_stop": "C", "alight_stop": "D", "minutes": 5}
+    ]
