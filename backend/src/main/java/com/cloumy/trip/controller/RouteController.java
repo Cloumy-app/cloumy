@@ -7,6 +7,7 @@ import com.cloumy.trip.dto.RouteGenRequest;
 import com.cloumy.trip.dto.RouteListResponse;
 import com.cloumy.trip.entity.Route;
 import com.cloumy.trip.service.AiServiceClient;
+import com.cloumy.trip.service.FallbackRouteService;
 import com.cloumy.trip.service.RouteDaySummaryService;
 import com.cloumy.trip.service.RouteService;
 import com.cloumy.trip.service.RouteSlotService;
@@ -46,6 +47,7 @@ public class RouteController {
     private final RouteSlotService routeSlotService;
     private final RouteDaySummaryService routeDaySummaryService;
     private final AiServiceClient aiServiceClient;
+    private final FallbackRouteService fallbackRouteService;
 
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
@@ -127,7 +129,7 @@ public class RouteController {
                             }
                             emitter.complete();
                         },
-                        emitter::completeWithError
+                        error -> handleStreamFailure(req, route, emitter, error)
                 );
             } catch (IOException e) {
                 emitter.completeWithError(e);
@@ -136,5 +138,36 @@ public class RouteController {
 
         emitter.onTimeout(emitter::complete);
         return emitter;
+    }
+
+    // FastAPI 스트리밍 실패 시 폴백 — 2차: DB 유사 루트를 찾아 대신 흘려보냄, 없으면 3차: 기존처럼 스트림 에러 종료
+    // (진짜 HTTP 503은 route_id 이벤트로 이미 200 응답이 커밋돼 있어 불가능 — completeWithError가
+    // react-native-sse의 error 리스너로 이어지는 기존 경로를 그대로 씀)
+    private void handleStreamFailure(RouteGenRequest req, Route route, SseEmitter emitter, Throwable error) {
+        log.warn("FastAPI 스트리밍 실패 — 폴백 시도: {}", error.getMessage());
+        fallbackRouteService.findFallbackLines(req).ifPresentOrElse(
+                lines -> {
+                    for (String line : lines) {
+                        try {
+                            emitter.send(SseEmitter.event().data(line));
+                        } catch (IOException e) {
+                            emitter.completeWithError(e);
+                            return;
+                        }
+                        try {
+                            routeSlotService.saveStreamingLine(route.getId(), line);
+                        } catch (Exception e) {
+                            log.warn("폴백 슬롯 저장 실패 (무시): {}", e.getMessage());
+                        }
+                    }
+                    try {
+                        emitter.send(SseEmitter.event().data("{\"done\":true}"));
+                    } catch (IOException e) {
+                        // 클라이언트가 이미 끊긴 경우 무시
+                    }
+                    emitter.complete();
+                },
+                () -> emitter.completeWithError(error)
+        );
     }
 }
