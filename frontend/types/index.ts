@@ -51,12 +51,22 @@ export interface SlotWithCoords {
   transportToNext: string | null;
   transportMinutes: number | null;
   transitSummary: string | null;
+  transitDetail: string | null;
   tips: string | null;
   placeName: string;
   address: string | null;
   lat: number;
   lng: number;
   avgDurationMinutes: number | null;
+}
+
+// transitDetail(JSON 문자열)을 JSON.parse한 구간별 상세 — 정적 승하차 정보(실시간 도착정보 아님)
+export interface TransitHop {
+  mode: string;
+  route: string;
+  board_stop: string;
+  alight_stop: string;
+  minutes: number;
 }
 
 export interface PlaceDetail {

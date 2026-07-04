@@ -92,8 +92,16 @@ public class RouteSlotService {
                 .transportToNext(node.path("transport_to_next").asText(null))
                 .transportMinutes(transportMinutes)
                 .transitSummary(node.path("transit_summary").asText(null))
+                .transitDetail(jsonArrayFieldToString(node, "transit_detail"))
                 .build();
         routeSlotRepository.save(slot);
+    }
+
+    // transit_detail은 문자열이 아니라 JSON 배열 값이라 asText()(빈 문자열 반환)가 아니라
+    // toString()으로 압축 JSON 문자열을 그대로 얻어야 한다(TEXT 컬럼에 문자열로 저장).
+    private static String jsonArrayFieldToString(JsonNode node, String field) {
+        JsonNode value = node.path(field);
+        return value.isMissingNode() || value.isNull() ? null : value.toString();
     }
 
     public List<SlotResponse> getSlots(UUID routeId, UUID userId) {
@@ -223,8 +231,8 @@ public class RouteSlotService {
         // AI 호출 자체가 실패(빈 리스트)하면 영향 구간을 null로 리셋 —
         // place가 이미 바뀌었으므로 옛 값을 그대로 두면 "정보 없음"보다 더 나쁜 틀린 정보가 된다.
         if (results.size() != ordered.size()) {
-            prev.ifPresent(p -> p.updateTransport(null, null, null));
-            target.updateTransport(null, null, null);
+            prev.ifPresent(p -> p.updateTransport(null, null, null, null));
+            target.updateTransport(null, null, null, null);
             return;
         }
 
@@ -232,12 +240,19 @@ public class RouteSlotService {
         int idx = 0;
         if (prev.isPresent()) {
             AiServiceClient.TransportSlotResult r = results.get(idx++);
-            prev.get().updateTransport(r.transport_to_next(), r.transport_minutes(), r.transit_summary());
+            prev.get().updateTransport(r.transport_to_next(), r.transport_minutes(), r.transit_summary(),
+                    transitDetailToString(r.transit_detail()));
         }
         if (next.isPresent()) {
             AiServiceClient.TransportSlotResult r = results.get(idx);
-            target.updateTransport(r.transport_to_next(), r.transport_minutes(), r.transit_summary());
+            target.updateTransport(r.transport_to_next(), r.transport_minutes(), r.transit_summary(),
+                    transitDetailToString(r.transit_detail()));
         }
+    }
+
+    // AI 응답의 transit_detail(JsonNode, 불투명 JSON blob)을 TEXT 컬럼에 저장할 문자열로 변환.
+    private static String transitDetailToString(JsonNode transitDetail) {
+        return transitDetail == null || transitDetail.isNull() ? null : transitDetail.toString();
     }
 
     private void verifyOwner(UUID routeId, UUID userId) {

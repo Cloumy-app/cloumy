@@ -23,6 +23,7 @@ class TransportSlotOut(BaseModel):
     transport_to_next: str | None = None
     transport_minutes: int | None = None
     transit_summary: str | None = None
+    transit_detail: list[dict] | None = None
 
 
 @router.post("/routes/slots/transport", response_model=list[TransportSlotOut])
