@@ -7,11 +7,14 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface RouteSlotRepository extends JpaRepository<RouteSlot, UUID> {
 
     boolean existsByRouteIdAndDayNumberAndOrderIndex(UUID routeId, int dayNumber, int orderIndex);
+
+    Optional<RouteSlot> findByRouteIdAndDayNumberAndOrderIndex(UUID routeId, int dayNumber, int orderIndex);
 
     // places 테이블과 JOIN해서 lat/lng 포함한 슬롯 목록 반환
     // ST_Y(geometry) = latitude, ST_X(geometry) = longitude (WGS84)

@@ -79,4 +79,16 @@ public class RouteSlot {
     public void togglePin() {
         this.pinned = !this.pinned;
     }
+
+    public void replacePlace(UUID placeId, Integer estimatedCost, String tips) {
+        this.placeId = placeId;
+        this.estimatedCost = estimatedCost;
+        this.tips = tips;
+    }
+
+    public void updateTransport(String transportToNext, Integer transportMinutes, String transitSummary) {
+        this.transportToNext = transportToNext;
+        this.transportMinutes = transportMinutes;
+        this.transitSummary = transitSummary;
+    }
 }

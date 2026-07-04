@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { getRoute, getRouteSlots, getRouteDaySummaries, toggleSlotPin as apiToggleSlotPin, deleteRouteSlot, deleteRoute } from '@/lib/api/routes';
+import { getRoute, getRouteSlots, getRouteDaySummaries, toggleSlotPin as apiToggleSlotPin, deleteRouteSlot, deleteRoute, replaceRouteSlot } from '@/lib/api/routes';
 import { getRouteAccommodations } from '@/lib/api/accommodations';
 import { fetchForecast } from '@/lib/api/weather';
 import { useRouteStore } from '@/stores/useRouteStore';
@@ -191,7 +191,8 @@ export default function RouteResultScreen() {
     }, 420);
   };
 
-  const handleReplaceWithAlternative = (slotId: string, alt: SlotAlternative) => {
+  const handleReplaceWithAlternative = async (slotId: string, alt: SlotAlternative) => {
+    if (!routeId) return;
     queryClient.setQueryData<SlotWithCoords[]>(['route-slots', routeId], (prev) =>
       prev?.map((s) =>
         s.id === slotId
@@ -199,6 +200,19 @@ export default function RouteResultScreen() {
           : s,
       ),
     );
+    try {
+      const updated = await replaceRouteSlot(routeId, slotId, {
+        placeId: alt.placeId,
+        estimatedCost: alt.estimatedCost,
+        reason: alt.reason,
+      });
+      queryClient.setQueryData<SlotWithCoords[]>(['route-slots', routeId], (prev) =>
+        prev?.map((s) => updated.find((u) => u.id === s.id) ?? s),
+      );
+    } catch {
+      // 실패 시 원본 복구(이웃 이동정보까지 서버 진실로 되돌림)
+      queryClient.invalidateQueries({ queryKey: ['route-slots', routeId] });
+    }
   };
 
   const handlePin = async (slotId: string) => {

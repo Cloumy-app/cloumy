@@ -2,9 +2,11 @@ package com.cloumy.trip.controller;
 
 import com.cloumy.auth.security.CloudmyUserDetails;
 import com.cloumy.common.response.ApiResponse;
+import com.cloumy.trip.dto.ReplaceSlotRequest;
 import com.cloumy.trip.dto.SlotAlternativeResponse;
 import com.cloumy.trip.dto.SlotResponse;
 import com.cloumy.trip.service.RouteSlotService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -62,5 +65,16 @@ public class RouteSlotController {
     ) {
         return ApiResponse.ok(
                 routeSlotService.getAlternatives(routeId, slotId, UUID.fromString(user.userId())));
+    }
+
+    @PatchMapping("/{slotId}")
+    public ApiResponse<List<SlotResponse>> replaceSlot(
+            @PathVariable UUID routeId,
+            @PathVariable UUID slotId,
+            @RequestBody @Valid ReplaceSlotRequest req,
+            @AuthenticationPrincipal CloudmyUserDetails user
+    ) {
+        return ApiResponse.ok(
+                routeSlotService.replaceSlot(routeId, slotId, UUID.fromString(user.userId()), req));
     }
 }

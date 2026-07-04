@@ -2,10 +2,13 @@ package com.cloumy.trip.service;
 
 import com.cloumy.common.exception.BusinessException;
 import com.cloumy.common.response.ErrorCode;
+import com.cloumy.trip.dto.PlaceProjection;
+import com.cloumy.trip.dto.ReplaceSlotRequest;
 import com.cloumy.trip.dto.SlotAlternativeResponse;
 import com.cloumy.trip.dto.SlotResponse;
 import com.cloumy.trip.entity.Route;
 import com.cloumy.trip.entity.RouteSlot;
+import com.cloumy.trip.repository.PlaceRepository;
 import com.cloumy.trip.repository.RouteRepository;
 import com.cloumy.trip.repository.RouteSlotRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -17,8 +20,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -29,6 +36,7 @@ public class RouteSlotService {
 
     private final RouteRepository routeRepository;
     private final RouteSlotRepository routeSlotRepository;
+    private final PlaceRepository placeRepository;
     private final RouteDaySummaryService routeDaySummaryService;
     private final AiServiceClient aiServiceClient;
     private final ObjectMapper objectMapper;
@@ -153,6 +161,83 @@ public class RouteSlotService {
                 route.getBudgetLevel(),
                 nearby
         );
+    }
+
+    @Transactional
+    public List<SlotResponse> replaceSlot(UUID routeId, UUID slotId, UUID userId, ReplaceSlotRequest req) {
+        verifyOwner(routeId, userId);
+        Route route = routeRepository.findById(routeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
+        RouteSlot target = routeSlotRepository.findById(slotId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SLOT_NOT_FOUND));
+        PlaceProjection newPlace = placeRepository.findPlaceDetailById(req.placeId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.PLACE_NOT_FOUND));
+
+        target.replacePlace(req.placeId(), req.estimatedCost(), req.reason());
+
+        Optional<RouteSlot> prev = routeSlotRepository.findByRouteIdAndDayNumberAndOrderIndex(
+                routeId, target.getDayNumber(), target.getOrderIndex() - 1);
+        Optional<RouteSlot> next = routeSlotRepository.findByRouteIdAndDayNumberAndOrderIndex(
+                routeId, target.getDayNumber(), target.getOrderIndex() + 1);
+
+        if (route.getTransportMode() != null && (prev.isPresent() || next.isPresent())) {
+            recalculateNeighborTransport(route.getTransportMode(), req.placeId(), newPlace, target, prev, next);
+        }
+
+        routeSlotRepository.flush();
+
+        Set<UUID> affectedIds = new HashSet<>();
+        affectedIds.add(target.getId());
+        prev.ifPresent(s -> affectedIds.add(s.getId()));
+        next.ifPresent(s -> affectedIds.add(s.getId()));
+
+        return routeSlotRepository.findSlotsByRouteId(routeId).stream()
+                .filter(p -> affectedIds.contains(UUID.fromString(p.getId())))
+                .map(SlotResponse::from)
+                .toList();
+    }
+
+    // 교체된 슬롯과 직접 이웃(order_index ±1)한 구간만 재계산한다(같은 날 전체 재계산은 범위 밖).
+    // 이동시간 계산 로직은 새로 만들지 않고 AI의 enrich_transport를 그대로 재사용(DRY).
+    private void recalculateNeighborTransport(
+            String transportMode, UUID newPlaceId, PlaceProjection newPlace,
+            RouteSlot target, Optional<RouteSlot> prev, Optional<RouteSlot> next
+    ) {
+        List<AiServiceClient.TransportSlotDto> ordered = new ArrayList<>();
+        prev.ifPresent(p -> {
+            PlaceProjection prevPlace = placeRepository.findPlaceDetailById(p.getPlaceId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.PLACE_NOT_FOUND));
+            ordered.add(new AiServiceClient.TransportSlotDto(
+                    p.getPlaceId().toString(), prevPlace.getLat(), prevPlace.getLng()));
+        });
+        ordered.add(new AiServiceClient.TransportSlotDto(newPlaceId.toString(), newPlace.getLat(), newPlace.getLng()));
+        next.ifPresent(n -> {
+            PlaceProjection nextPlace = placeRepository.findPlaceDetailById(n.getPlaceId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.PLACE_NOT_FOUND));
+            ordered.add(new AiServiceClient.TransportSlotDto(
+                    n.getPlaceId().toString(), nextPlace.getLat(), nextPlace.getLng()));
+        });
+
+        List<AiServiceClient.TransportSlotResult> results = aiServiceClient.getSlotTransport(transportMode, ordered);
+
+        // AI 호출 자체가 실패(빈 리스트)하면 영향 구간을 null로 리셋 —
+        // place가 이미 바뀌었으므로 옛 값을 그대로 두면 "정보 없음"보다 더 나쁜 틀린 정보가 된다.
+        if (results.size() != ordered.size()) {
+            prev.ifPresent(p -> p.updateTransport(null, null, null));
+            target.updateTransport(null, null, null);
+            return;
+        }
+
+        // ordered[i] -> ordered[i+1] 구간 결과가 results[i]에 담겨 옴 (enrich_transport 규약과 동일)
+        int idx = 0;
+        if (prev.isPresent()) {
+            AiServiceClient.TransportSlotResult r = results.get(idx++);
+            prev.get().updateTransport(r.transport_to_next(), r.transport_minutes(), r.transit_summary());
+        }
+        if (next.isPresent()) {
+            AiServiceClient.TransportSlotResult r = results.get(idx);
+            target.updateTransport(r.transport_to_next(), r.transport_minutes(), r.transit_summary());
+        }
     }
 
     private void verifyOwner(UUID routeId, UUID userId) {

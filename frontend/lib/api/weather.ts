@@ -104,12 +104,22 @@ const RAIN_THRESHOLD = 0.6;
 // "다른 이유로 없는 것"을 프론트에서 구분하려면 이 함수로 직접 판정해야 한다.
 export const FORECAST_RANGE_DAYS = 5;
 
-export function isWithinForecastRange(dateStr: string): boolean {
+function diffDaysFromToday(dateStr: string): number {
   const target = new Date(dateStr);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((target.getTime() - today.getTime()) / 86_400_000);
-  return diffDays >= 0 && diffDays < FORECAST_RANGE_DAYS;
+  return Math.round((target.getTime() - today.getTime()) / 86_400_000);
+}
+
+export function isWithinForecastRange(dateStr: string): boolean {
+  const diff = diffDaysFromToday(dateStr);
+  return diff >= 0 && diff < FORECAST_RANGE_DAYS;
+}
+
+// 이미 지난 날짜인지 — 과거는 예보가 영영 채워지지 않으므로(예보 API는 미래만 제공)
+// "곧 볼 수 있다"는 안내가 아니라 기존 "정보 없음"으로 처리해야 함
+export function isPastDate(dateStr: string): boolean {
+  return diffDaysFromToday(dateStr) < 0;
 }
 
 function hourToBlock(hour: number): RainBlock | null {

@@ -70,6 +70,7 @@ export interface PlaceDetail {
 }
 
 export interface SlotAlternative {
+  placeId: string;
   placeName: string;
   reason: string;
   estimatedCost: number;

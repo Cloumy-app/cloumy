@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from app.config.database import create_pool
 from app.config.redis import create_redis
 from app.config.settings import settings
-from app.routes import route_gen, slot_alternatives
+from app.routes import route_gen, slot_alternatives, slot_transport
 from app.services.route_service import close_ai_clients
 
 logging.basicConfig(level=logging.INFO)
@@ -55,6 +55,7 @@ async def internal_key_middleware(request: Request, call_next):
 
 app.include_router(route_gen.router)
 app.include_router(slot_alternatives.router)
+app.include_router(slot_transport.router)
 
 
 @app.get("/health")

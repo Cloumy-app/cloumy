@@ -98,6 +98,38 @@ public class AiServiceClient {
         }
     }
 
+    public record TransportSlotDto(String place_id, double lat, double lng) {}
+
+    public record TransportSlotResult(
+            String place_id, String transport_to_next, Integer transport_minutes, String transit_summary) {}
+
+    private record SlotTransportReq(String transport_mode, List<TransportSlotDto> slots) {}
+
+    public List<TransportSlotResult> getSlotTransport(String transportMode, List<TransportSlotDto> slots) {
+        try {
+            String body = objectMapper.writeValueAsString(new SlotTransportReq(transportMode, slots));
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(fastapiUrl + "/ai/routes/slots/transport"))
+                    .header("Content-Type", "application/json")
+                    .header("X-Internal-Key", internalApiKey)
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .timeout(Duration.ofSeconds(10))
+                    .build();
+
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 400) {
+                log.error("FastAPI 슬롯 이동정보 오류: status={}", response.statusCode());
+                return List.of();
+            }
+            return objectMapper.readValue(
+                    response.body(), new TypeReference<List<TransportSlotResult>>() {});
+        } catch (Exception e) {
+            log.error("슬롯 이동정보 요청 실패: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
     private record FastApiRequest(
             String city,
             int nights,

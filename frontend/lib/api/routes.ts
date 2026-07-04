@@ -48,6 +48,21 @@ export async function deleteRouteSlot(routeId: string, slotId: string): Promise<
   if (!res.ok) throw new Error(`${res.status}`);
 }
 
+export async function replaceRouteSlot(
+  routeId: string,
+  slotId: string,
+  body: { placeId: string; estimatedCost: number; reason: string },
+): Promise<SlotWithCoords[]> {
+  const res = await apiFetch(`/v1/routes/${routeId}/slots/${slotId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+  const resBody: { data: SlotWithCoords[] } = await res.json();
+  return resBody.data;
+}
+
 export async function getPlaceDetail(placeId: string): Promise<PlaceDetail> {
   const res = await apiFetch(`/v1/places/${placeId}`);
   if (!res.ok) throw new Error(`${res.status}`);
