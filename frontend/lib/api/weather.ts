@@ -99,6 +99,19 @@ export interface DayWeather extends WeatherInfo {
 // AI가 루트를 짤 때 쓴 기준과 사용자에게 보여주는 기준을 맞추기 위함
 const RAIN_THRESHOLD = 0.6;
 
+// OpenWeatherMap 무료 티어는 5일 예보만 제공 — fetchForecast()가 범위 밖 날짜는
+// 조용히 건너뛰므로(아래 dayEntries.length===0 → continue), "범위 밖이라 없는 것"과
+// "다른 이유로 없는 것"을 프론트에서 구분하려면 이 함수로 직접 판정해야 한다.
+export const FORECAST_RANGE_DAYS = 5;
+
+export function isWithinForecastRange(dateStr: string): boolean {
+  const target = new Date(dateStr);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((target.getTime() - today.getTime()) / 86_400_000);
+  return diffDays >= 0 && diffDays < FORECAST_RANGE_DAYS;
+}
+
 function hourToBlock(hour: number): RainBlock | null {
   if (hour >= 6 && hour < 12) return '오전';
   if (hour >= 12 && hour < 18) return '오후';

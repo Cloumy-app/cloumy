@@ -2,6 +2,7 @@ import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { Wallet, MapPin, CloudSun, Sun, Cloud, CloudRain } from 'lucide-react-native';
 import type { SlotWithCoords } from '@/types';
 import type { DayWeather } from '@/lib/api/weather';
+import { isWithinForecastRange } from '@/lib/api/weather';
 
 interface DayTabsProps {
   slots: SlotWithCoords[];
@@ -47,6 +48,7 @@ export function DayTabs({ slots, selectedDay, onSelectDay, weatherByDate, startD
 
   const currentDateStr = startDate ? getDateForDay(startDate, selectedDay) : null;
   const weather = currentDateStr && weatherByDate ? weatherByDate[currentDateStr] ?? null : null;
+  const isOutOfForecastRange = currentDateStr ? !isWithinForecastRange(currentDateStr) : false;
 
   return (
     <View>
@@ -117,8 +119,8 @@ export function DayTabs({ slots, selectedDay, onSelectDay, weatherByDate, startD
             <View className="flex-1 bg-slate-50 rounded-xl p-3 items-center justify-center border border-slate-100">
               <CloudSun size={16} color="#94a3b8" />
               <Text className="text-[10px] text-slate-400 font-medium mt-1">날씨</Text>
-              <Text className="text-xs font-black text-slate-400 mt-0.5" numberOfLines={1}>
-                정보 없음
+              <Text className="text-xs font-black text-slate-400 mt-0.5" numberOfLines={2}>
+                {isOutOfForecastRange ? '🌤️ 날씨 예보는 출발 5일 전부터 확인할 수 있어요' : '정보 없음'}
               </Text>
             </View>
           )}
@@ -154,8 +156,8 @@ export function DayTabs({ slots, selectedDay, onSelectDay, weatherByDate, startD
             );
           })() : (
             <View className="flex-1 bg-slate-50 rounded-xl px-3 py-2 items-center justify-center">
-              <Text className="text-slate-400 font-black text-base" numberOfLines={1}>
-                정보 없음
+              <Text className="text-slate-400 font-black text-base" numberOfLines={2}>
+                {isOutOfForecastRange ? '🌤️ 5일 전부터 확인 가능' : '정보 없음'}
               </Text>
               <Text className="text-slate-400 text-[10px] font-medium">여행 날씨</Text>
             </View>
