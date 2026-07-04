@@ -73,6 +73,15 @@ DENSITY_GUIDE: dict[str, str] = {
     "packed":  "하루 6슬롯까지 — 알차게 이동",
 }
 
+# 프롬프트가 안내하는 목표치(DENSITY_GUIDE)의 상단 + 1(프롬프트가 이미 "±1 이내"를
+# 명시하므로 그 여유를 하드캡으로 그대로 반영) — 텍스트 지시만으로는 검증을 뚫고
+# 한 day에 슬롯이 계속 쌓이는 경우(실측: 10슬롯)를 코드로 차단한다.
+DENSITY_SLOT_CAP: dict[str, int] = {
+    "relaxed": 4,
+    "normal": 6,
+    "packed": 7,
+}
+
 
 async def close_ai_clients() -> None:
     """lifespan 종료 시 호출 — httpx AsyncClient 정상 종료."""
@@ -189,7 +198,15 @@ async def stream_route(
     }
 
     # 5. 후보 장소 목록 텍스트 구성 — 지역 클러스터링으로 Day별 구역을 미리 나눔
-    clusters = cluster_candidates(candidates, k=request.nights + 1)
+    # 숙소가 있으면 Day 1 구역이 숙소 인근이 되도록 k-means 초기 centroid를 유도한다
+    # (clustering이 cluster_candidates 호출 시점에 필요하므로 day_count/anchors를 여기서 먼저 계산).
+    day_count = request.nights + 1
+    accommodation_anchors = _build_accommodation_anchors(
+        request.accommodations, request.start_date, day_count
+    )
+    clusters = cluster_candidates(
+        candidates, k=day_count, day1_anchor=accommodation_anchors.get(1)
+    )
     clustering_active = len(clusters) > 1
 
     # 환각(hallucination) 대체 시 전체 후보가 아니라 그 Day에 배정된 구역
@@ -252,12 +269,13 @@ async def stream_route(
     # 여행 일수(day 수)에 비례해 출력 토큰 확보 — 슬롯당 ~200토큰 + day_summary ~90토큰 기준.
     # 고정값(4096)이었을 때는 "type"/day_summary 추가로 늘어난 출력이 3일 이상 루트에서
     # max_tokens에 걸려 뒷부분 day가 통째로 유실되는 문제가 있었음.
-    # claude-sonnet-4-6 실제 출력 상한은 스트리밍 시 128,000토큰이라 아래 값은 전혀 근접하지 않음.
-    day_count = request.nights + 1
-    max_tokens = min(16000, 1500 + day_count * 1700)
-    accommodation_anchors = _build_accommodation_anchors(
-        request.accommodations, request.start_date, day_count
-    )
+    # 이전 공식(min(16000, 1500+day_count*1700))은 nights 유효범위(1~5)에서 최댓값이
+    # 11700이라 16000 상한이 실제로 걸린 적이 없었음. 환각/중복 재시도가 많은 요청(실측:
+    # 한 요청에서 53건)은 재시도 자체가 출력 토큰을 추가로 소모해 기존 공식으로도
+    # 트렁케이션이 발생했음(실측: day_count=3에서 6600 토큰 소진) — 여유를 크게 늘림.
+    # claude-sonnet-4-6 실제 출력 상한은 스트리밍 시 128,000토큰이라 아래 값은 전혀 근접하지 않고,
+    # max_tokens는 상한일 뿐이라 정상 종료 시 실제 과금(출력 토큰 기준)엔 영향 없음.
+    max_tokens = min(24000, 2500 + day_count * 3400)
 
     buffer = ""
     collected: list[str] = []
@@ -265,6 +283,8 @@ async def stream_route(
     current_day: int | None = None
     valid_days = set(range(1, request.nights + 2))
     used_place_ids: set[str] = set()  # 루트 전체에서 이미 배치된 장소 추적 — 중복 슬롯 방지
+    day_slot_counts: dict[int, int] = {}  # day → 채택된 슬롯 수 (DENSITY_SLOT_CAP 판정용)
+    slot_cap = DENSITY_SLOT_CAP.get(request.density, DENSITY_SLOT_CAP["normal"])
 
     async def _finalize_day(day_lines: list[str], day_number: int | None) -> list[str]:
         """TSP 재정렬 + 이동시간 enrichment를 거친 최종 ndjson 라인을 반환한다."""
@@ -283,6 +303,7 @@ async def stream_route(
             day_buffer = []
         current_day = slot_day
         day_buffer.append(validated)
+        day_slot_counts[slot_day] = day_slot_counts.get(slot_day, 0) + 1
         return flushed
 
     async def _process_line(line: str) -> list[str]:
@@ -299,6 +320,16 @@ async def stream_route(
             validated = await validate_day_summary(line, valid_days)
             return [validated] if validated else []
         day = obj.get("day", 1)
+        # density 목표(±1)를 코드로 강제 — 프롬프트 텍스트 지시만으로는 검증을 뚫고
+        # 한 day에 슬롯이 계속 쌓이는 걸 못 막는다(실측: 환각/중복 재시도로 10슬롯까지 증가).
+        # validate_route_slot보다 먼저 체크해야 캡 초과로 버릴 슬롯의 place_id가
+        # used_place_ids에 낙인찍혀 낭비되는 걸 막을 수 있다.
+        if day_slot_counts.get(day, 0) >= slot_cap:
+            logger.warning(
+                "day=%d 슬롯 상한(%d) 도달 — 스킵: place_id=%s place_name=%s",
+                day, slot_cap, obj.get("place_id"), obj.get("place_name"),
+            )
+            return []
         # Day별 구역 강제 배치를 어기지 않도록, 환각/중복 치환도 그 Day에 배정된
         # 구역 후보로만 한정한다(day_candidate_lookup) — 사용 여부는 루트 전체에서 추적.
         lookup = day_candidate_lookup.get(day) or candidate_lookup

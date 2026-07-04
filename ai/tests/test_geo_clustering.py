@@ -65,6 +65,36 @@ def test_cluster_candidates_prevents_extreme_imbalance():
     assert max(sizes) <= len(candidates) * 0.7  # 34/50=68%였던 실측 사례 같은 극단적 쏠림 방지
 
 
+def test_cluster_candidates_day1_anchor_forces_first_cluster():
+    # 시드(42) 기본 실행 시 서울 그룹이 결과[0](Day 1)로 나온다는 전제 하에,
+    # day1_anchor를 부산 좌표로 주면 result[0]이 부산 그룹으로 뒤집혀야 한다.
+    seoul = [_doc(37.50 + i * 0.001, 127.00 + i * 0.001, f"seoul{i}") for i in range(5)]
+    busan = [_doc(35.10 + i * 0.001, 129.00 + i * 0.001, f"busan{i}") for i in range(5)]
+    candidates = seoul + busan
+    busan_names = {d.metadata["name"] for d in busan}
+
+    result = cluster_candidates(candidates, k=2, day1_anchor=(35.10, 129.00))
+
+    day1_names = {d.metadata["name"] for d in result[0]}
+    assert day1_names == busan_names
+
+
+def test_cluster_candidates_no_anchor_unaffected():
+    # day1_anchor를 생략하면(기본값 None) 기존 동작과 동일해야 한다 — 회귀 없음.
+    seoul = [_doc(37.50 + i * 0.001, 127.00 + i * 0.001, f"seoul{i}") for i in range(5)]
+    busan = [_doc(35.10 + i * 0.001, 129.00 + i * 0.001, f"busan{i}") for i in range(5)]
+    candidates = seoul + busan
+
+    with_anchor_none = cluster_candidates(candidates, k=2, day1_anchor=None)
+    without_anchor_arg = cluster_candidates(candidates, k=2)
+
+    assert [
+        {d.metadata["name"] for d in c} for c in with_anchor_none
+    ] == [
+        {d.metadata["name"] for d in c} for c in without_anchor_arg
+    ]
+
+
 def test_cluster_preserves_relative_order_within_cluster():
     # 서울 그룹에 인위적 순서(유사도 랭킹 흉내)를 부여
     seoul = [_doc(37.50 + i * 0.001, 127.00 + i * 0.001, f"s{i}") for i in range(5)]

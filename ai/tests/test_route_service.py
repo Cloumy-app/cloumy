@@ -280,7 +280,7 @@ async def test_stream_route_day_summary_does_not_break_tsp_reorder():
 
 @pytest.mark.asyncio
 async def test_stream_route_scales_max_tokens_by_day_count():
-    # nights=2 → day_count=3 → max_tokens = min(16000, 1500 + 3*1700) = 6600
+    # nights=2 → day_count=3 → max_tokens = min(24000, 2500 + 3*3400) = 12700
     fake_stream = _FakeAnthropicStream([])
     mock_pgvector = MagicMock()
     mock_pgvector.return_value.ainvoke = AsyncMock(return_value=_candidates())
@@ -291,7 +291,7 @@ async def test_stream_route_scales_max_tokens_by_day_count():
             pass
 
     _, kwargs = stream_mock.call_args
-    assert kwargs["max_tokens"] == 6600
+    assert kwargs["max_tokens"] == 12700
 
 
 @pytest.mark.asyncio
@@ -307,6 +307,40 @@ async def test_stream_route_logs_error_when_truncated_by_max_tokens(caplog):
                 pass
 
     assert any("max_tokens" in record.message for record in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_stream_route_day_slot_cap_rejects_excess_slots(caplog):
+    # density="normal" → 캡 6. 같은 day에 8개 슬롯을 몰아넣어도 6개까지만 채택돼야 함
+    # (실측 사례: 환각/중복 재시도로 한 day에 10슬롯까지 쌓였던 버그 재현 테스트).
+    candidates = [
+        Document(
+            page_content=f"P{i} | 주소 | 태그: 관광",
+            metadata={"id": f"p{i}", "name": f"P{i}", "lng": 129.0 + i * 0.01, "lat": 35.0 + i * 0.01,
+                      "avg_duration_minutes": 60, "is_hidden_gem": False},
+        )
+        for i in range(8)
+    ]
+    day1 = "".join(
+        f'{{"day":1,"order":{i + 1},"place_id":"p{i}","place_name":"P{i}",'
+        f'"tip":"","duration_minutes":60,"budget_estimate":5000}}\n'
+        for i in range(8)
+    )
+    fake_stream = _FakeAnthropicStream([day1])
+
+    mock_pgvector = MagicMock()
+    mock_pgvector.return_value.ainvoke = AsyncMock(return_value=candidates)
+
+    results = []
+    with patch.object(route_service, "PgvectorRetriever", mock_pgvector), \
+         patch.object(route_service, "cluster_candidates", return_value=[candidates]), \
+         patch.object(route_service._anthropic.messages, "stream", return_value=fake_stream):
+        with caplog.at_level("WARNING"):
+            async for line in stream_route(_make_req(density="normal"), db=MagicMock(), redis=None):
+                results.append(line)
+
+    assert len(results) == 6
+    assert any("슬롯 상한" in record.message for record in caplog.records)
 
 
 @pytest.mark.asyncio

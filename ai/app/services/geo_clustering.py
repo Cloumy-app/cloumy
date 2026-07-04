@@ -26,13 +26,23 @@ def cluster_label(idx: int) -> str:
     return chr(ord("A") + idx)
 
 
-def _kmeans_labels(coords: np.ndarray, k: int, seed: int) -> np.ndarray:
-    """(n, 2) 좌표 배열을 k개 클러스터로 나눈 라벨 배열을 반환한다. Lloyd's algorithm."""
+def _kmeans_labels(
+    coords: np.ndarray, k: int, seed: int, seed_coord: tuple[float, float] | None = None
+) -> np.ndarray:
+    """(n, 2) 좌표 배열을 k개 클러스터로 나눈 라벨 배열을 반환한다. Lloyd's algorithm.
+
+    seed_coord가 있으면 k-means++ 초기 centroid의 슬롯 0을 랜덤 선택 대신 그 좌표로
+    고정한다. _greedy_chain_order가 항상 클러스터 인덱스 0에서 시작하므로(order[0]==0
+    결정론적으로 보장), 이렇게 하면 최종 반환 리스트의 0번째(Day 1)가 seed_coord 인근
+    클러스터가 되도록 유도할 수 있다."""
     n = coords.shape[0]
     rng = np.random.default_rng(seed)
 
     # k-means++ 초기화
-    centroids = [coords[rng.integers(n)]]
+    if seed_coord is not None:
+        centroids = [np.array(seed_coord, dtype=coords.dtype)]
+    else:
+        centroids = [coords[rng.integers(n)]]
     for _ in range(k - 1):
         d2 = np.min(
             [np.sum((coords - c) ** 2, axis=1) for c in centroids], axis=0
@@ -126,7 +136,8 @@ def _greedy_chain_order(centroids: np.ndarray) -> list[int]:
 
 
 def cluster_candidates(
-    candidates: list[Document], k: int, seed: int = 42
+    candidates: list[Document], k: int, seed: int = 42,
+    day1_anchor: tuple[float, float] | None = None,
 ) -> list[list[Document]]:
     """
     후보 Document 리스트를 k개의 지리적 구역으로 나눈다.
@@ -134,6 +145,9 @@ def cluster_candidates(
       단일 그룹(길이 1 리스트)을 반환한다 — 호출부는 len(result) == 1로 비활성 판별.
     - 각 클러스터 내부는 원본 순서(=pgvector 유사도 랭킹)를 보존한다.
     - 반환 리스트는 centroid 간 그리디 최근접 순서로 정렬돼 있다.
+    - day1_anchor(숙소 좌표)가 있으면 반환 리스트의 0번째(Day 1)가 그 좌표 인근
+      구역이 되도록 유도한다 — 느슨한 유도이며, Lloyd 반복/재배분 보정을 거치며
+      실제 구역 경계는 후보 분포에 따라 조정될 수 있다(하드 고정 아님).
     """
     if not candidates:
         return []
@@ -146,7 +160,7 @@ def cluster_candidates(
         return [candidates]
 
     coords = np.array([[c.metadata["lat"], c.metadata["lng"]] for c in candidates])
-    labels = _kmeans_labels(coords, k, seed)
+    labels = _kmeans_labels(coords, k, seed, seed_coord=day1_anchor)
     labels = _rebalance_labels(coords, labels, k)
 
     # 최소 클러스터 크기 보장: k-means 수렴 후 특정 구역이 극단적으로 작으면
