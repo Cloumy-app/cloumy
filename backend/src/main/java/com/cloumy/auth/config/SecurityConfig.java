@@ -1,6 +1,7 @@
 package com.cloumy.auth.config;
 
 import com.cloumy.auth.security.JwtAuthenticationFilter;
+import com.cloumy.common.filter.RateLimitFilter;
 import com.cloumy.common.response.ApiResponse;
 import com.cloumy.common.response.ErrorCode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -8,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -26,10 +28,15 @@ import java.io.IOException;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        // @Component로 등록하지 않고 여기서 직접 생성 — Spring Boot의 서블릿 필터 자동 등록 대상이
+        // 되지 않도록 해서 요청당 정확히 한 번만 실행되게 한다(RateLimitFilter 클래스 주석 참고)
+        RateLimitFilter rateLimitFilter = new RateLimitFilter(redisTemplate, objectMapper);
+
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -45,6 +52,7 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(rateLimitFilter, JwtAuthenticationFilter.class)
                 .exceptionHandling(ex -> ex
                         // 인증 정보 없음 (토큰 누락 등) → 401
                         .authenticationEntryPoint((request, response, e) ->

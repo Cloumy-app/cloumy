@@ -150,7 +150,7 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 
 **[Spring]**
 - [x] 폴백 — 유사 루트 추천 — FastAPI 장애 시 DB 유사 루트 조회로 SSE 대체, 없으면 기존 에러 처리 유지 (`trip/service/FallbackRouteService.java`) — 2026-07-04
-- [ ] Rate Limiting 튜닝 — 사용자당 1분 3회, Redis 슬라이딩 윈도우 (`common/config/GatewayConfig.java`)
+- [x] Rate Limiting 튜닝 — 사용자당 1분 3회, Redis ZSET 슬라이딩 윈도우, Spring Cloud Gateway 없이 Filter로 구현 (`common/filter/RateLimitFilter.java`) — 2026-07-04
 
 **[공통]**
 - [ ] 통합 테스트 E2E — 전체 플로우 실 API 검증 (입력 → RAG → TSP → LLM → SSE → DB 저장)

@@ -14,6 +14,13 @@
 - **해야 할 것**: Apple 공개키 JWK endpoint(`https://appleid.apple.com/auth/keys`)에서 공개키를 가져와 RS256 서명 검증 추가
 - **참고**: JJWT 또는 `com.nimbusds:nimbus-jose-jwt` 라이브러리 사용 권장
 
+### 2. JWT 블랙리스트 조회가 Redis 장애 시 처리되지 않은 예외를 던짐
+- **파일**: `backend/src/main/java/com/cloumy/auth/security/JwtTokenProvider.java` (validateToken, `redisTemplate.hasKey(BLACKLIST_KEY_PREFIX + ...)` 부분)
+- **관련 태스크**: Rate Limiting 튜닝(Spring, 2026-07-04) 검증 중 발견 — `RateLimitFilter`의 fail-open 동작을 확인하려고 Redis 컨테이너를 잠깐 내렸더니, 내 필터에 도달하기도 전에 `JwtAuthenticationFilter`가 블랙리스트 조회에서 `RedisException`을 던져 500으로 응답함(정상 토큰인데도)
+- **위험**: Redis 장애 시 인증이 필요한 모든 엔드포인트가 500을 반환 — 정상 사용자도 전부 막힘. 레이트리밋은 fail-open으로 설계했는데 그 앞단인 인증 자체가 fail-closed(사실상 의도치 않은 예외)라 전체 취지가 무색해짐
+- **해야 할 것(논의 필요)**: 블랙리스트 조회를 try-catch로 감싸고 Redis 장애 시 정책 결정 필요 — "차단된 토큰인지 확인 불가 시 통과시킬지(로그아웃 처리가 늦게 반영되는 정도의 리스크)" vs "명시적으로 503 반환할지"(현재처럼 이유 불명확한 500보다는 나음)
+- **우선순위**: 중간 — Redis 자체가 자주 죽는 컴포넌트는 아니지만, 장애 시 파급 범위가 이 기능 하나가 아니라 전체 인증이라 영향도가 큼
+
 ---
 
 ## 🟠 테스트 미완료
