@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from app.services.transport_service import _estimate_minutes, enrich_transport
+from app.services.transport_service import _build_transit_summary, _estimate_minutes, enrich_transport
 
 # 강남역 -> 서울역 직선거리 약 8.4km
 _GANGNAM = (37.4979, 127.0276)
@@ -52,17 +52,19 @@ async def test_enrich_transport_transit_without_key_falls_back_to_approximation(
     result = await enrich_transport(slots, coord_lookup, "transit", "")
     assert result[0]["transport_to_next"] == "transit"
     assert result[0]["transport_minutes"] > 0  # 근사치로 채워짐
+    assert result[0]["transit_summary"] is None  # 키 없으면 노선 요약도 없음
 
 
 async def test_enrich_transport_transit_api_error_falls_back_to_approximation():
     slots = [{"place_id": "a"}, {"place_id": "b"}]
     coord_lookup = {"a": _GANGNAM, "b": _SEOUL_STATION}
     with patch(
-        "app.services.transport_service._tmap_transit_minutes",
+        "app.services.transport_service._tmap_transit_route",
         new=AsyncMock(side_effect=Exception("Tmap API 장애")),
     ):
         result = await enrich_transport(slots, coord_lookup, "transit", "dummy-key")
     assert result[0]["transport_minutes"] > 0  # 예외 발생해도 근사치로 폴백, 크래시 없음
+    assert result[0]["transit_summary"] is None
 
 
 async def test_enrich_transport_missing_coord_skips_pair():
@@ -70,3 +72,29 @@ async def test_enrich_transport_missing_coord_skips_pair():
     coord_lookup = {"a": _GANGNAM}
     result = await enrich_transport(slots, coord_lookup, "walk", "")
     assert "transport_to_next" not in result[0]  # 좌표 없는 상대와는 계산 스킵
+
+
+def test_build_transit_summary_bus_to_subway_one_transfer():
+    itinerary = {"legs": [
+        {"mode": "BUS", "route": "143"},
+        {"mode": "SUBWAY", "route": "2호선"},
+    ]}
+    assert _build_transit_summary(itinerary) == "버스 143 → 지하철 2호선 (환승 1회)"
+
+
+def test_build_transit_summary_all_walk_returns_none():
+    itinerary = {"legs": [{"mode": "WALK"}]}
+    assert _build_transit_summary(itinerary) is None
+
+
+def test_build_transit_summary_missing_route_field_no_keyerror():
+    itinerary = {"legs": [{"mode": "BUS"}]}  # route 키 자체가 없음
+    assert _build_transit_summary(itinerary) == "버스"
+
+
+def test_build_transit_summary_unknown_mode_skipped():
+    itinerary = {"legs": [
+        {"mode": "FERRY", "route": "여객선"},
+        {"mode": "BUS", "route": "143"},
+    ]}
+    assert _build_transit_summary(itinerary) == "버스 143"

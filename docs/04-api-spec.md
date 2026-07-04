@@ -121,8 +121,9 @@ AI 루트 생성 (스트리밍 응답)
           "startTime": "10:00",
           "durationMinutes": 90,
           "estimatedCost": 15000,
-          "transportToNext": "taxi",
-          "transportMinutes": 20,
+          "transportToNext": "transit",
+          "transportMinutes": 32,
+          "transitSummary": "버스 143 → 지하철 2호선 (환승 1회)",
           "tips": "오전에 가면 싱싱한 회를 저렴하게 즐길 수 있습니다."
         }
       ]

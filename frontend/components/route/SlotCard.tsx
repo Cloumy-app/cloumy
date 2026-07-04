@@ -55,6 +55,7 @@ export function SlotCard({
   const startTime = formatTime(apiSlot?.startTime ?? null);
   const transportMinutes = apiSlot?.transportMinutes ?? null;
   const transportToNext = apiSlot?.transportToNext ?? null;
+  const transitSummary = apiSlot?.transitSummary ?? null;
 
   const handleReshuffle = async () => {
     if (pinned || !routeId || !apiSlot) return;
@@ -176,7 +177,7 @@ export function SlotCard({
           <View className="flex-row items-center gap-2 ml-10 my-2 py-2 border-b border-dashed border-slate-200">
             <Navigation size={14} color="#94a3b8" />
             <Text className="text-sm font-bold text-slate-500 flex-1">
-              다음 장소까지{transportToNext ? ` ${transportToNext} ·` : ''} {transportMinutes != null ? `${transportMinutes}분 소요` : ''}
+              다음 장소까지 {transitSummary ? `${transitSummary} · ` : transportToNext ? `${transportToNext} · ` : ''}{transportMinutes != null ? `${transportMinutes}분 소요` : ''}
             </Text>
           </View>
         )}
@@ -374,7 +375,7 @@ export function SlotCard({
         <View className="flex-row items-center gap-1.5 ml-14 my-1">
           <Navigation size={11} color="#94a3b8" />
           <Text className="text-[11px] text-slate-400">
-            {transportToNext && `${transportToNext} · `}
+            {transitSummary ? `${transitSummary} · ` : transportToNext ? `${transportToNext} · ` : ''}
             {transportMinutes != null ? `${transportMinutes}분 소요` : ''}
           </Text>
         </View>

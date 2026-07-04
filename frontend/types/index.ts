@@ -50,6 +50,7 @@ export interface SlotWithCoords {
   estimatedCost: number | null;
   transportToNext: string | null;
   transportMinutes: number | null;
+  transitSummary: string | null;
   tips: string | null;
   placeName: string;
   address: string | null;

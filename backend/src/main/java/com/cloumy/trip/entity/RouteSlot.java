@@ -54,12 +54,15 @@ public class RouteSlot {
     @Column(name = "transport_minutes")
     private Integer transportMinutes;
 
+    @Column(name = "transit_summary")
+    private String transitSummary;
+
     private String tips;
 
     @Builder
     private RouteSlot(UUID routeId, UUID placeId, int dayNumber, int orderIndex,
                       Integer durationMinutes, Integer estimatedCost, String tips,
-                      String transportToNext, Integer transportMinutes) {
+                      String transportToNext, Integer transportMinutes, String transitSummary) {
         this.routeId = routeId;
         this.placeId = placeId;
         this.dayNumber = dayNumber;
@@ -69,6 +72,7 @@ public class RouteSlot {
         this.tips = tips;
         this.transportToNext = transportToNext;
         this.transportMinutes = transportMinutes;
+        this.transitSummary = transitSummary;
         this.pinned = false;
     }
 

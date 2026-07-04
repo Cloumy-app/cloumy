@@ -83,6 +83,7 @@ public class RouteSlotService {
                 .tips(node.path("tip").asText(null))
                 .transportToNext(node.path("transport_to_next").asText(null))
                 .transportMinutes(transportMinutes)
+                .transitSummary(node.path("transit_summary").asText(null))
                 .build();
         routeSlotRepository.save(slot);
     }

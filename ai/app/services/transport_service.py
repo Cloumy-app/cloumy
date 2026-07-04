@@ -21,6 +21,9 @@ _TMAP_TRANSIT_URL = "https://apis.openapi.sk.com/transit/routes"
 # DB CHECK 제약이 'car'가 아니라 'taxi'를 요구함(V4 마이그레이션 기존 설계)
 _MODE_TO_SLOT_LABEL = {"walk": "walk", "car": "taxi", "transit": "transit"}
 
+# Tmap 대중교통 API legs[].mode → 노선 요약 표시용 한글 라벨(도보는 요약에서 제외)
+_TRANSIT_MODE_LABEL = {"BUS": "버스", "SUBWAY": "지하철", "TRAIN": "기차", "EXPRESSBUS": "고속버스"}
+
 
 def _estimate_minutes(distance_km: float, mode: str) -> int:
     """거리 기반 근사치. mode는 'walk' 또는 그 외(자동차 취급)."""
@@ -28,10 +31,28 @@ def _estimate_minutes(distance_km: float, mode: str) -> int:
     return max(1, round(distance_km * _DETOUR_FACTOR / speed * 60))
 
 
-async def _tmap_transit_minutes(
+def _build_transit_summary(itinerary: dict) -> str | None:
+    """legs 중 대중교통 구간만 추출해 '버스 143 → 지하철 2호선 (환승 1회)' 형태로 요약.
+    도보 구간뿐이거나 legs 구조가 예상과 다르면 None(요약 없이 소요시간만 표시)."""
+    hops = []
+    for leg in itinerary.get("legs", []):
+        label = _TRANSIT_MODE_LABEL.get(leg.get("mode", ""))
+        if label is None:
+            continue
+        route = leg.get("route", "").strip()
+        hops.append(f"{label} {route}".strip())
+
+    if not hops:
+        return None
+    summary = " → ".join(hops)
+    transfers = len(hops) - 1
+    return f"{summary} (환승 {transfers}회)" if transfers > 0 else summary
+
+
+async def _tmap_transit_route(
     client: httpx.AsyncClient, lat1: float, lng1: float, lat2: float, lng2: float, api_key: str
-) -> int | None:
-    """Tmap 대중교통 API로 실제 소요시간(분)을 조회. 경로 없으면 None."""
+) -> tuple[int, str | None] | None:
+    """Tmap 대중교통 API로 소요시간(분)과 노선 요약을 함께 조회. 경로 없으면 None."""
     resp = await client.post(
         _TMAP_TRANSIT_URL,
         headers={"accept": "application/json", "appKey": api_key, "content-type": "application/json"},
@@ -46,7 +67,9 @@ async def _tmap_transit_minutes(
     itineraries = resp.json().get("metaData", {}).get("plan", {}).get("itineraries", [])
     if not itineraries:
         return None
-    return round(itineraries[0]["totalTime"] / 60)
+    itinerary = itineraries[0]
+    minutes = round(itinerary["totalTime"] / 60)
+    return minutes, _build_transit_summary(itinerary)
 
 
 async def enrich_transport(
@@ -74,10 +97,12 @@ async def enrich_transport(
             lat1, lng1 = coord_lookup[id_a]
             lat2, lng2 = coord_lookup[id_b]
 
-            minutes = None
+            minutes, summary = None, None
             if transport_mode == "transit" and tmap_api_key:
                 try:
-                    minutes = await _tmap_transit_minutes(client, lat1, lng1, lat2, lng2, tmap_api_key)
+                    result = await _tmap_transit_route(client, lat1, lng1, lat2, lng2, tmap_api_key)
+                    if result is not None:
+                        minutes, summary = result
                 except Exception as e:
                     logger.warning("Tmap 대중교통 API 오류 — 근사치로 폴백: %s", e)
 
@@ -87,5 +112,6 @@ async def enrich_transport(
 
             ordered_slots[i]["transport_to_next"] = label
             ordered_slots[i]["transport_minutes"] = minutes
+            ordered_slots[i]["transit_summary"] = summary
 
     return ordered_slots

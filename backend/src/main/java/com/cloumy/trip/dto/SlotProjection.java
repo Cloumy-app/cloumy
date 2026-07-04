@@ -13,6 +13,7 @@ public interface SlotProjection {
     Integer getEstimatedCost();
     String getTransportToNext();
     Integer getTransportMinutes();
+    String getTransitSummary();
     String getTips();
     String getPlaceName();
     String getAddress();

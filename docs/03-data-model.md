@@ -103,6 +103,7 @@ group_trips
 | is_pinned | BOOLEAN | ✅ | Pin & Reshuffle 고정 여부 (기본값 false) |
 | transport_to_next | VARCHAR | - | 'walk' \| 'transit' \| 'taxi' |
 | transport_minutes | INTEGER | - | 다음 장소까지 이동 시간 |
+| transit_summary | TEXT | - | 대중교통 노선+환승 요약 (예: "버스 143 → 지하철 2호선 (환승 1회)"), transit 모드일 때만 |
 | tips | TEXT | - | AI 생성 팁 |
 
 ### expenses
@@ -284,6 +285,7 @@ interface RouteSlot {
   isPinned: boolean;
   transportToNext?: 'walk' | 'transit' | 'taxi';
   transportMinutes?: number;
+  transitSummary?: string; // 대중교통 노선+환승 요약, transit 모드일 때만
   tips?: string;
 }
 
