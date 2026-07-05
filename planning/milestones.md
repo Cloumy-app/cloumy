@@ -147,6 +147,7 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 - [x] 날씨 가중치 반영 방식 개선 — 전체 평균 정렬 → Day별 강수확률 프롬프트 반영 (`services/weather_service.py`) — 2026-07-02
 - [x] 날씨 라벨 세분화(오전/오후/저녁 블록) + 근시일(5일 이내) 요청 캐시 우회 (`services/weather_service.py`, `services/route_service.py`) — 2026-07-02
 - [x] 코드 리뷰 대응 — TSP 순서 불일치, 슬롯 대안 좌표 환각, 폴백 태그 유실, hidden_gem 노출 누락, TourAPI 중복, 임베딩 배치 재사용 수정 (7건) — 2026-07-02
+- [x] 네이버 지역검색 API 보강 수집기 — 동네 단위 키워드로 카카오 실패(순증 0건) 반복 방지, 전국 14개 도시 순증 1,180건 (`scripts/collect_naver_local.py`) — 2026-07-05
 
 **[Spring]**
 - [x] 폴백 — 유사 루트 추천 — FastAPI 장애 시 DB 유사 루트 조회로 SSE 대체, 없으면 기존 에러 처리 유지 (`trip/service/FallbackRouteService.java`) — 2026-07-04
