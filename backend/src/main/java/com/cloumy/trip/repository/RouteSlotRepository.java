@@ -16,6 +16,14 @@ public interface RouteSlotRepository extends JpaRepository<RouteSlot, UUID> {
 
     Optional<RouteSlot> findByRouteIdAndDayNumberAndOrderIndex(UUID routeId, int dayNumber, int orderIndex);
 
+    // start_time 캐스케이드 재계산용 — 해당 day 전체를 order_index 순으로 조회
+    List<RouteSlot> findByRouteIdAndDayNumberOrderByOrderIndex(UUID routeId, int dayNumber);
+
+    // 슬롯 삽입 시 뒤 슬롯들의 order_index를 미는 대상 조회 — 큰 값부터 내림차순으로 반환해야
+    // 순서대로 +1 했을 때 (route_id, day_number, order_index) UNIQUE 제약과 중간에 충돌하지 않는다.
+    List<RouteSlot> findByRouteIdAndDayNumberAndOrderIndexGreaterThanOrderByOrderIndexDesc(
+            UUID routeId, int dayNumber, int orderIndex);
+
     // places 테이블과 JOIN해서 lat/lng 포함한 슬롯 목록 반환
     // ST_Y(geometry) = latitude, ST_X(geometry) = longitude (WGS84)
     @Query(value = """

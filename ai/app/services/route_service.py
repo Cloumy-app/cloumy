@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import AsyncGenerator
 
 import asyncpg
@@ -81,6 +81,22 @@ DENSITY_SLOT_CAP: dict[str, int] = {
     "normal": 6,
     "packed": 7,
 }
+
+# 하루 일정 시작 시각 — 사용자 개별 입력 없이 고정값 사용(추후 필요 시 입력 필드로 확장 가능)
+DAY_START_TIME = time(9, 0)
+
+
+def _assign_start_times(slots: list[dict]) -> list[dict]:
+    """LLM이 시간을 직접 생성하지 않고, 이미 계산된 duration_minutes/transport_minutes를
+    순서대로 누적해 start_time을 역산한다 — 도구가 생성한 시간과 실제 소요시간이
+    어긋나는 걸 원천 차단(계산 결과가 곧 정답이므로 검증이 따로 필요 없음)."""
+    current = datetime.combine(date.today(), DAY_START_TIME)
+    for slot in slots:
+        slot["start_time"] = current.time().strftime("%H:%M")
+        duration = slot.get("duration_minutes") or 0
+        transport = slot.get("transport_minutes") or 0
+        current += timedelta(minutes=duration + transport)
+    return slots
 
 
 async def close_ai_clients() -> None:
@@ -287,11 +303,12 @@ async def stream_route(
     slot_cap = DENSITY_SLOT_CAP.get(request.density, DENSITY_SLOT_CAP["normal"])
 
     async def _finalize_day(day_lines: list[str], day_number: int | None) -> list[str]:
-        """TSP 재정렬 + 이동시간 enrichment를 거친 최종 ndjson 라인을 반환한다."""
+        """TSP 재정렬 + 이동시간 enrichment + start_time 계산을 거친 최종 ndjson 라인을 반환한다."""
         reordered = reorder_slots(day_lines, coord_lookup, anchor=accommodation_anchors.get(day_number))
         slots = [json.loads(line) for line in reordered]
         enriched = await enrich_transport(slots, coord_lookup, request.transport_mode, settings.tmap_api_key)
-        return [json.dumps(s, ensure_ascii=False) + "\n" for s in enriched]
+        timed = _assign_start_times(enriched)
+        return [json.dumps(s, ensure_ascii=False) + "\n" for s in timed]
 
     async def _ingest(validated: str) -> list[str]:
         """day 경계를 넘으면 이전 day를 TSP 재정렬+이동시간 enrichment해 반환, 아니면 버퍼링만 하고 빈 리스트 반환."""
