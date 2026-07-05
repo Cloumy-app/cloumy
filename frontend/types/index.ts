@@ -154,11 +154,27 @@ export function getBudgetStatus(cost: number, level: BudgetLevel): BudgetStatus 
   return 'ok';
 }
 
+export interface ChatPlaceCard {
+  placeId: string;
+  name: string;
+  tags: string;
+  isHiddenGem: boolean;
+  avgDurationMinutes: number | null;
+}
+
+export interface ChatEstimatedSlot {
+  slotId: string;
+  day: number;
+  orderIndex: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   createdAt: Date;
+  places?: ChatPlaceCard[];
+  estimatedSlot?: ChatEstimatedSlot;
 }
 
 export interface BudgetSummary {

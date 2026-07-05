@@ -20,12 +20,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -33,6 +32,9 @@ import java.util.UUID;
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
 public class RouteSlotService {
+
+    // AI(route_service.py)의 DAY_START_TIME과 동일한 값 — 슬롯 삽입/교체 후 재계산에도 동일 기준 사용
+    private static final LocalTime DAY_START_TIME = LocalTime.of(9, 0);
 
     private final RouteRepository routeRepository;
     private final RouteSlotRepository routeSlotRepository;
@@ -81,11 +83,16 @@ public class RouteSlotService {
         Integer transportMinutes = node.has("transport_minutes")
                 ? node.path("transport_minutes").asInt() : null;
 
+        // AI가 duration_minutes/transport_minutes 누적으로 역산한 값("HH:MM") — 항상 채워져서 옴
+        String startTimeStr = node.path("start_time").asText(null);
+        LocalTime startTime = startTimeStr != null ? LocalTime.parse(startTimeStr) : null;
+
         RouteSlot slot = RouteSlot.builder()
                 .routeId(routeId)
                 .placeId(UUID.fromString(placeIdStr))
                 .dayNumber(dayNumber)
                 .orderIndex(orderIndex)
+                .startTime(startTime)
                 .durationMinutes(node.path("duration_minutes").asInt(0))
                 .estimatedCost(node.path("budget_estimate").asInt(0))
                 .tips(node.path("tip").asText(null))
@@ -192,17 +199,30 @@ public class RouteSlotService {
             recalculateNeighborTransport(route.getTransportMode(), req.placeId(), newPlace, target, prev, next);
         }
 
+        // 이동시간이 바뀌면 그 뒤 슬롯들의 start_time도 밀리므로, 이웃 몇 개가 아니라
+        // 해당 day 전체를 처음부터 다시 계산한다(day당 슬롯 수가 적어 비용 무시 가능).
+        recomputeStartTimesForDay(routeId, target.getDayNumber());
         routeSlotRepository.flush();
 
-        Set<UUID> affectedIds = new HashSet<>();
-        affectedIds.add(target.getId());
-        prev.ifPresent(s -> affectedIds.add(s.getId()));
-        next.ifPresent(s -> affectedIds.add(s.getId()));
-
+        int affectedDay = target.getDayNumber();
         return routeSlotRepository.findSlotsByRouteId(routeId).stream()
-                .filter(p -> affectedIds.contains(UUID.fromString(p.getId())))
+                .filter(p -> affectedDay == p.getDayNumber())
                 .map(SlotResponse::from)
                 .toList();
+    }
+
+    // duration_minutes/transport_minutes 누적으로 start_time을 처음부터 다시 계산한다.
+    // 부분 재계산(변경 지점 이후만) 대신 day 전체를 다시 계산하는 이유: 슬롯 삽입/삭제/교체가
+    // 뒤섞여도 항상 정답을 보장하는 가장 단순한 방법이고, day당 슬롯 수가 적어 비용도 무시할 수준.
+    private void recomputeStartTimesForDay(UUID routeId, int dayNumber) {
+        List<RouteSlot> slots = routeSlotRepository.findByRouteIdAndDayNumberOrderByOrderIndex(routeId, dayNumber);
+        LocalTime current = DAY_START_TIME;
+        for (RouteSlot slot : slots) {
+            slot.updateStartTime(current);
+            int duration = slot.getDurationMinutes() != null ? slot.getDurationMinutes() : 0;
+            int transport = slot.getTransportMinutes() != null ? slot.getTransportMinutes() : 0;
+            current = current.plusMinutes(duration + transport);
+        }
     }
 
     // 교체된 슬롯과 직접 이웃(order_index ±1)한 구간만 재계산한다(같은 날 전체 재계산은 범위 밖).
@@ -248,6 +268,63 @@ public class RouteSlotService {
             target.updateTransport(r.transport_to_next(), r.transport_minutes(), r.transit_summary(),
                     transitDetailToString(r.transit_detail()));
         }
+    }
+
+    // 챗봇이 추천한 장소를 afterSlot과 그 다음 슬롯 사이에 새 슬롯으로 끼워 넣는다.
+    @Transactional
+    public List<SlotResponse> insertSlotAfter(UUID routeId, UUID userId, UUID afterSlotId, UUID placeId) {
+        verifyOwner(routeId, userId);
+        Route route = routeRepository.findById(routeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
+        RouteSlot afterSlot = routeSlotRepository.findById(afterSlotId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SLOT_NOT_FOUND));
+        PlaceProjection newPlace = placeRepository.findPlaceDetailById(placeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PLACE_NOT_FOUND));
+
+        int dayNumber = afterSlot.getDayNumber();
+        int insertOrderIndex = afterSlot.getOrderIndex() + 1;
+
+        // "원래 다음 슬롯"은 order_index를 밀기 전에 먼저 확보해야 한다 — 밀고 나면 값이 바뀐다.
+        Optional<RouteSlot> next = routeSlotRepository.findByRouteIdAndDayNumberAndOrderIndex(
+                routeId, dayNumber, insertOrderIndex);
+
+        // 뒤 슬롯들을 order_index 큰 값부터 내림차순으로 +1씩 밀어 삽입 자리를 비운다.
+        // 오름차순으로 밀면 (route_id, day_number, order_index) UNIQUE 제약과 중간에 충돌한다.
+        // 개별 flush 필수: Hibernate가 이 UPDATE들을 JDBC batch로 묶으면 리스트 순서를
+        // 보존한다는 보장이 없어(실측: 배치로 묶었더니 내림차순 의도와 다르게 실행돼
+        // uk_route_slots_day_order 위반 발생) — 한 건씩 flush해 실행 순서를 강제한다.
+        List<RouteSlot> shifting = routeSlotRepository
+                .findByRouteIdAndDayNumberAndOrderIndexGreaterThanOrderByOrderIndexDesc(
+                        routeId, dayNumber, afterSlot.getOrderIndex());
+        for (RouteSlot s : shifting) {
+            s.shiftOrderIndex(1);
+            routeSlotRepository.flush();
+        }
+
+        // durationMinutes를 비워두면(0으로 취급) start_time 캐스케이드에서 이 슬롯 체류시간이
+        // 0분으로 계산돼 다음 슬롯과 시각이 겹쳐 보인다 — 장소의 평균 체류시간으로 기본값을 채운다.
+        RouteSlot newSlot = RouteSlot.builder()
+                .routeId(routeId)
+                .placeId(placeId)
+                .dayNumber(dayNumber)
+                .orderIndex(insertOrderIndex)
+                .durationMinutes(newPlace.getAvgDurationMinutes())
+                .build();
+        routeSlotRepository.save(newSlot);
+
+        // replaceSlot과 동일한 이웃 이동정보 재계산 재사용: afterSlot(prev)→newSlot(target)→next
+        if (route.getTransportMode() != null) {
+            recalculateNeighborTransport(
+                    route.getTransportMode(), placeId, newPlace, newSlot, Optional.of(afterSlot), next);
+        }
+
+        // 새 슬롯이 끼어들면서 그 뒤 모든 슬롯의 시작 시각이 밀리므로 day 전체 재계산
+        recomputeStartTimesForDay(routeId, dayNumber);
+        routeSlotRepository.flush();
+
+        return routeSlotRepository.findSlotsByRouteId(routeId).stream()
+                .map(SlotResponse::from)
+                .toList();
     }
 
     // AI 응답의 transit_detail(JsonNode, 불투명 JSON blob)을 TEXT 컬럼에 저장할 문자열로 변환.

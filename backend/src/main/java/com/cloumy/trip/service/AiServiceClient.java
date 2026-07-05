@@ -1,5 +1,8 @@
 package com.cloumy.trip.service;
 
+import com.cloumy.common.exception.BusinessException;
+import com.cloumy.common.response.ErrorCode;
+import com.cloumy.trip.dto.ChatResponse;
 import com.cloumy.trip.dto.RouteGenRequest;
 import com.cloumy.trip.dto.SlotAlternativeResponse;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -131,6 +134,43 @@ public class AiServiceClient {
         } catch (Exception e) {
             log.error("슬롯 이동정보 요청 실패: {}", e.getMessage());
             return List.of();
+        }
+    }
+
+    private record ChatLocationDto(double lat, double lng) {}
+
+    private record ChatReq(
+            String user_id, String route_id, String message, ChatLocationDto current_location
+    ) {}
+
+    public ChatResponse chat(String userId, String routeId, String message, Double lat, Double lng) {
+        try {
+            ChatLocationDto location = (lat != null && lng != null) ? new ChatLocationDto(lat, lng) : null;
+            String body = objectMapper.writeValueAsString(
+                    new ChatReq(userId, routeId, message, location));
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(fastapiUrl + "/ai/chat"))
+                    .header("Content-Type", "application/json")
+                    .header("X-Internal-Key", internalApiKey)
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .timeout(Duration.ofSeconds(15))
+                    .build();
+
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 404) {
+                throw new BusinessException(ErrorCode.ROUTE_NOT_FOUND);
+            }
+            if (response.statusCode() >= 400) {
+                log.error("FastAPI 챗봇 오류: status={}", response.statusCode());
+                throw new BusinessException(ErrorCode.INTERNAL_ERROR, "챗봇 응답에 실패했습니다");
+            }
+            return objectMapper.readValue(response.body(), ChatResponse.class);
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("챗봇 요청 실패: {}", e.getMessage());
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "챗봇 요청에 실패했습니다");
         }
     }
 

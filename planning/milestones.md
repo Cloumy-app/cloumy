@@ -227,15 +227,20 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 
 ### ~2026-07-25 ~ 2026-08-14: AI 챗봇
 
-- [ ] LangChain 멀티턴 챗봇 파이프라인
-- [ ] Redis 세션 관리 (메시지 히스토리, 컨텍스트)
-- [ ] Function Calling 도구 구현
-  - search_nearby_places, record_expense, get_remaining_budget, suggest_alternatives
-- [ ] 챗봇 스트리밍 WebSocket 구현
-- [ ] 여행 중 현위치 기반 장소 추천 (OpenWeatherMap API 연동)
-- [ ] 예산 자연어 파싱 (Haiku, "기념품 12,000원 썼어" → 자동 분류)
-- [ ] 챗봇 UI 구현 (ChatBubble, 스트리밍 애니메이션)
-- [ ] 지출 파싱 확인 팝업 UI
+> **1단계 스코프 축소 (2026-07-05)**: 원래 견적(8~10주) 대비 스코프를 좁혀 여행 중 실시간 어시스턴트 + 읽기전용 도구 3개(`search_nearby_places`/`get_weather_forecast`/`get_route_status`)부터 진행. 스트리밍 없이 non-streaming 단발 응답으로 시작(추후 `route_gen.py` NDJSON 패턴 이식 가능). 예산 추적 기능 자체가 미구현이라 `record_expense`/`get_remaining_budget`는 다음 단계로, `suggest_alternatives`는 기존 Pin&Reshuffle과 중복이라 후순위, 여행 전 대화형 루트 생성도 다음 단계로 미룸.
+
+- [x] `search_nearby_places`/`get_weather_forecast`/`get_route_status` Function Calling 도구 3종 (`ai/app/services/chat_service.py`) — 2026-07-05
+- [x] Redis 세션 관리 (메시지 히스토리, TTL 2h) — 2026-07-05
+- [x] Spring `ChatController` + `AiServiceClient.chat()` + 소유권 검증(이중) + Rate Limit 분리(분당 10회) — 2026-07-05
+- [x] 챗봇 UI 구현 (`(tabs)/chat.tsx` — 메시지 리스트 + 입력창, 스트리밍 없음) — 2026-07-05
+- [x] GPS 없이 시간 기반 "현재 위치" 추정 — `route_slots.start_time` 누적 계산으로 확신 높음/낮음 분기, 애매하면 챗봇이 되묻기 (`_estimate_current_slot`) — 2026-07-05
+- [x] 추천 장소 → 일정에 바로 삽입 — 챗봇 카드 탭 시 추정 슬롯과 다음 슬롯 사이에 새 슬롯 삽입(`POST /v1/routes/{routeId}/slots`), 이웃 이동정보·start_time 재계산 — 2026-07-05
+- [x] `route_slots.start_time` 알고리즘 계산 — 하루 09:00 고정 시작 + duration/transport 누적 역산, LLM이 시간 직접 생성 안 함 (`route_service.py`) — 2026-07-05
+- [ ] (다음 단계) LangChain 멀티턴 챗봇 파이프라인 고도화, 챗봇 스트리밍
+- [ ] (다음 단계) `record_expense`/`get_remaining_budget` — 예산 추적 기능 선행 필요
+- [ ] (다음 단계) `modify_route_slot`/`suggest_alternatives` — Pin&Reshuffle과 통합 검토
+- [ ] (다음 단계) 여행 전 대화형 루트 생성
+- [ ] (다음 단계) 예산 자연어 파싱, 지출 파싱 확인 팝업 UI
 
 ### ~2026-08-04 ~ 2026-08-25: 예산 관리 & 지출 추적
 
