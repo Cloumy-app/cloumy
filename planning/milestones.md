@@ -153,7 +153,7 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 - [x] Rate Limiting 튜닝 — 사용자당 1분 3회, Redis ZSET 슬라이딩 윈도우, Spring Cloud Gateway 없이 Filter로 구현 (`common/filter/RateLimitFilter.java`) — 2026-07-04
 
 **[공통]**
-- [ ] 통합 테스트 E2E — 전체 플로우 실 API 검증 (입력 → RAG → TSP → LLM → SSE → DB 저장)
+- [x] 통합 테스트 E2E — 실 서비스(DB/Redis/Claude API) 기반 수동 스크립트, 6개 시나리오 전부 통과 (`ai/scripts/e2e_test.py`) — 2026-07-05
 
 **[Frontend UX + AI 품질 — 중간 점검 후속 (2026-06-30 완료)]**
 - [x] 전체보기 라우팅 버그 수정 + 내 루트 목록 화면 (`app/routes/index.tsx`) — 2026-06-30
