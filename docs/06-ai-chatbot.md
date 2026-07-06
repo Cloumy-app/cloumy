@@ -109,7 +109,8 @@ Anthropic의 [tool use](https://docs.anthropic.com/) 기능으로 구현. LLM이
 - **입력**: `category_tags`(선택, 예: `['#카페']`), `radius_m`(선택, 기본 1500m)
 - **실행 로직** (`_tool_search_nearby_places`): `PostgisTagRetriever`(`ai/app/services/retrievers.py`)를 그대로 재사용 — 루트 생성 때 후보 장소를 찾는 것과 **동일한 검색기**. 검색 중심 좌표 우선순위: **①현재 위치(있으면) → ②시간 기반 추정 슬롯 좌표(확신 높을 때만) → ③여행지 도시 중심**
 - **참조 DB**: `places` 테이블 (`ST_DWithin` 반경 검색 + `category_tags &&` 배열 필터, `is_active = true`만)
-- **반환**: 상위 5곳의 이름/태그/Hidden Gem 여부/평균 체류시간 → 이 목록은 채팅 답변에 **장소 카드**로도 그대로 노출됨(`ChatResponse.places`)
+- **반환**: 상위 5곳의 이름/태그/Hidden Gem 여부/평균 체류시간 + **`reason`(한줄 추천 이유, 2026-07-06 추가)** → 이 목록은 채팅 답변에 **장소 카드**로도 그대로 노출됨(`ChatResponse.places`)
+- **`reason` 생성 방식**: 후보 5곳을 Haiku에 한 번에 보내 후보별 1문장 추천 이유를 받는다(`_generate_place_reasons`) — `slot_alternatives.py`(Pin&Reshuffle)와 동일한 index 기반 JSON 응답 패턴 재사용(place_id를 LLM이 직접 안 베끼게 해 환각 방지). 처음엔 LLM 호출 없이 태그만 잘라 붙이는 결정론적 폴백(`describe_candidate`, `retrievers.py`)만 썼다가, 다른 슬롯들의 풍부한 팁과 톤이 안 맞는다는 피드백으로 LLM 생성 방식으로 교체 — `describe_candidate`는 LLM 응답 파싱 실패 시의 폴백으로만 남음
 
 ### 4-2. `get_weather_forecast`
 - **언제 호출되나**: "오늘/내일 날씨", "비 와?" 류의 요청
@@ -124,6 +125,7 @@ Anthropic의 [tool use](https://docs.anthropic.com/) 기능으로 구현. LLM이
 - **실행 로직** (`_tool_get_route_status`): 신규 작성한 조회 함수. **소유권 검증을 통과한 route**에 한해서만 조회.
 - **참조 DB**: `route_slots`(day_number/order_index/start_time/is_pinned/**transport_to_next/transport_minutes/transit_summary** + `places.name` JOIN) + `route_day_summaries`(day별 한 줄 요약)
 - 이동정보(`transport_to_next` 등)는 **루트 생성 시점에 이미 계산·저장된 값을 그대로 재사용** — 이 도구가 호출될 때 Tmap 등 외부 API를 새로 부르지 않음. `transit_detail`(승하차 정류장별 상세 JSON)은 답변 길이를 짧게 유지하기 위해 의도적으로 제외(요약 문장인 `transit_summary`만 사용)
+- **`today_day`/`current_slot_order_index` 필드 (2026-07-06 추가)**: "오늘이 며칠째인지"는 원래 시스템 프롬프트 텍스트 힌트로만 전달됐는데, 모델이 그 힌트와 이 도구가 반환하는 전체 일정 덤프를 스스로 연결 짓지 못하고 "며칠째 여행 중이신가요?"라고 되묻는 문제가 실측됨(특히 이런 질문은 `_SONNET_KEYWORDS`에 안 걸려 기본 Haiku로 라우팅돼 문맥 연결이 더 약함). 도구 결과 자체에 `today_day`(현재 위치 추정이 `high`일 때만 값, 아니면 `null`)와 `current_slot_order_index`, 그리고 각 day 객체에 `is_today` 플래그를 직접 포함시켜 모델이 추론 없이 바로 답하도록 수정
 
 ### 4-4. 시간 기반 위치 추정 (`_estimate_current_slot`, 도구 아님)
 - 도구 호출 여부와 무관하게 **매 요청마다 한 번** 계산돼 시스템 프롬프트에 힌트로 주입됩니다(위 [1장](#1-한눈에-보기--지금-뭘-할-수-있나) 참고)
@@ -138,6 +140,8 @@ Anthropic의 [tool use](https://docs.anthropic.com/) 기능으로 구현. LLM이
   2. 새 슬롯 insert
   3. 앞/뒤 이웃 이동정보 재계산 — 기존 `replaceSlot`이 쓰던 `recalculateNeighborTransport`(→`AiServiceClient.getSlotTransport`)를 그대로 재사용, 외부 API는 새 구간 2개만 다시 호출
 - `estimated_slot`이 `low`(위치 불확실)일 때는 삽입 UI 자체를 안 띄움 — 어디에 끼울지 기준점이 없기 때문
+- **이동수단 미지정 라우트 기본값 (2026-07-06 수정)**: `routes.transport_mode`는 루트 생성 시 선택 사항이라 null인 경우가 많은데, 원래는 null이면 이동정보 재계산 자체를 건너뛰어 삽입된 슬롯에 이동시간이 아예 안 붙는 버그가 있었다. `transport_mode`가 null이면 `"car"`를 기본값으로 써서(`enrich_transport`가 이미 walk가 아니면 전부 자동차 속도로 근사하는 구조라 AI 쪽 변경 없이 재사용) 항상 근사치라도 보여주도록 수정 — `replaceSlot()`에는 동일한 가드가 아직 남아있어 같은 문제가 잠재함(`planning/unimplemented.md` 후속 과제로 기록)
+- **`reason`이 `tips`로 영속화**: 카드의 `reason`(위 4-1 참고)이 삽입 요청에 함께 전달되어 새 슬롯의 `RouteSlot.tips`에 그대로 저장됨 — Pin&Reshuffle이 대안 교체 시 `tips`에 `reason`을 저장하는 것과 동일한 방식이라, 프론트 `SlotCard.tsx`가 이미 `tips`를 렌더링하고 있어 추가 작업 없이 자동으로 화면에 보임
 
 ### 공통 안전장치
 - 도구 호출 → 결과 반영 → 재호출... 이 무한 반복되지 않도록 **최대 3라운드**로 캡(`MAX_TOOL_ROUNDS`)
@@ -195,6 +199,7 @@ Anthropic의 [tool use](https://docs.anthropic.com/) 기능으로 구현. LLM이
 - **라운드당 비용**: tool loop 한 라운드가 돌 때마다 지금까지의 전체 대화(히스토리 + 도구 호출/결과)를 다시 통째로 모델에 전송합니다 — 라운드 수만큼 입력 토큰이 누적됩니다. `MAX_TOOL_ROUNDS=3`으로 상한을 걸어둔 이유이기도 합니다.
 - **모델 라우팅으로 비용 절감**: 대부분의 요청은 저렴한 Haiku(`$1/$5` per 1M 토큰)로 처리되고, 복잡한 요청만 Sonnet(`$3/$15`)으로 넘어갑니다.
 - **세션 히스토리는 텍스트만 저장**하므로 Redis 저장/전송 자체의 토큰 비용은 없음(Redis는 토큰과 무관, 순수 문자열 저장소).
+- **`search_nearby_places` 호출마다 Haiku 1회 추가 (2026-07-06)**: 후보별 추천 이유(`reason`) 생성을 위한 별도 Haiku 호출 — Pin&Reshuffle(`slot_alternatives.py`)이 대안 추천마다 이미 하고 있는 것과 동일한 비용 수준.
 
 ---
 
