@@ -19,6 +19,7 @@ class ChatRequest(BaseModel):
     route_id: str
     message: str
     current_location: ChatLocation | None = None
+    language: str | None = None  # ko/en/ja/zh — 앱 설정 언어(사용자 메시지 언어가 애매할 때 폴백)
 
 
 class PlaceCard(BaseModel):
@@ -61,6 +62,7 @@ async def chat(req: ChatRequest, request: Request):
             route_id=req.route_id,
             user_message=req.message,
             current_location=location,
+            language=req.language,
         )
     except RouteNotFoundError:
         logger.warning("챗봇 요청 — 존재하지 않거나 소유하지 않은 route_id: %s", req.route_id)

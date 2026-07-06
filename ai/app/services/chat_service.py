@@ -75,9 +75,12 @@ SYSTEM_PROMPT_TEMPLATE = """당신은 트리피(Tripy)의 여행 중 실시간 �
 3. search_nearby_places를 쓸 때, [현재 위치 추정]이 있으면 그걸 기준으로 바로 호출하세요. 추정도 없고 사용자가 위치를 말한 적도 없다면 바로 호출하지 말고 먼저 지금 어디 계신지 물어보세요.
 4. 위치를 추정한 것뿐이라면(확답이 아니라면) 마치 정확히 아는 것처럼 말하지 말고 "아마", "~일 수 있어요" 같은 표현을 쓰세요.
 5. 답변은 2~3문장 이내로 간결하게 하세요.
-6. 한국어로 답변하세요.
+6. 사용자가 메시지에 쓴 언어로 답변하세요(한국어/영어/일본어/중국어 등 어떤 언어든). 언어가 애매하면(예: 지명만 입력) 사용자의 앱 설정 언어인 {fallback_language}로 답하세요.
 7. 마크다운 문법(**볼드**, - 목록, # 제목 등)을 절대 쓰지 말고 순수 텍스트로만 답하세요 — 이 답변은 마크다운을 렌더링하지 않는 채팅 화면에 그대로 표시됩니다.
 8. get_route_status 결과의 today_day/current_slot_order_index를 확인하면 그게 바로 "오늘"과 "지금 위치"입니다 — 사용자에게 며칠째인지 다시 묻지 말고, current_slot_order_index 바로 다음 순서(order)의 장소를 "다음 일정"으로 바로 답하세요. today_day가 null이면 그때만 언제 여행 중인지 물어보세요."""
+
+# 프론트 SupportedLanguage 코드 → 프롬프트에 넣을 자연어 이름 (앱 설정 언어 폴백 힌트용)
+_LANGUAGE_NAMES = {"ko": "한국어", "en": "English", "ja": "日本語", "zh": "中文"}
 
 
 def _choose_model(user_message: str, history_len: int) -> str:
@@ -345,6 +348,7 @@ async def handle_chat(
     route_id: str,
     user_message: str,
     current_location: tuple[float, float] | None = None,
+    language: str | None = None,
 ) -> tuple[str, list[dict] | None, dict | None]:
     """route_id가 user_id 소유가 아니면 RouteNotFoundError를 던진다.
     반환: (자연어 답변, search_nearby_places 결과 장소 목록(카드 렌더용, 없으면 None),
@@ -372,6 +376,7 @@ async def handle_chat(
         end_date=route["end_date"].isoformat(),
         nights=route["nights"],
         nights_plus_1=route["nights"] + 1,
+        fallback_language=_LANGUAGE_NAMES.get(language, "한국어"),
     ) + location_hint
 
     messages: list[dict] = [*history, {"role": "user", "content": user_message}]
