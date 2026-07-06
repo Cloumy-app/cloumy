@@ -7,5 +7,6 @@ public record ChatPlaceCard(
         String name,
         String tags,
         @JsonAlias("is_hidden_gem") boolean isHiddenGem,
-        @JsonAlias("avg_duration_minutes") Integer avgDurationMinutes
+        @JsonAlias("avg_duration_minutes") Integer avgDurationMinutes,
+        String reason
 ) {}

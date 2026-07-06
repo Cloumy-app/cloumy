@@ -75,7 +75,7 @@ public class RouteSlotController {
             @AuthenticationPrincipal CloudmyUserDetails user
     ) {
         return ApiResponse.ok(routeSlotService.insertSlotAfter(
-                routeId, UUID.fromString(user.userId()), req.afterSlotId(), req.placeId()));
+                routeId, UUID.fromString(user.userId()), req.afterSlotId(), req.placeId(), req.reason()));
     }
 
     @PatchMapping("/{slotId}")

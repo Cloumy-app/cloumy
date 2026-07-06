@@ -36,6 +36,11 @@ public class RouteSlotService {
     // AI(route_service.py)의 DAY_START_TIME과 동일한 값 — 슬롯 삽입/교체 후 재계산에도 동일 기준 사용
     private static final LocalTime DAY_START_TIME = LocalTime.of(9, 0);
 
+    // 챗봇 삽입 시 라우트에 이동수단이 지정 안 돼 있어도(transport_mode == null) 이동정보를
+    // 아예 안 보여주는 대신 자동차 근사치라도 채우기 위한 기본값. enrich_transport()가
+    // walk가 아니면 전부 자동차 속도로 근사하는 구조라 AI 쪽 변경 없이 그대로 재사용 가능.
+    private static final String DEFAULT_TRANSPORT_MODE = "car";
+
     private final RouteRepository routeRepository;
     private final RouteSlotRepository routeSlotRepository;
     private final PlaceRepository placeRepository;
@@ -272,7 +277,8 @@ public class RouteSlotService {
 
     // 챗봇이 추천한 장소를 afterSlot과 그 다음 슬롯 사이에 새 슬롯으로 끼워 넣는다.
     @Transactional
-    public List<SlotResponse> insertSlotAfter(UUID routeId, UUID userId, UUID afterSlotId, UUID placeId) {
+    public List<SlotResponse> insertSlotAfter(
+            UUID routeId, UUID userId, UUID afterSlotId, UUID placeId, String reason) {
         verifyOwner(routeId, userId);
         Route route = routeRepository.findById(routeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
@@ -303,20 +309,25 @@ public class RouteSlotService {
 
         // durationMinutes를 비워두면(0으로 취급) start_time 캐스케이드에서 이 슬롯 체류시간이
         // 0분으로 계산돼 다음 슬롯과 시각이 겹쳐 보인다 — 장소의 평균 체류시간으로 기본값을 채운다.
+        // reason은 챗봇 추천 카드의 한줄 설명 — Pin&Reshuffle이 대안 교체 시 tips에 reason을
+        // 저장하는 것과 동일한 방식으로, 삽입된 슬롯도 SlotCard.tsx가 그대로 표시할 수 있게 tips에 저장
         RouteSlot newSlot = RouteSlot.builder()
                 .routeId(routeId)
                 .placeId(placeId)
                 .dayNumber(dayNumber)
                 .orderIndex(insertOrderIndex)
                 .durationMinutes(newPlace.getAvgDurationMinutes())
+                .tips(reason)
                 .build();
         routeSlotRepository.save(newSlot);
 
         // replaceSlot과 동일한 이웃 이동정보 재계산 재사용: afterSlot(prev)→newSlot(target)→next
-        if (route.getTransportMode() != null) {
-            recalculateNeighborTransport(
-                    route.getTransportMode(), placeId, newPlace, newSlot, Optional.of(afterSlot), next);
-        }
+        // 라우트에 이동수단이 지정 안 돼 있으면 DEFAULT_TRANSPORT_MODE("car")로 대체 —
+        // 챗봇으로 장소를 추가했는데 "어떻게 가는지" 정보가 아예 안 붙는 체감 버그 방지.
+        String effectiveTransportMode = route.getTransportMode() != null
+                ? route.getTransportMode() : DEFAULT_TRANSPORT_MODE;
+        recalculateNeighborTransport(
+                effectiveTransportMode, placeId, newPlace, newSlot, Optional.of(afterSlot), next);
 
         // 새 슬롯이 끼어들면서 그 뒤 모든 슬롯의 시작 시각이 밀리므로 day 전체 재계산
         recomputeStartTimesForDay(routeId, dayNumber);

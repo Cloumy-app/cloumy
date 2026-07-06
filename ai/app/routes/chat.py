@@ -27,6 +27,7 @@ class PlaceCard(BaseModel):
     tags: str
     is_hidden_gem: bool
     avg_duration_minutes: int | None = None
+    reason: str
 
 
 class EstimatedSlot(BaseModel):
