@@ -76,7 +76,8 @@ SYSTEM_PROMPT_TEMPLATE = """당신은 트리피(Tripy)의 여행 중 실시간 �
 4. 위치를 추정한 것뿐이라면(확답이 아니라면) 마치 정확히 아는 것처럼 말하지 말고 "아마", "~일 수 있어요" 같은 표현을 쓰세요.
 5. 답변은 2~3문장 이내로 간결하게 하세요.
 6. 한국어로 답변하세요.
-7. 마크다운 문법(**볼드**, - 목록, # 제목 등)을 절대 쓰지 말고 순수 텍스트로만 답하세요 — 이 답변은 마크다운을 렌더링하지 않는 채팅 화면에 그대로 표시됩니다."""
+7. 마크다운 문법(**볼드**, - 목록, # 제목 등)을 절대 쓰지 말고 순수 텍스트로만 답하세요 — 이 답변은 마크다운을 렌더링하지 않는 채팅 화면에 그대로 표시됩니다.
+8. get_route_status 결과의 today_day/current_slot_order_index를 확인하면 그게 바로 "오늘"과 "지금 위치"입니다 — 사용자에게 며칠째인지 다시 묻지 말고, current_slot_order_index 바로 다음 순서(order)의 장소를 "다음 일정"으로 바로 답하세요. today_day가 null이면 그때만 언제 여행 중인지 물어보세요."""
 
 
 def _choose_model(user_message: str, history_len: int) -> str:
@@ -233,7 +234,7 @@ async def _tool_get_weather_forecast(route: asyncpg.Record, tool_input: dict) ->
     return {"date": target_date_str, "forecast": _label_for_day(day_blocks)}
 
 
-async def _tool_get_route_status(db: asyncpg.Pool, route: asyncpg.Record) -> dict:
+async def _tool_get_route_status(db: asyncpg.Pool, route: asyncpg.Record, estimated_slot: dict) -> dict:
     slots = await db.fetch(
         "SELECT rs.day_number, rs.order_index, rs.start_time, rs.is_pinned, p.name AS place_name, "
         "rs.transport_to_next, rs.transport_minutes, rs.transit_summary "
@@ -260,10 +261,19 @@ async def _tool_get_route_status(db: asyncpg.Pool, route: asyncpg.Record) -> dic
             "transit_summary": s["transit_summary"],
         })
 
+    # "오늘"이 어느 Day인지 도구 결과 자체에 표시 — 시스템 프롬프트 텍스트 힌트에만 의존하면
+    # 모델이 둘을 못 연결 짓고 사용자에게 며칠째인지 되묻는 문제가 있어(실측), 근거 데이터에 직접 반영한다.
+    today_day = estimated_slot["day"] if estimated_slot["confidence"] == "high" else None
+    today_order_index = estimated_slot["order_index"] if estimated_slot["confidence"] == "high" else None
+    for day_dict in days.values():
+        day_dict["is_today"] = day_dict["day"] == today_day
+
     return {
         "destination": route["destination"],
         "start_date": route["start_date"].isoformat(),
         "end_date": route["end_date"].isoformat(),
+        "today_day": today_day,
+        "current_slot_order_index": today_order_index,
         "days": [days[k] for k in sorted(days)],
     }
 
@@ -281,7 +291,7 @@ async def _execute_tool(
     if name == "get_weather_forecast":
         return await _tool_get_weather_forecast(route, tool_input)
     if name == "get_route_status":
-        return await _tool_get_route_status(db, route)
+        return await _tool_get_route_status(db, route, estimated_slot)
     logger.warning("알 수 없는 도구 호출: %s", name)
     return {"error": f"알 수 없는 도구: {name}"}
 
