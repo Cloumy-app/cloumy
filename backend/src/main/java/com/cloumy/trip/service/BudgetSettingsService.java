@@ -109,7 +109,9 @@ public class BudgetSettingsService {
         double foodBoost = 0, transportBoost = 0, activityBoost = 0, etcBoost = 0;
         for (String tag : tags) {
             Boost boost = TAG_BOOSTS.get(tag);
-            if (boost == null) continue;
+            if (boost == null) {
+                continue;
+            }
             switch (boost.category()) {
                 case FOOD -> foodBoost = Math.min(MAX_BOOST_PER_CATEGORY, foodBoost + boost.amount());
                 case TRANSPORT -> transportBoost = Math.min(MAX_BOOST_PER_CATEGORY, transportBoost + boost.amount());
@@ -126,16 +128,32 @@ public class BudgetSettingsService {
         // boost 안 받은 카테고리들의 기본 비중 합 — 여기서 boost 총량만큼 비례 차감
         double food = DEFAULT_FOOD, transport = DEFAULT_TRANSPORT, activity = DEFAULT_ACTIVITY, etc = DEFAULT_ETC;
         double nonBoostedBase = 0;
-        if (foodBoost == 0) nonBoostedBase += DEFAULT_FOOD;
-        if (transportBoost == 0) nonBoostedBase += DEFAULT_TRANSPORT;
-        if (activityBoost == 0) nonBoostedBase += DEFAULT_ACTIVITY;
-        if (etcBoost == 0) nonBoostedBase += DEFAULT_ETC;
+        if (foodBoost == 0) {
+            nonBoostedBase += DEFAULT_FOOD;
+        }
+        if (transportBoost == 0) {
+            nonBoostedBase += DEFAULT_TRANSPORT;
+        }
+        if (activityBoost == 0) {
+            nonBoostedBase += DEFAULT_ACTIVITY;
+        }
+        if (etcBoost == 0) {
+            nonBoostedBase += DEFAULT_ETC;
+        }
 
         // transport는 태그 매핑이 없어 항상 차감 후보로 남으므로 nonBoostedBase는 0이 될 수 없음
-        if (foodBoost == 0) food -= totalBoost * (DEFAULT_FOOD / nonBoostedBase);
-        if (transportBoost == 0) transport -= totalBoost * (DEFAULT_TRANSPORT / nonBoostedBase);
-        if (activityBoost == 0) activity -= totalBoost * (DEFAULT_ACTIVITY / nonBoostedBase);
-        if (etcBoost == 0) etc -= totalBoost * (DEFAULT_ETC / nonBoostedBase);
+        if (foodBoost == 0) {
+            food -= totalBoost * (DEFAULT_FOOD / nonBoostedBase);
+        }
+        if (transportBoost == 0) {
+            transport -= totalBoost * (DEFAULT_TRANSPORT / nonBoostedBase);
+        }
+        if (activityBoost == 0) {
+            activity -= totalBoost * (DEFAULT_ACTIVITY / nonBoostedBase);
+        }
+        if (etcBoost == 0) {
+            etc -= totalBoost * (DEFAULT_ETC / nonBoostedBase);
+        }
 
         food += foodBoost;
         transport += transportBoost;
@@ -153,7 +171,9 @@ public class BudgetSettingsService {
                 double deficit = MIN_RATIO - values[i];
                 int maxIdx = 0;
                 for (int j = 1; j < values.length; j++) {
-                    if (values[j] > values[maxIdx]) maxIdx = j;
+                    if (values[j] > values[maxIdx]) {
+                        maxIdx = j;
+                    }
                 }
                 values[i] = MIN_RATIO;
                 values[maxIdx] -= deficit;
@@ -165,7 +185,9 @@ public class BudgetSettingsService {
         double diff = 1.0 - sum;
         int maxIdx = 0;
         for (int j = 1; j < values.length; j++) {
-            if (values[j] > values[maxIdx]) maxIdx = j;
+            if (values[j] > values[maxIdx]) {
+                maxIdx = j;
+            }
         }
         values[maxIdx] += diff;
 
