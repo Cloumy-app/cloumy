@@ -44,7 +44,7 @@ public class ChatController {
         }
 
         ChatResponse chatResponse = aiServiceClient.chat(
-                userId.toString(), req.routeId().toString(), req.message(), req.lat(), req.lng());
+                userId.toString(), req.routeId().toString(), req.message(), req.lat(), req.lng(), req.language());
         return ApiResponse.ok(chatResponse);
     }
 }

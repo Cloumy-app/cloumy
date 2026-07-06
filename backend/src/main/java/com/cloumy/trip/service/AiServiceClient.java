@@ -140,14 +140,15 @@ public class AiServiceClient {
     private record ChatLocationDto(double lat, double lng) {}
 
     private record ChatReq(
-            String user_id, String route_id, String message, ChatLocationDto current_location
+            String user_id, String route_id, String message, ChatLocationDto current_location, String language
     ) {}
 
-    public ChatResponse chat(String userId, String routeId, String message, Double lat, Double lng) {
+    public ChatResponse chat(
+            String userId, String routeId, String message, Double lat, Double lng, String language) {
         try {
             ChatLocationDto location = (lat != null && lng != null) ? new ChatLocationDto(lat, lng) : null;
             String body = objectMapper.writeValueAsString(
-                    new ChatReq(userId, routeId, message, location));
+                    new ChatReq(userId, routeId, message, location, language));
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(fastapiUrl + "/ai/chat"))

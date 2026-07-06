@@ -9,5 +9,6 @@ public record ChatRequest(
         @NotNull UUID routeId,
         @NotBlank String message,
         Double lat,
-        Double lng
+        Double lng,
+        String language // ko/en/ja/zh — 앱 설정 언어(선택 사항)
 ) {}
