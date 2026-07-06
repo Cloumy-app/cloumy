@@ -47,6 +47,11 @@ public enum ErrorCode {
     RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMIT_EXCEEDED",
             "잠시 후 다시 시도해주세요. 1분에 최대 3회까지 요청할 수 있습니다"),
 
+    // 예산
+    BUDGET_SETTINGS_NOT_FOUND(HttpStatus.NOT_FOUND, "BUDGET_SETTINGS_NOT_FOUND", "예산 설정을 찾을 수 없습니다"),
+    INVALID_BUDGET_RATIO(HttpStatus.BAD_REQUEST, "INVALID_BUDGET_RATIO", "카테고리 비율의 합은 1.0이어야 합니다"),
+    EXPENSE_NOT_FOUND(HttpStatus.NOT_FOUND, "EXPENSE_NOT_FOUND", "지출 내역을 찾을 수 없습니다"),
+
     // 공통
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "INVALID_INPUT", "잘못된 입력값입니다"),
     FORBIDDEN(HttpStatus.FORBIDDEN, "FORBIDDEN", "접근 권한이 없습니다"),

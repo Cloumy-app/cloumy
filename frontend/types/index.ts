@@ -122,6 +122,7 @@ export interface RouteGenRequest {
   density?: Density;
   transportMode?: TransportMode;
   accommodations?: AccommodationInput[];
+  totalBudget?: number; // 숙박비 제외 현지 활동/식사 예산, 선택 사항
 }
 
 export type GroupType = 'solo' | 'couple' | 'friends' | 'family';
@@ -178,18 +179,35 @@ export interface ChatMessage {
   estimatedSlot?: ChatEstimatedSlot;
 }
 
+// totalBudget이 null이면 이 루트에 예산이 설정되지 않은 것(에러 아님)
 export interface BudgetSummary {
-  routeId: string;
-  totalBudget: number;
-  usedAmount: number;
-  remainingAmount: number;
+  totalBudget: number | null;
+  foodRatio: number | null;
+  transportRatio: number | null;
+  activityRatio: number | null;
+  etcRatio: number | null;
+  plannedTotal: number;
+  unplannedTotal: number;
+  remaining: number | null;
 }
+
+export type ExpenseCategory = '식음료' | '교통' | '입장료' | '기념품' | '기타';
 
 export interface Expense {
   id: string;
-  routeId: string;
-  description: string;
-  amount: number;
-  category: string;
+  category: ExpenseCategory;
+  actualAmount: number;
+  memo: string | null;
   createdAt: string;
+}
+
+export interface AddExpenseRequest {
+  category: ExpenseCategory;
+  actualAmount: number;
+  memo?: string;
+}
+
+export interface BudgetReport {
+  plannedTotal: number;
+  unplannedByCategory: { category: string; total: number }[];
 }

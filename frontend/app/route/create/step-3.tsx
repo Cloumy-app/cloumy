@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
@@ -31,6 +31,7 @@ export default function RouteCreateStep3() {
 
   const [selectedRatio, setSelectedRatio] = useState(0.5);
   const [selectedDensity, setSelectedDensity] = useState<Density>('normal');
+  const [totalBudget, setTotalBudget] = useState('');
 
   const onNext = () => {
     router.push({
@@ -39,6 +40,7 @@ export default function RouteCreateStep3() {
         ...params,
         hiddenGemRatio: String(selectedRatio),
         density: selectedDensity,
+        ...(totalBudget.trim() ? { totalBudget: totalBudget.trim() } : {}),
       },
     });
   };
@@ -129,6 +131,24 @@ export default function RouteCreateStep3() {
                 </TouchableOpacity>
               );
             })}
+          </View>
+        </View>
+
+        {/* 총예산 입력 */}
+        <View className="mb-8">
+          <Text className="font-bold text-slate-700 mb-1">예산 (선택)</Text>
+          <Text className="text-xs text-slate-400 mb-4">
+            숙박비는 제외한 현지 활동/식사 예산을 입력해주세요
+          </Text>
+          <View className="flex-row items-center bg-slate-50 border-2 border-slate-200 rounded-2xl px-4">
+            <TextInput
+              value={totalBudget}
+              onChangeText={(text) => setTotalBudget(text.replace(/[^0-9]/g, ''))}
+              placeholder="예: 500000"
+              keyboardType="number-pad"
+              className="flex-1 py-3 px-2 text-sm text-slate-700"
+            />
+            <Text className="text-slate-400 text-sm">원</Text>
           </View>
         </View>
 

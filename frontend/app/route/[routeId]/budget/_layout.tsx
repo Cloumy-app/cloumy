@@ -1,0 +1,11 @@
+import { Stack } from 'expo-router';
+
+export default function BudgetLayout() {
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="index" />
+      <Stack.Screen name="add-expense" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="report" />
+    </Stack>
+  );
+}

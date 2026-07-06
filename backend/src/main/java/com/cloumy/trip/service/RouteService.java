@@ -25,6 +25,7 @@ public class RouteService {
     private final PassValidationService passValidationService;
     private final RouteRepository routeRepository;
     private final AccommodationRepository accommodationRepository;
+    private final BudgetSettingsService budgetSettingsService;
 
     public Page<RouteListResponse> getMyRoutes(UUID userId, Pageable pageable) {
         return routeRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable)
@@ -70,6 +71,11 @@ public class RouteService {
                 .build();
 
         Route saved = routeRepository.save(route);
+
+        // totalBudget 선택 사항 — 숙소와 동일하게 없으면 예산 기능 자체를 건너뜀
+        if (req.totalBudget() != null) {
+            budgetSettingsService.createDefault(saved.getId(), req.totalBudget(), req.tags());
+        }
 
         // 숙소는 Route가 만들어진 뒤에만 route_id(FK)를 가질 수 있어 여기서 같이 저장한다.
         // 메서드 전체가 @Transactional이라 숙소 저장 실패 시 Route 생성까지 롤백된다.
