@@ -1,0 +1,14 @@
+{
+  "chat": {
+    "title": "AI 聊天",
+    "subtitle": "关于当前行程可以随时提问",
+    "emptyRoute": "请先创建旅行行程。\n创建后即可与聊天助手讨论该行程。",
+    "emptyHint": "试着问问\"推荐附近的美食\"或\"今天天气怎么样？\"",
+    "sending": "正在生成回复...",
+    "inputPlaceholder": "请输入消息",
+    "addFailedTitle": "添加失败",
+    "addFailedBody": "未能添加到行程中，请稍后再试。",
+    "recommendedPlaces": "推荐地点",
+    "insertHint": "点击即可添加到下一个行程之间"
+  }
+}

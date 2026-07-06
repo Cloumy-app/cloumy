@@ -1,0 +1,14 @@
+{
+  "chat": {
+    "title": "AI Chat",
+    "subtitle": "Ask anything about your current trip",
+    "emptyRoute": "Please create a trip itinerary first.\nYou can chat with the assistant about it once it's ready.",
+    "emptyHint": "Try asking \"Recommend a restaurant nearby\" or \"What's the weather today?\"",
+    "sending": "Writing a reply...",
+    "inputPlaceholder": "Type a message",
+    "addFailedTitle": "Couldn't add it",
+    "addFailedBody": "We couldn't add this to your itinerary. Please try again in a moment.",
+    "recommendedPlaces": "Recommended places",
+    "insertHint": "Tap to add it between your next two stops"
+  }
+}
