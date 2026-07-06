@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Check, MessageCircle, Plus, Send, Sparkles } from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { getMyRoutes, insertRouteSlot } from '@/lib/api/routes';
 import { useChatStore } from '@/stores/useChatStore';
 import type { ChatEstimatedSlot, ChatMessage, ChatPlaceCard } from '@/types';
@@ -26,6 +27,7 @@ function PlaceCardList({
   estimatedSlot?: ChatEstimatedSlot;
   routeId: string;
 }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [insertingId, setInsertingId] = useState<string | null>(null);
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
@@ -40,7 +42,7 @@ function PlaceCardList({
       setAddedIds((prev) => new Set(prev).add(place.placeId));
     } catch (e) {
       console.error('[chat] insertRouteSlot 실패:', e);
-      Alert.alert('추가 실패', '일정에 추가하지 못했어요. 잠시 후 다시 시도해주세요.');
+      Alert.alert(t('chat.addFailedTitle'), t('chat.addFailedBody'));
     } finally {
       setInsertingId(null);
     }
@@ -50,7 +52,7 @@ function PlaceCardList({
     <View className="w-[85%] mt-2 p-3 bg-sky-50 border border-sky-100 rounded-2xl">
       <View className="flex-row items-center gap-1.5 mb-2">
         <Sparkles size={13} color="#0369a1" />
-        <Text className="text-xs font-bold text-sky-800">추천 장소</Text>
+        <Text className="text-xs font-bold text-sky-800">{t('chat.recommendedPlaces')}</Text>
       </View>
       {places.map((place, i) => {
         const added = addedIds.has(place.placeId);
@@ -89,7 +91,7 @@ function PlaceCardList({
         );
       })}
       {canInsert && (
-        <Text className="text-[11px] text-sky-700 mt-1">탭하면 다음 일정 사이에 추가돼요</Text>
+        <Text className="text-[11px] text-sky-700 mt-1">{t('chat.insertHint')}</Text>
       )}
     </View>
   );
@@ -114,6 +116,7 @@ function MessageBubble({ message, routeId }: { message: ChatMessage; routeId: st
 }
 
 export default function ChatScreen() {
+  const { t } = useTranslation();
   const [input, setInput] = useState('');
   const listRef = useRef<FlatList>(null);
   const { messages, isSending, activeRouteId, setActiveRouteId, sendMessage } = useChatStore();
@@ -154,9 +157,7 @@ export default function ChatScreen() {
     return (
       <SafeAreaView className="flex-1 bg-white items-center justify-center px-8">
         <MessageCircle size={48} color="#94a3b8" />
-        <Text className="text-slate-400 font-medium mt-4 text-center">
-          여행 일정을 먼저 만들어주세요.{'\n'}만든 일정에 대해 챗봇과 대화할 수 있어요.
-        </Text>
+        <Text className="text-slate-400 font-medium mt-4 text-center">{t('chat.emptyRoute')}</Text>
       </SafeAreaView>
     );
   }
@@ -164,8 +165,8 @@ export default function ChatScreen() {
   return (
     <SafeAreaView className="flex-1 bg-white" edges={['top']}>
       <View className="px-5 py-3 border-b border-slate-100">
-        <Text className="text-lg font-bold text-slate-800">AI 챗봇</Text>
-        <Text className="text-xs text-slate-400 mt-0.5">현재 여행 일정에 대해 물어보세요</Text>
+        <Text className="text-lg font-bold text-slate-800">{t('chat.title')}</Text>
+        <Text className="text-xs text-slate-400 mt-0.5">{t('chat.subtitle')}</Text>
       </View>
 
       <FlatList
@@ -177,9 +178,7 @@ export default function ChatScreen() {
         ListEmptyComponent={
           <View className="flex-1 items-center justify-center">
             <MessageCircle size={40} color="#cbd5e1" />
-            <Text className="text-slate-300 mt-3 text-sm">
-              &ldquo;근처 맛집 추천해줘&rdquo;, &ldquo;오늘 날씨 어때?&rdquo; 처럼 물어보세요
-            </Text>
+            <Text className="text-slate-300 mt-3 text-sm">{t('chat.emptyHint')}</Text>
           </View>
         }
       />
@@ -187,7 +186,7 @@ export default function ChatScreen() {
       {isSending && (
         <View className="px-5 pb-2 flex-row items-center gap-2">
           <ActivityIndicator size="small" color="#94a3b8" />
-          <Text className="text-slate-400 text-xs">답변 작성 중...</Text>
+          <Text className="text-slate-400 text-xs">{t('chat.sending')}</Text>
         </View>
       )}
 
@@ -196,7 +195,7 @@ export default function ChatScreen() {
           <TextInput
             value={input}
             onChangeText={setInput}
-            placeholder="메시지를 입력하세요"
+            placeholder={t('chat.inputPlaceholder')}
             className="flex-1 bg-slate-100 rounded-full px-4 py-3 text-slate-800"
             editable={!isSending}
             onSubmitEditing={handleSend}

@@ -1,0 +1,14 @@
+{
+  "chat": {
+    "title": "AI 챗봇",
+    "subtitle": "현재 여행 일정에 대해 물어보세요",
+    "emptyRoute": "여행 일정을 먼저 만들어주세요.\n만든 일정에 대해 챗봇과 대화할 수 있어요.",
+    "emptyHint": "\"근처 맛집 추천해줘\", \"오늘 날씨 어때?\" 처럼 물어보세요",
+    "sending": "답변 작성 중...",
+    "inputPlaceholder": "메시지를 입력하세요",
+    "addFailedTitle": "추가 실패",
+    "addFailedBody": "일정에 추가하지 못했어요. 잠시 후 다시 시도해주세요.",
+    "recommendedPlaces": "추천 장소",
+    "insertHint": "탭하면 다음 일정 사이에 추가돼요"
+  }
+}
