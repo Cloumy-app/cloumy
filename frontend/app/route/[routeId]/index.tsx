@@ -9,10 +9,12 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { getRoute, getRouteSlots, getRouteDaySummaries, toggleSlotPin as apiToggleSlotPin, deleteRouteSlot, deleteRoute, replaceRouteSlot } from '@/lib/api/routes';
 import { getRouteAccommodations } from '@/lib/api/accommodations';
 import { fetchForecast } from '@/lib/api/weather';
+import { getBudgetSummary } from '@/lib/api/budget';
 import { useRouteStore } from '@/stores/useRouteStore';
 import { TripMap } from '@/components/map/TripMap';
 import { DayTabs } from '@/components/route/DayTabs';
 import { SlotCard } from '@/components/route/SlotCard';
+import { BudgetBanner } from '@/components/route/BudgetBanner';
 import type { BudgetLevel, RouteDaySummary, SlotAlternative, SlotWithCoords } from '@/types';
 import type { DayWeather, RainBlock } from '@/lib/api/weather';
 
@@ -116,6 +118,12 @@ export default function RouteResultScreen() {
 
   const destination = currentRoute?.destination ?? '';
   const routeStartDate = currentRoute?.startDate ?? '';
+
+  const { data: budgetSummary } = useQuery({
+    queryKey: ['budget', routeId],
+    queryFn: () => getBudgetSummary(routeId!),
+    enabled: !!routeId && !isStreaming,
+  });
 
   const { data: apiSlots, isLoading: slotsLoading } = useQuery({
     queryKey: ['route-slots', routeId],
@@ -360,7 +368,23 @@ export default function RouteResultScreen() {
           )}
         </View>
 
-        <View style={{ width: 40 }} />
+        <TouchableOpacity
+          onPress={() => router.push({ pathname: '/route/[routeId]/budget', params: { routeId } })}
+          style={{
+            width: 40,
+            height: 40,
+            backgroundColor: 'rgba(255,255,255,0.92)',
+            borderRadius: 20,
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.12,
+            shadowRadius: 8,
+            elevation: 4,
+          }}
+        >
+          <Wallet size={20} color="#334155" />
+        </TouchableOpacity>
       </View>
 
       {/* Reanimated 드래그 바텀시트 */}
@@ -499,6 +523,7 @@ export default function RouteResultScreen() {
           }}
           showsVerticalScrollIndicator={false}
         >
+          {budgetSummary && <BudgetBanner routeId={routeId!} summary={budgetSummary} />}
           {hasApiSlots
             ? currentDayApiSlots.map((apiSlot, i) => (
                 <View

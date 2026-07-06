@@ -50,6 +50,7 @@ export default function RouteCreateStep4() {
     hiddenGemRatio: string;
     density: string;
     transportMode?: string;
+    totalBudget?: string;
   }>();
 
   const destination = params.destination ?? '여행지';
@@ -200,6 +201,7 @@ export default function RouteCreateStep4() {
         density: selectedDensity,
         transportMode: params.transportMode as TransportMode | undefined,
         accommodations,
+        totalBudget: params.totalBudget ? Number(params.totalBudget) : undefined,
       },
       (slot: RouteSlot) => {
         if (!isMountedRef.current) return;
