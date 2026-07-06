@@ -178,3 +178,15 @@ class PgvectorRetriever(BaseRetriever):
 
     def _get_relevant_documents(self, query: str, *, run_manager=None) -> list[Document]:
         raise NotImplementedError("PgvectorRetriever는 비동기 전용입니다 — _aget_relevant_documents를 사용하세요")
+
+
+def describe_candidate(doc: Document) -> str:
+    """검색된 후보 장소를 한줄로 설명한다(LLM 호출 없이 결정론적) — Pin&Reshuffle 대안 추천과
+    챗봇 추천 카드가 동일한 방식으로 "왜 이 장소인지"를 보여주기 위해 공유하는 함수.
+    page_content가 "이름 | 주소 | 태그: ..." 형식이므로 태그 부분만 뽑아 재사용."""
+    tag_part = next(
+        (p for p in doc.page_content.split(" | ") if p.startswith("태그:")), None
+    )
+    if tag_part:
+        return f"{tag_part.replace('태그: ', '')} · 동선상 가까운 위치"
+    return "동선상 가까운 대안 장소"

@@ -7,7 +7,7 @@ import asyncpg
 
 from app.config.city_centers import CITY_CENTERS
 from app.config.settings import settings
-from app.services.retrievers import PostgisTagRetriever
+from app.services.retrievers import PostgisTagRetriever, describe_candidate
 from app.services.route_service import _anthropic
 from app.services.weather_service import _get_forecast_by_block, _label_for_day
 
@@ -201,6 +201,9 @@ async def _tool_search_nearby_places(
         radius_m=tool_input.get("radius_m") or _SEARCH_RADIUS_M,
     ).ainvoke("")
 
+    top_candidates = candidates[:5]
+    reasons = await _generate_place_reasons(route["destination"], top_candidates) if top_candidates else {}
+
     return {
         "places": [
             {
@@ -209,10 +212,49 @@ async def _tool_search_nearby_places(
                 "tags": doc.page_content.split(" | ")[-1].replace("태그: ", ""),
                 "is_hidden_gem": doc.metadata["is_hidden_gem"],
                 "avg_duration_minutes": doc.metadata["avg_duration_minutes"],
+                "reason": reasons.get(doc.metadata["id"]) or describe_candidate(doc),
             }
-            for doc in candidates[:5]
+            for doc in top_candidates
         ]
     }
+
+
+_PLACE_REASON_SYSTEM_PROMPT = """당신은 한국 여행 전문가입니다. 주어진 장소 후보 각각에 대해 왜 가볼만한지 1문장으로 설명합니다.
+
+출력 형식: JSON 배열 하나만 출력합니다. 다른 텍스트 없음.
+[{"index": 1, "reason": "추천 이유 1문장"}, ...]
+
+규칙:
+- index는 후보 목록 각 줄 맨 앞 [N] 번호만 사용
+- 후보 전체에 대해 빠짐없이 작성
+- JSON 외 텍스트 절대 금지"""
+
+
+async def _generate_place_reasons(destination: str, candidates: list) -> dict[str, str]:
+    """검색된 후보 각각에 대해 Haiku로 1문장 추천 이유를 생성한다.
+    slot_alternatives.py의 index 기반 JSON 응답 패턴을 그대로 재사용 — 환각 방지."""
+    candidates_text = "\n".join(
+        f"[{i + 1}] {doc.page_content}" for i, doc in enumerate(candidates)
+    )
+    try:
+        response = await _anthropic.messages.create(
+            model=HAIKU_MODEL,
+            max_tokens=512,
+            system=_PLACE_REASON_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": f"목적지: {destination}\n\n후보:\n{candidates_text}"}],
+        )
+        raw = response.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1].removeprefix("json").strip()
+        data = json.loads(raw)
+        return {
+            candidates[item["index"] - 1].metadata["id"]: item["reason"]
+            for item in data
+            if isinstance(item.get("index"), int) and 1 <= item["index"] <= len(candidates)
+        }
+    except Exception as e:
+        logger.warning("챗봇 장소 추천 이유 생성 실패 — 폴백 설명 사용: %s", e)
+        return {}
 
 
 async def _tool_get_weather_forecast(route: asyncpg.Record, tool_input: dict) -> dict:
