@@ -24,6 +24,10 @@ public interface RouteSlotRepository extends JpaRepository<RouteSlot, UUID> {
     List<RouteSlot> findByRouteIdAndDayNumberAndOrderIndexGreaterThanOrderByOrderIndexDesc(
             UUID routeId, int dayNumber, int orderIndex);
 
+    // 예산 관리 — 계획지출(자동 생성 슬롯)은 캐시하지 않고 매번 이 합계를 그대로 사용
+    @Query("SELECT COALESCE(SUM(s.estimatedCost), 0) FROM RouteSlot s WHERE s.routeId = :routeId")
+    int sumEstimatedCostByRouteId(@Param("routeId") UUID routeId);
+
     // places 테이블과 JOIN해서 lat/lng 포함한 슬롯 목록 반환
     // ST_Y(geometry) = latitude, ST_X(geometry) = longitude (WGS84)
     @Query(value = """
