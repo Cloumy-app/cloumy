@@ -31,13 +31,13 @@ function PlaceCardList({
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const canInsert = !!estimatedSlot;
 
-  const handleAdd = async (placeId: string) => {
-    if (!estimatedSlot || insertingId || addedIds.has(placeId)) return;
-    setInsertingId(placeId);
+  const handleAdd = async (place: ChatPlaceCard) => {
+    if (!estimatedSlot || insertingId || addedIds.has(place.placeId)) return;
+    setInsertingId(place.placeId);
     try {
-      await insertRouteSlot(routeId, estimatedSlot.slotId, placeId);
+      await insertRouteSlot(routeId, estimatedSlot.slotId, place.placeId, place.reason);
       queryClient.invalidateQueries({ queryKey: ['route-slots', routeId] });
-      setAddedIds((prev) => new Set(prev).add(placeId));
+      setAddedIds((prev) => new Set(prev).add(place.placeId));
     } catch (e) {
       console.error('[chat] insertRouteSlot 실패:', e);
       Alert.alert('추가 실패', '일정에 추가하지 못했어요. 잠시 후 다시 시도해주세요.');
@@ -58,7 +58,7 @@ function PlaceCardList({
           <TouchableOpacity
             key={`${place.placeId}-${i}`}
             className="flex-row items-start gap-2 p-3 bg-white rounded-xl border border-sky-100 mb-2 last:mb-0"
-            onPress={() => handleAdd(place.placeId)}
+            onPress={() => handleAdd(place)}
             disabled={!canInsert || added || insertingId !== null}
             activeOpacity={canInsert ? 0.7 : 1}
           >
@@ -71,6 +71,11 @@ function PlaceCardList({
                 {place.tags}
                 {place.isHiddenGem ? ' · 🔮 Hidden Gem' : ''}
               </Text>
+              {place.reason && (
+                <Text className="text-slate-400 text-xs mt-1" numberOfLines={2}>
+                  {place.reason}
+                </Text>
+              )}
             </View>
             {canInsert &&
               (insertingId === place.placeId ? (

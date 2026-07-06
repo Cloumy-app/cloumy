@@ -160,6 +160,7 @@ export interface ChatPlaceCard {
   tags: string;
   isHiddenGem: boolean;
   avgDurationMinutes: number | null;
+  reason: string;
 }
 
 export interface ChatEstimatedSlot {

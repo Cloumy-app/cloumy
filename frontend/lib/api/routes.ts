@@ -67,10 +67,11 @@ export async function insertRouteSlot(
   routeId: string,
   afterSlotId: string,
   placeId: string,
+  reason?: string,
 ): Promise<SlotWithCoords[]> {
   const res = await apiFetch(`/v1/routes/${routeId}/slots`, {
     method: 'POST',
-    body: JSON.stringify({ afterSlotId, placeId }),
+    body: JSON.stringify({ afterSlotId, placeId, reason }),
   });
   if (!res.ok) throw new Error(`${res.status}`);
   const resBody: { data: SlotWithCoords[] } = await res.json();
