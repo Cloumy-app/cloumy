@@ -236,6 +236,7 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 - [x] GPS 없이 시간 기반 "현재 위치" 추정 — `route_slots.start_time` 누적 계산으로 확신 높음/낮음 분기, 애매하면 챗봇이 되묻기 (`_estimate_current_slot`) — 2026-07-05
 - [x] 추천 장소 → 일정에 바로 삽입 — 챗봇 카드 탭 시 추정 슬롯과 다음 슬롯 사이에 새 슬롯 삽입(`POST /v1/routes/{routeId}/slots`), 이웃 이동정보·start_time 재계산 — 2026-07-05
 - [x] `route_slots.start_time` 알고리즘 계산 — 하루 09:00 고정 시작 + duration/transport 누적 역산, LLM이 시간 직접 생성 안 함 (`route_service.py`) — 2026-07-05
+- [x] 챗봇 후속 개선 — 이동수단 기본값(car) 적용, get_route_status 날짜 인식 수정, 추천 카드 한줄 이유(Haiku) 추가 — 2026-07-06
 - [ ] (다음 단계) LangChain 멀티턴 챗봇 파이프라인 고도화, 챗봇 스트리밍
 - [ ] (다음 단계) `record_expense`/`get_remaining_budget` — 예산 추적 기능 선행 필요
 - [ ] (다음 단계) `modify_route_slot`/`suggest_alternatives` — Pin&Reshuffle과 통합 검토

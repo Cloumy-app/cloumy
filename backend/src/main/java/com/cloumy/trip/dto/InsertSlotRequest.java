@@ -6,5 +6,6 @@ import java.util.UUID;
 
 public record InsertSlotRequest(
         @NotNull UUID afterSlotId,
-        @NotNull UUID placeId
+        @NotNull UUID placeId,
+        String reason
 ) {}

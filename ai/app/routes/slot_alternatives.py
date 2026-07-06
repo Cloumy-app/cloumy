@@ -5,7 +5,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from app.config.city_centers import CITY_CENTERS
-from app.services.retrievers import PostgisTagRetriever
+from app.services.retrievers import PostgisTagRetriever, describe_candidate
 from app.services.route_service import _anthropic
 
 logger = logging.getLogger(__name__)
@@ -181,7 +181,7 @@ async def get_slot_alternatives(req: SlotAlternativesRequest, request: Request):
                 AlternativePlace(
                     place_id=doc.metadata["id"],
                     place_name=doc.metadata["name"],
-                    reason=_describe_candidate(doc),
+                    reason=describe_candidate(doc),
                     estimated_cost=0,
                     lat=doc.metadata["lat"],
                     lng=doc.metadata["lng"],
@@ -189,14 +189,3 @@ async def get_slot_alternatives(req: SlotAlternativesRequest, request: Request):
             )
 
     return result
-
-
-def _describe_candidate(doc) -> str:
-    """LLM이 직접 고르지 못해 백필로 채워진 항목에 최소한의 설명을 붙인다.
-    page_content가 "이름 | 주소 | 태그: ..." 형식이므로 태그 부분만 뽑아 재사용."""
-    tag_part = next(
-        (p for p in doc.page_content.split(" | ") if p.startswith("태그:")), None
-    )
-    if tag_part:
-        return f"{tag_part.replace('태그: ', '')} · 동선상 가까운 위치"
-    return "동선상 가까운 대안 장소"

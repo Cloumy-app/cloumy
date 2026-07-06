@@ -7,7 +7,7 @@ import asyncpg
 
 from app.config.city_centers import CITY_CENTERS
 from app.config.settings import settings
-from app.services.retrievers import PostgisTagRetriever
+from app.services.retrievers import PostgisTagRetriever, describe_candidate
 from app.services.route_service import _anthropic
 from app.services.weather_service import _get_forecast_by_block, _label_for_day
 
@@ -76,7 +76,8 @@ SYSTEM_PROMPT_TEMPLATE = """당신은 트리피(Tripy)의 여행 중 실시간 �
 4. 위치를 추정한 것뿐이라면(확답이 아니라면) 마치 정확히 아는 것처럼 말하지 말고 "아마", "~일 수 있어요" 같은 표현을 쓰세요.
 5. 답변은 2~3문장 이내로 간결하게 하세요.
 6. 한국어로 답변하세요.
-7. 마크다운 문법(**볼드**, - 목록, # 제목 등)을 절대 쓰지 말고 순수 텍스트로만 답하세요 — 이 답변은 마크다운을 렌더링하지 않는 채팅 화면에 그대로 표시됩니다."""
+7. 마크다운 문법(**볼드**, - 목록, # 제목 등)을 절대 쓰지 말고 순수 텍스트로만 답하세요 — 이 답변은 마크다운을 렌더링하지 않는 채팅 화면에 그대로 표시됩니다.
+8. get_route_status 결과의 today_day/current_slot_order_index를 확인하면 그게 바로 "오늘"과 "지금 위치"입니다 — 사용자에게 며칠째인지 다시 묻지 말고, current_slot_order_index 바로 다음 순서(order)의 장소를 "다음 일정"으로 바로 답하세요. today_day가 null이면 그때만 언제 여행 중인지 물어보세요."""
 
 
 def _choose_model(user_message: str, history_len: int) -> str:
@@ -200,6 +201,9 @@ async def _tool_search_nearby_places(
         radius_m=tool_input.get("radius_m") or _SEARCH_RADIUS_M,
     ).ainvoke("")
 
+    top_candidates = candidates[:5]
+    reasons = await _generate_place_reasons(route["destination"], top_candidates) if top_candidates else {}
+
     return {
         "places": [
             {
@@ -208,10 +212,49 @@ async def _tool_search_nearby_places(
                 "tags": doc.page_content.split(" | ")[-1].replace("태그: ", ""),
                 "is_hidden_gem": doc.metadata["is_hidden_gem"],
                 "avg_duration_minutes": doc.metadata["avg_duration_minutes"],
+                "reason": reasons.get(doc.metadata["id"]) or describe_candidate(doc),
             }
-            for doc in candidates[:5]
+            for doc in top_candidates
         ]
     }
+
+
+_PLACE_REASON_SYSTEM_PROMPT = """당신은 한국 여행 전문가입니다. 주어진 장소 후보 각각에 대해 왜 가볼만한지 1문장으로 설명합니다.
+
+출력 형식: JSON 배열 하나만 출력합니다. 다른 텍스트 없음.
+[{"index": 1, "reason": "추천 이유 1문장"}, ...]
+
+규칙:
+- index는 후보 목록 각 줄 맨 앞 [N] 번호만 사용
+- 후보 전체에 대해 빠짐없이 작성
+- JSON 외 텍스트 절대 금지"""
+
+
+async def _generate_place_reasons(destination: str, candidates: list) -> dict[str, str]:
+    """검색된 후보 각각에 대해 Haiku로 1문장 추천 이유를 생성한다.
+    slot_alternatives.py의 index 기반 JSON 응답 패턴을 그대로 재사용 — 환각 방지."""
+    candidates_text = "\n".join(
+        f"[{i + 1}] {doc.page_content}" for i, doc in enumerate(candidates)
+    )
+    try:
+        response = await _anthropic.messages.create(
+            model=HAIKU_MODEL,
+            max_tokens=512,
+            system=_PLACE_REASON_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": f"목적지: {destination}\n\n후보:\n{candidates_text}"}],
+        )
+        raw = response.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1].removeprefix("json").strip()
+        data = json.loads(raw)
+        return {
+            candidates[item["index"] - 1].metadata["id"]: item["reason"]
+            for item in data
+            if isinstance(item.get("index"), int) and 1 <= item["index"] <= len(candidates)
+        }
+    except Exception as e:
+        logger.warning("챗봇 장소 추천 이유 생성 실패 — 폴백 설명 사용: %s", e)
+        return {}
 
 
 async def _tool_get_weather_forecast(route: asyncpg.Record, tool_input: dict) -> dict:
@@ -233,7 +276,7 @@ async def _tool_get_weather_forecast(route: asyncpg.Record, tool_input: dict) ->
     return {"date": target_date_str, "forecast": _label_for_day(day_blocks)}
 
 
-async def _tool_get_route_status(db: asyncpg.Pool, route: asyncpg.Record) -> dict:
+async def _tool_get_route_status(db: asyncpg.Pool, route: asyncpg.Record, estimated_slot: dict) -> dict:
     slots = await db.fetch(
         "SELECT rs.day_number, rs.order_index, rs.start_time, rs.is_pinned, p.name AS place_name, "
         "rs.transport_to_next, rs.transport_minutes, rs.transit_summary "
@@ -260,10 +303,19 @@ async def _tool_get_route_status(db: asyncpg.Pool, route: asyncpg.Record) -> dic
             "transit_summary": s["transit_summary"],
         })
 
+    # "오늘"이 어느 Day인지 도구 결과 자체에 표시 — 시스템 프롬프트 텍스트 힌트에만 의존하면
+    # 모델이 둘을 못 연결 짓고 사용자에게 며칠째인지 되묻는 문제가 있어(실측), 근거 데이터에 직접 반영한다.
+    today_day = estimated_slot["day"] if estimated_slot["confidence"] == "high" else None
+    today_order_index = estimated_slot["order_index"] if estimated_slot["confidence"] == "high" else None
+    for day_dict in days.values():
+        day_dict["is_today"] = day_dict["day"] == today_day
+
     return {
         "destination": route["destination"],
         "start_date": route["start_date"].isoformat(),
         "end_date": route["end_date"].isoformat(),
+        "today_day": today_day,
+        "current_slot_order_index": today_order_index,
         "days": [days[k] for k in sorted(days)],
     }
 
@@ -281,7 +333,7 @@ async def _execute_tool(
     if name == "get_weather_forecast":
         return await _tool_get_weather_forecast(route, tool_input)
     if name == "get_route_status":
-        return await _tool_get_route_status(db, route)
+        return await _tool_get_route_status(db, route, estimated_slot)
     logger.warning("알 수 없는 도구 호출: %s", name)
     return {"error": f"알 수 없는 도구: {name}"}
 
