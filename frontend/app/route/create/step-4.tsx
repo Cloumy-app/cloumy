@@ -13,6 +13,7 @@ import { devLogin } from '@/lib/api/auth';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useRouteStore } from '@/stores/useRouteStore';
 import { useAccommodationPinStore } from '@/stores/useAccommodationPinStore';
+import { useLanguageStore } from '@/stores/useLanguageStore';
 import type { GroupType, BudgetLevel, Density, RouteSlot, AccommodationInput, TransportMode } from '@/types';
 
 type SelectedAccommodation = { name: string; address: string | null; lat: number; lng: number; source: 'kakao' | 'manual' };
@@ -210,6 +211,7 @@ export default function RouteCreateStep4() {
         transportMode: params.transportMode as TransportMode | undefined,
         accommodations,
         totalBudget: params.totalBudget ? Number(params.totalBudget) : undefined,
+        language: useLanguageStore.getState().language,
       },
       (slot: RouteSlot) => {
         if (!isMountedRef.current) return;
