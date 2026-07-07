@@ -27,7 +27,7 @@ cloumy-ai/
 │   ├── routes/
 │   │   ├── route_gen.py          # POST /ai/routes/generate
 │   │   ├── slot_alternatives.py  # POST /ai/routes/slots/{slot_id}/alternatives
-│   │   ├── chatbot.py            # WebSocket /ai/chat
+│   │   ├── chatbot.py            # WebSocket /ai/chat — 실제로는 `chat_service.py`에 REST 단발 응답으로 구현됨 (`docs/06-ai-chatbot.md` 참고). 다국어 응답(영/일/중) 구현 완료(2026-07-06). 카메라 입력(메뉴판·키오스크 번역)은 계획, 미구현
 │   │   ├── embedding.py          # POST /ai/embeddings (내부용)
 │   │   └── scoring.py            # POST /ai/places/rarity-score
 │   │
@@ -42,8 +42,8 @@ cloumy-ai/
 │   │   └── rarity_scorer.py   # 희소성 점수 계산
 │   │
 │   ├── prompts/
-│   │   ├── route_gen.txt      # 루트 생성 시스템 프롬프트 (캐시됨)
-│   │   └── chatbot.txt        # 챗봇 시스템 프롬프트
+│   │   ├── route_gen.txt      # 루트 생성 시스템 프롬프트 (캐시됨) — ⚠️ 아직 한국어 고정, 다국어화 계획 (`planning/milestones.md` Phase 2.5)
+│   │   └── chatbot.txt        # 챗봇 시스템 프롬프트 — 사용자 메시지 언어로 응답하도록 이미 수정됨
 │   │
 │   ├── models/
 │   │   └── schemas.py         # Pydantic 모델

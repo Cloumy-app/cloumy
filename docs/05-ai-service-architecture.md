@@ -278,3 +278,5 @@ scripts/ (오프라인 배치)
 | `services/rag_service.py` | 실제로는 `retrievers.py`로 이름·구조가 다르게 구현됨 |
 
 > **현재 실제로 도는 것**: 루트 생성(`route_gen.py`)과 슬롯 대안 추천(`slot_alternatives.py`) 두 엔드포인트, 그리고 이를 지탱하는 RAG 검색 / 날씨 가중치 / TSP 재정렬 / 환각 검증. 챗봇, 예산 자연어 파싱, 희소성 점수는 아직 계획 단계입니다.
+
+> ⚠️ **다국어 미반영 (2026-07-06 타겟 전환 관련)**: 챗봇(`docs/06-ai-chatbot.md`)은 사용자 메시지 언어로 응답하도록 이미 수정됐지만, `ROUTE_GEN_SYSTEM_PROMPT`(`route_service.py`)는 여전히 한국어 고정 — 하루 요약·장소 설명 등 루트 생성 결과물이 한국어로만 나옵니다. `planning/milestones.md` Phase 2.5 "다음 단계"에 등록된 후속 작업.
