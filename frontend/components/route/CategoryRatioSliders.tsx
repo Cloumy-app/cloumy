@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import Slider from '@react-native-community/slider';
 
 type Ratios = { food: number; transport: number; activity: number; etc: number };
 
-const CATEGORY_LABELS: { key: keyof Ratios; label: string; color: string }[] = [
-  { key: 'food', label: '식음료', color: '#0ea5e9' },
-  { key: 'transport', label: '교통', color: '#22c55e' },
-  { key: 'activity', label: '입장료', color: '#f59e0b' },
-  { key: 'etc', label: '기타', color: '#a855f7' },
+const CATEGORY_KEYS: { key: keyof Ratios; color: string }[] = [
+  { key: 'food', color: '#0ea5e9' },
+  { key: 'transport', color: '#22c55e' },
+  { key: 'activity', color: '#f59e0b' },
+  { key: 'etc', color: '#a855f7' },
 ];
 
 // 슬라이더 하나를 옮기면 나머지 3개를 기존 비중대로 비례 재분배해 합이 항상 100 유지
@@ -34,6 +35,7 @@ export function CategoryRatioSliders({
   initial: Ratios; // 0~1 비율
   onSave: (ratios: Ratios) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [ratios, setRatios] = useState<Ratios>({
     food: initial.food * 100,
     transport: initial.transport * 100,
@@ -58,10 +60,10 @@ export function CategoryRatioSliders({
 
   return (
     <View className="bg-white border border-slate-100 rounded-2xl p-4">
-      {CATEGORY_LABELS.map(({ key, label, color }) => (
+      {CATEGORY_KEYS.map(({ key, color }) => (
         <View key={key} className="mb-4 last:mb-0">
           <View className="flex-row justify-between mb-1">
-            <Text className="text-sm font-bold text-slate-700">{label}</Text>
+            <Text className="text-sm font-bold text-slate-700">{t(`budget.categoryLabels.${key}`)}</Text>
             <Text className="text-sm font-bold" style={{ color }}>
               {Math.round(ratios[key])}%
             </Text>
@@ -84,7 +86,7 @@ export function CategoryRatioSliders({
         className="bg-sky-500 py-3 rounded-2xl items-center mt-2"
         activeOpacity={0.9}
       >
-        {saving ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-bold text-sm">저장</Text>}
+        {saving ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-bold text-sm">{t('budget.saveButton')}</Text>}
       </TouchableOpacity>
     </View>
   );

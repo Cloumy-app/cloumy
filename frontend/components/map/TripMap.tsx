@@ -1,5 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { View, Text } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import MapView, { Marker, Polyline, type MapViewMethods, type Region } from 'react-native-maps';
 import type { Accommodation, SlotWithCoords } from '@/types';
 
@@ -15,6 +16,7 @@ interface TripMapProps {
 }
 
 export function TripMap({ slots, accommodations = [], selectedDay, height = 300, focusedSlotId, onSlotPress }: TripMapProps) {
+  const { t } = useTranslation();
   const mapRef = useRef<MapViewMethods>(null);
 
   const days = [...new Set(slots.map((s) => s.dayNumber))].sort();
@@ -46,7 +48,7 @@ export function TripMap({ slots, accommodations = [], selectedDay, height = 300,
         className="bg-slate-100 items-center justify-center"
         style={{ height }}
       >
-        <Text className="text-slate-400 text-sm">지도 데이터 준비 중...</Text>
+        <Text className="text-slate-400 text-sm">{t('tripMap.preparing')}</Text>
       </View>
     );
   }

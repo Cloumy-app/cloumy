@@ -1,5 +1,7 @@
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { Search, MapPin, Sparkles, Navigation, Calendar } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -9,18 +11,18 @@ import { useAuthStore } from '@/stores/useAuthStore';
 import type { RouteListItem } from '@/types';
 
 const QUICK_ACTIONS = [
-  { icon: MapPin, label: '장소', color: '#f43f5e', bg: '#fff1f2' },
-  { icon: Navigation, label: '루트', color: '#3b82f6', bg: '#eff6ff' },
-  { icon: Sparkles, label: 'AI 계획', color: '#f59e0b', bg: '#fffbeb' },
-  { icon: Search, label: '탐색', color: '#10b981', bg: '#ecfdf5' },
-];
+  { icon: MapPin, key: 'places', color: '#f43f5e', bg: '#fff1f2' },
+  { icon: Navigation, key: 'routes', color: '#3b82f6', bg: '#eff6ff' },
+  { icon: Sparkles, key: 'aiPlan', color: '#f59e0b', bg: '#fffbeb' },
+  { icon: Search, key: 'explore', color: '#10b981', bg: '#ecfdf5' },
+] as const;
 
 const RECOMMENDED_CITIES = [
-  { id: '1', title: '도쿄 미식 탐방', emoji: '🗼', bg: '#e0f2fe' },
-  { id: '2', title: '파리 예술 여행', emoji: '🗺️', bg: '#fce7f3' },
-  { id: '3', title: '방콕 로컬 맛집', emoji: '🌴', bg: '#dcfce7' },
-  { id: '4', title: '제주 힐링 코스', emoji: '🏔️', bg: '#fef9c3' },
-];
+  { id: '1', key: 'tokyo', emoji: '🗼', bg: '#e0f2fe' },
+  { id: '2', key: 'paris', emoji: '🗺️', bg: '#fce7f3' },
+  { id: '3', key: 'bangkok', emoji: '🌴', bg: '#dcfce7' },
+  { id: '4', key: 'jeju', emoji: '🏔️', bg: '#fef9c3' },
+] as const;
 
 function formatDateRange(start: string, end: string): string {
   const s = new Date(start);
@@ -28,8 +30,8 @@ function formatDateRange(start: string, end: string): string {
   return `${s.getMonth() + 1}.${s.getDate()} - ${e.getMonth() + 1}.${e.getDate()}`;
 }
 
-function UpcomingTripCard({ route }: { route: RouteListItem }) {
-  const dday = getTripStatusLabel(route.startDate, route.endDate);
+function UpcomingTripCard({ route, t }: { route: RouteListItem; t: TFunction }) {
+  const dday = getTripStatusLabel(t, route.startDate, route.endDate);
   return (
     <TouchableOpacity
       className="bg-slate-800 rounded-3xl overflow-hidden"
@@ -43,7 +45,7 @@ function UpcomingTripCard({ route }: { route: RouteListItem }) {
           </View>
           <View className="bg-sky-500 px-3 py-1 rounded-full flex-row items-center gap-1">
             <Sparkles size={10} color="#ffffff" />
-            <Text className="text-white text-xs font-bold">AI 맞춤형</Text>
+            <Text className="text-white text-xs font-bold">{t('home.aiCustomBadge')}</Text>
           </View>
         </View>
         <Text className="text-white text-2xl font-bold mb-2">{route.title}</Text>
@@ -58,7 +60,7 @@ function UpcomingTripCard({ route }: { route: RouteListItem }) {
   );
 }
 
-function EmptyTripCard() {
+function EmptyTripCard({ t }: { t: TFunction }) {
   return (
     <TouchableOpacity
       className="bg-slate-800 rounded-3xl p-5"
@@ -67,14 +69,14 @@ function EmptyTripCard() {
     >
       <View className="flex-row gap-2 mb-3">
         <View className="bg-white/20 px-3 py-1 rounded-full">
-          <Text className="text-white text-xs font-bold">새 여행</Text>
+          <Text className="text-white text-xs font-bold">{t('home.newTripBadge')}</Text>
         </View>
       </View>
-      <Text className="text-white text-2xl font-bold mb-2">새 여행 계획 만들기</Text>
+      <Text className="text-white text-2xl font-bold mb-2">{t('home.newTripTitle')}</Text>
       <View className="flex-row items-center gap-2">
         <Sparkles size={14} color="rgba(255,255,255,0.8)" />
         <Text className="text-white/80 text-sm font-medium">
-          AI가 최적의 루트를 생성해드립니다
+          {t('home.newTripSubtitle')}
         </Text>
       </View>
     </TouchableOpacity>
@@ -82,6 +84,7 @@ function EmptyTripCard() {
 }
 
 export default function HomeScreen() {
+  const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['routes', 'list'],
@@ -100,9 +103,9 @@ export default function HomeScreen() {
           <View className="flex-row justify-between items-center mb-6">
             <View>
               <Text className="text-sky-800 font-medium text-sm mb-1">
-                좋은 하루예요, {user?.nickname ?? '여행자'}님
+                {t('home.greeting', { name: user?.nickname ?? t('home.travelerFallback') })}
               </Text>
-              <Text className="text-3xl font-bold text-slate-800">어디로 떠나볼까요?</Text>
+              <Text className="text-3xl font-bold text-slate-800">{t('home.headline')}</Text>
             </View>
             <View className="w-12 h-12 rounded-full bg-sky-200 items-center justify-center">
               <Text className="text-sky-600 font-bold text-lg">{initial}</Text>
@@ -117,7 +120,7 @@ export default function HomeScreen() {
           >
             <Search size={20} color="#38bdf8" />
             <Text className="ml-3 flex-1 text-slate-400 font-medium text-sm">
-              AI에게 일정 계획 요청하기...
+              {t('home.searchPlaceholder')}
             </Text>
             <View className="bg-sky-500 p-2.5 rounded-2xl">
               <Sparkles size={18} color="#ffffff" />
@@ -136,7 +139,7 @@ export default function HomeScreen() {
                 >
                   <action.icon size={24} color={action.color} />
                 </View>
-                <Text className="text-xs font-bold text-slate-600">{action.label}</Text>
+                <Text className="text-xs font-bold text-slate-600">{t(`home.quickActions.${action.key}`)}</Text>
               </View>
             ))}
           </View>
@@ -144,9 +147,9 @@ export default function HomeScreen() {
           {/* 다가오는 여행 */}
           <View className="mb-8">
             <View className="flex-row justify-between items-center mb-4">
-              <Text className="text-lg font-bold text-slate-800">다가오는 여행</Text>
+              <Text className="text-lg font-bold text-slate-800">{t('home.upcomingTripLabel')}</Text>
               <TouchableOpacity onPress={() => router.push('/routes' as never)}>
-                <Text className="text-sky-500 text-sm font-bold">전체보기</Text>
+                <Text className="text-sky-500 text-sm font-bold">{t('home.viewAllButton')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -160,18 +163,18 @@ export default function HomeScreen() {
                 onPress={() => refetch()}
                 activeOpacity={0.85}
               >
-                <Text className="text-slate-500 text-sm">불러오지 못했어요, 다시 시도</Text>
+                <Text className="text-slate-500 text-sm">{t('home.loadErrorRetry')}</Text>
               </TouchableOpacity>
             ) : upcomingRoute ? (
-              <UpcomingTripCard route={upcomingRoute} />
+              <UpcomingTripCard route={upcomingRoute} t={t} />
             ) : (
-              <EmptyTripCard />
+              <EmptyTripCard t={t} />
             )}
           </View>
 
           {/* 당신을 위한 추천 */}
           <View className="mb-8">
-            <Text className="text-lg font-bold text-slate-800 mb-4">당신을 위한 추천</Text>
+            <Text className="text-lg font-bold text-slate-800 mb-4">{t('home.recommendedForYouLabel')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-6 px-6">
               {RECOMMENDED_CITIES.map((city) => (
                 <TouchableOpacity
@@ -182,7 +185,7 @@ export default function HomeScreen() {
                 >
                   <Text className="text-5xl mb-3">{city.emoji}</Text>
                   <Text className="text-slate-700 font-bold text-sm text-center px-3">
-                    {city.title}
+                    {t(`home.recommendedCities.${city.key}`)}
                   </Text>
                 </TouchableOpacity>
               ))}

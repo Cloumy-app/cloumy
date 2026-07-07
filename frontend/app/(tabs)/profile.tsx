@@ -1,5 +1,6 @@
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 import { MapPin, LogOut, ChevronRight, Globe } from 'lucide-react-native';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -13,6 +14,7 @@ const LANGUAGE_OPTIONS: { code: SupportedLanguage; label: string }[] = [
 ];
 
 export default function ProfileScreen() {
+  const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const language = useLanguageStore((s) => s.language);
@@ -29,15 +31,15 @@ export default function ProfileScreen() {
             <Text className="text-sky-600 font-bold text-3xl">{initial}</Text>
           </View>
           <Text className="text-xl font-bold text-slate-800 mb-1">
-            {user?.nickname ?? '여행자'}
+            {user?.nickname ?? t('profile.travelerFallback')}
           </Text>
-          <Text className="text-sm text-slate-400">Cloumy 여행자</Text>
+          <Text className="text-sm text-slate-400">{t('profile.subtitle')}</Text>
         </View>
 
         {/* 내 루트 섹션 */}
         <View className="mx-6 mt-6">
           <Text className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">
-            내 루트
+            {t('profile.myRoutesSection')}
           </Text>
           <View className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
             <TouchableOpacity
@@ -48,7 +50,7 @@ export default function ProfileScreen() {
               <View className="w-9 h-9 rounded-xl bg-sky-50 items-center justify-center">
                 <MapPin size={18} color="#0ea5e9" />
               </View>
-              <Text className="flex-1 font-semibold text-slate-700">내 루트 보기</Text>
+              <Text className="flex-1 font-semibold text-slate-700">{t('profile.myRoutesLink')}</Text>
               <ChevronRight size={18} color="#94a3b8" />
             </TouchableOpacity>
           </View>
@@ -57,14 +59,14 @@ export default function ProfileScreen() {
         {/* 언어 섹션 */}
         <View className="mx-6 mt-4">
           <Text className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">
-            언어
+            {t('profile.languageSection')}
           </Text>
           <View className="bg-white rounded-2xl border border-slate-100 overflow-hidden px-5 py-4">
             <View className="flex-row items-center gap-3 mb-3">
               <View className="w-9 h-9 rounded-xl bg-sky-50 items-center justify-center">
                 <Globe size={18} color="#0ea5e9" />
               </View>
-              <Text className="flex-1 font-semibold text-slate-700">언어 설정</Text>
+              <Text className="flex-1 font-semibold text-slate-700">{t('profile.languageSettings')}</Text>
             </View>
             <View className="flex-row gap-2">
               {LANGUAGE_OPTIONS.map((option) => {
@@ -91,7 +93,7 @@ export default function ProfileScreen() {
         {/* 계정 섹션 */}
         <View className="mx-6 mt-4 mb-8">
           <Text className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">
-            계정
+            {t('profile.accountSection')}
           </Text>
           <View className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
             <TouchableOpacity
@@ -102,7 +104,7 @@ export default function ProfileScreen() {
               <View className="w-9 h-9 rounded-xl bg-rose-50 items-center justify-center">
                 <LogOut size={18} color="#f43f5e" />
               </View>
-              <Text className="flex-1 font-semibold text-rose-500">로그아웃</Text>
+              <Text className="flex-1 font-semibold text-rose-500">{t('profile.logout')}</Text>
               <ChevronRight size={18} color="#94a3b8" />
             </TouchableOpacity>
           </View>

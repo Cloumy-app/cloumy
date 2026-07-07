@@ -1,4 +1,5 @@
 import { View, Text, TouchableOpacity, Modal, ActivityIndicator, Linking, Platform } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { X, MapPin, Clock, Gem, Navigation } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import { getPlaceDetail } from '@/lib/api/routes';
@@ -26,6 +27,7 @@ async function openGoogleMaps(lat: number, lng: number) {
 }
 
 export function PlaceDetailSheet({ placeId, onClose }: PlaceDetailSheetProps) {
+  const { t } = useTranslation();
   const { data: place, isLoading } = useQuery({
     queryKey: ['place-detail', placeId],
     queryFn: () => getPlaceDetail(placeId!),
@@ -66,7 +68,7 @@ export function PlaceDetailSheet({ placeId, onClose }: PlaceDetailSheetProps) {
         {isLoading ? (
           <View className="items-center py-12">
             <ActivityIndicator color="#0ea5e9" />
-            <Text className="text-slate-400 text-sm mt-3">장소 정보를 불러오는 중...</Text>
+            <Text className="text-slate-400 text-sm mt-3">{t('placeDetail.loading')}</Text>
           </View>
         ) : place ? (
           <View className="mt-2">
@@ -76,7 +78,7 @@ export function PlaceDetailSheet({ placeId, onClose }: PlaceDetailSheetProps) {
               {place.isHiddenGem && (
                 <View className="flex-row items-center gap-1 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
                   <Gem size={11} color="#d97706" />
-                  <Text className="text-amber-600 text-[10px] font-bold">히든젬</Text>
+                  <Text className="text-amber-600 text-[10px] font-bold">{t('placeDetail.hiddenGemBadge')}</Text>
                 </View>
               )}
             </View>
@@ -94,7 +96,10 @@ export function PlaceDetailSheet({ placeId, onClose }: PlaceDetailSheetProps) {
               <View className="flex-row items-center gap-2 bg-slate-50 rounded-2xl px-4 py-3 mb-5">
                 <Clock size={16} color="#0ea5e9" />
                 <Text className="text-slate-700 font-medium text-sm">
-                  평균 체류시간 <Text className="font-bold text-sky-600">{place.avgDurationMinutes}분</Text>
+                  {t('placeDetail.avgDurationLabel')}{' '}
+                  <Text className="font-bold text-sky-600">
+                    {t('placeDetail.avgDurationValue', { minutes: place.avgDurationMinutes })}
+                  </Text>
                 </Text>
               </View>
             )}
@@ -106,12 +111,12 @@ export function PlaceDetailSheet({ placeId, onClose }: PlaceDetailSheetProps) {
               activeOpacity={0.85}
             >
               <Navigation size={18} color="#ffffff" />
-              <Text className="font-bold text-white text-base">구글 지도에서 길찾기</Text>
+              <Text className="font-bold text-white text-base">{t('placeDetail.openInGoogleMaps')}</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <View className="items-center py-12">
-            <Text className="text-slate-400 text-sm">장소 정보를 찾을 수 없습니다</Text>
+            <Text className="text-slate-400 text-sm">{t('placeDetail.notFound')}</Text>
           </View>
         )}
       </View>

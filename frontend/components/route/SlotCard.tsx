@@ -1,18 +1,19 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Star, RefreshCw, X, Check, Navigation, Wallet, MapPin, Sparkles, CloudRain, Footprints, Car, Bus, ChevronDown, ChevronUp } from 'lucide-react-native';
 import type { BudgetLevel, RouteSlot, SlotAlternative, SlotWithCoords, TransitHop } from '@/types';
 import { getBudgetStatus } from '@/types';
 import { getSlotAlternatives } from '@/lib/api/routes';
 
-// transport_to_next 값('walk'/'taxi'/'transit')별 아이콘·색상·한글 라벨 —
-// DayTabs.tsx의 WEATHER_THEME과 동일한 패턴(값별 테마 dict)으로 통일.
-const TRANSPORT_THEME: Record<string, { Icon: typeof Navigation; bg: string; text: string; dot: string; label: string }> = {
-  walk:    { Icon: Footprints, bg: 'bg-slate-100', text: 'text-slate-600', dot: '#64748b', label: '도보' },
-  taxi:    { Icon: Car,        bg: 'bg-amber-50',  text: 'text-amber-700', dot: '#d97706', label: '자동차' },
-  transit: { Icon: Bus,        bg: 'bg-sky-50',    text: 'text-sky-700',   dot: '#0284c7', label: '대중교통' },
+// transport_to_next 값('walk'/'taxi'/'transit')별 아이콘·색상 —
+// DayTabs.tsx의 WEATHER_THEME과 동일한 패턴(값별 테마 dict)으로 통일. 라벨은 i18n 키로 별도 관리.
+const TRANSPORT_THEME: Record<string, { Icon: typeof Navigation; bg: string; text: string; dot: string; labelKey: string }> = {
+  walk:    { Icon: Footprints, bg: 'bg-slate-100', text: 'text-slate-600', dot: '#64748b', labelKey: 'walk' },
+  taxi:    { Icon: Car,        bg: 'bg-amber-50',  text: 'text-amber-700', dot: '#d97706', labelKey: 'taxi' },
+  transit: { Icon: Bus,        bg: 'bg-sky-50',    text: 'text-sky-700',   dot: '#0284c7', labelKey: 'transit' },
 };
-const DEFAULT_TRANSPORT_THEME = { Icon: Navigation, bg: 'bg-slate-100', text: 'text-slate-500', dot: '#94a3b8', label: '이동' };
+const DEFAULT_TRANSPORT_THEME = { Icon: Navigation, bg: 'bg-slate-100', text: 'text-slate-500', dot: '#94a3b8', labelKey: 'default' };
 
 function parseTransitDetail(detail: string | null): TransitHop[] | null {
   if (!detail) return null;
@@ -33,6 +34,7 @@ function TransportChip({
   detail: string | null;
   marginLeft: number;
 }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const theme = TRANSPORT_THEME[mode ?? ''] ?? DEFAULT_TRANSPORT_THEME;
   const Icon = theme.Icon;
@@ -42,8 +44,10 @@ function TransportChip({
     <View className={`flex-row items-center gap-2 self-start max-w-full ${theme.bg} rounded-full px-3.5 py-2`}>
       <Icon size={16} color={theme.dot} />
       <Text className={`text-sm font-bold shrink ${theme.text}`} numberOfLines={1}>
-        {summary ?? theme.label}
-        {minutes != null && <Text className="font-semibold text-slate-400"> · {minutes}분</Text>}
+        {summary ?? t(`slotCard.transportModes.${theme.labelKey}`)}
+        {minutes != null && (
+          <Text className="font-semibold text-slate-400"> · {t('slotCard.minutesSuffix', { minutes })}</Text>
+        )}
       </Text>
       {hops && (expanded ? <ChevronUp size={14} color={theme.dot} /> : <ChevronDown size={14} color={theme.dot} />)}
     </View>
@@ -64,7 +68,7 @@ function TransportChip({
             <View key={i}>
               <Text className={`text-sm font-bold ${theme.text}`}>{hop.mode} {hop.route}</Text>
               <Text className="text-sm text-slate-400">
-                {hop.board_stop} 승차 → {hop.alight_stop} 하차 · {hop.minutes}분
+                {t('slotCard.boardAlight', { board: hop.board_stop, alight: hop.alight_stop, minutes: hop.minutes })}
               </Text>
             </View>
           ))}
@@ -112,6 +116,7 @@ export function SlotCard({
   onReplaceWithAlternative,
   onTap,
 }: SlotCardProps) {
+  const { t } = useTranslation();
   const [alternatives, setAlternatives] = useState<SlotAlternative[]>([]);
   const [loadingAlts, setLoadingAlts] = useState(false);
   const [showAlts, setShowAlts] = useState(false);
@@ -182,7 +187,7 @@ export function SlotCard({
                   {isRainy && <CloudRain size={12} color="#0ea5e9" />}
                   {duration != null && (
                     <Text className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded-lg font-bold">
-                      {duration}분
+                      {t('slotCard.minutesSuffix', { minutes: duration })}
                     </Text>
                   )}
                 </View>
@@ -196,7 +201,7 @@ export function SlotCard({
 
               <View className="flex-row justify-between items-center pt-3 border-t border-slate-50">
                 <Text className="text-[10px] font-bold px-2 py-1 rounded-md bg-slate-100 text-slate-500">
-                  #방문
+                  {t('slotCard.visitTag')}
                 </Text>
                 <View className="flex-row items-center gap-3">
                   <View className="flex-row items-center gap-1">
@@ -206,7 +211,7 @@ export function SlotCard({
                       budgetStatus === 'soft' ? 'text-amber-500' :
                       'text-slate-600'
                     }`}>
-                      {budget === 0 ? '무료' : `${budget.toLocaleString()}원`}
+                      {budget === 0 ? t('slotCard.free') : t('slotCard.priceWon', { amount: budget.toLocaleString() })}
                     </Text>
                   </View>
 
@@ -257,7 +262,7 @@ export function SlotCard({
           <View className="ml-10 mt-2 p-4 bg-sky-50 border border-sky-100 rounded-2xl">
             <View className="flex-row items-center gap-1.5 mb-3">
               <Sparkles size={13} color="#0369a1" />
-              <Text className="text-xs font-bold text-sky-800">AI 대안 추천 (이 동선에 맞는 장소)</Text>
+              <Text className="text-xs font-bold text-sky-800">{t('slotCard.alternativesTitle')}</Text>
             </View>
             {alternatives.map((alt, i) => (
               <TouchableOpacity
@@ -276,7 +281,7 @@ export function SlotCard({
                   </Text>
                   {alt.estimatedCost > 0 && (
                     <Text className="text-sky-500 text-xs font-semibold mt-1">
-                      {alt.estimatedCost.toLocaleString()}원
+                      {t('slotCard.priceWon', { amount: alt.estimatedCost.toLocaleString() })}
                     </Text>
                   )}
                 </View>
@@ -379,7 +384,7 @@ export function SlotCard({
 
           <View className="flex-row gap-3 mt-1 items-center flex-wrap">
             {!startTime && duration != null && (
-              <Text className="text-xs text-slate-400">⏱ {duration}분</Text>
+              <Text className="text-xs text-slate-400">⏱ {t('slotCard.minutesSuffix', { minutes: duration })}</Text>
             )}
             {budget > 0 && (() => {
               const status = budgetLevel ? getBudgetStatus(budget, budgetLevel) : 'ok';
@@ -390,16 +395,16 @@ export function SlotCard({
                     status === 'soft' ? 'text-amber-500 font-semibold' :
                     'text-slate-400'
                   }`}>
-                    {budget === 0 ? '무료' : `${budget.toLocaleString()}원`}
+                    {budget === 0 ? t('slotCard.free') : t('slotCard.priceWon', { amount: budget.toLocaleString() })}
                   </Text>
                   {status === 'soft' && (
                     <Text className="text-[10px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded-md">
-                      예산 주의
+                      {t('slotCard.budgetCaution')}
                     </Text>
                   )}
                   {status === 'hard' && (
                     <Text className="text-[10px] text-rose-600 font-bold bg-rose-50 px-1.5 py-0.5 rounded-md">
-                      예산 초과
+                      {t('slotCard.budgetExceeded')}
                     </Text>
                   )}
                 </View>
@@ -411,7 +416,7 @@ export function SlotCard({
             <View className="mt-3 gap-2">
               <View className="flex-row items-center gap-1.5 mb-1">
                 <Sparkles size={12} color="#0369a1" />
-                <Text className="text-xs font-bold text-slate-500">AI 대안 추천 (이 동선에 맞는 장소)</Text>
+                <Text className="text-xs font-bold text-slate-500">{t('slotCard.alternativesTitle')}</Text>
               </View>
               {alternatives.map((alt, i) => (
                 <TouchableOpacity
@@ -430,7 +435,7 @@ export function SlotCard({
                     </Text>
                     {alt.estimatedCost > 0 && (
                       <Text className="text-sky-500 text-xs font-semibold mt-1">
-                        {alt.estimatedCost.toLocaleString()}원
+                        {t('slotCard.priceWon', { amount: alt.estimatedCost.toLocaleString() })}
                       </Text>
                     )}
                   </View>

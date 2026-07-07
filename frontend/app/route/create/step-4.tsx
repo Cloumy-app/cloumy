@@ -5,6 +5,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft, Plane, Sparkles, Cloud, Search, MapPin, X } from 'lucide-react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming, Easing } from 'react-native-reanimated';
 import { useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { streamRoute } from '@/lib/api/routes';
 import { searchAccommodations, type KakaoPlaceResult } from '@/lib/api/accommodations';
 import { devLogin } from '@/lib/api/auth';
@@ -12,7 +14,6 @@ import { useAuthStore } from '@/stores/useAuthStore';
 import { useRouteStore } from '@/stores/useRouteStore';
 import { useAccommodationPinStore } from '@/stores/useAccommodationPinStore';
 import type { GroupType, BudgetLevel, Density, RouteSlot, AccommodationInput, TransportMode } from '@/types';
-import { BUDGET_LABEL } from '@/types';
 
 type SelectedAccommodation = { name: string; address: string | null; lat: number; lng: number; source: 'kakao' | 'manual' };
 
@@ -26,19 +27,20 @@ const LOADING_ICONS = [
 ] as const;
 const LOADING_PROGRESS_FLOOR = 8; // 0%로 시작하면 멈춘 것처럼 보여서 처음부터 이 값으로 시작
 
-function getLoadingMessage(progress: number, ratio: number, destination: string): string {
-  if (progress < 20) return `${destination} 후보 장소를 살펴보고 있어요`;
+function getLoadingMessage(t: TFunction, progress: number, ratio: number, destination: string): string {
+  if (progress < 20) return t('routeCreateStep4.loadingMessages.searching', { destination });
   if (progress < 50) {
-    if (ratio >= 0.6) return `${destination}의 숨은 명소를 찾고 있어요`;
-    if (ratio <= 0.3) return `${destination}의 인기 명소를 찾고 있어요`;
-    return '명소와 로컬 스팟을 균형 있게 담고 있어요';
+    if (ratio >= 0.6) return t('routeCreateStep4.loadingMessages.hiddenGemFocused', { destination });
+    if (ratio <= 0.3) return t('routeCreateStep4.loadingMessages.mainstreamFocused', { destination });
+    return t('routeCreateStep4.loadingMessages.balanced');
   }
-  if (progress < 80) return '최적의 이동 동선을 계산하고 있어요';
-  if (progress < 95) return '예산과 일정을 다듬고 있어요';
-  return '완벽한 여행 루트가 거의 완성됐어요!';
+  if (progress < 80) return t('routeCreateStep4.loadingMessages.optimizingRoute');
+  if (progress < 95) return t('routeCreateStep4.loadingMessages.refiningBudget');
+  return t('routeCreateStep4.loadingMessages.almostDone');
 }
 
 export default function RouteCreateStep4() {
+  const { t } = useTranslation();
   const params = useLocalSearchParams<{
     destination: string;
     nights: string;
@@ -53,7 +55,10 @@ export default function RouteCreateStep4() {
     totalBudget?: string;
   }>();
 
-  const destination = params.destination ?? '여행지';
+  const destination = params.destination ?? '서울';
+  const destinationLabel = params.destination
+    ? t(`routeCreateStep1.cities.${params.destination}`)
+    : t('routeCreateStep4.defaultDestination');
   const selectedRatio = Number(params.hiddenGemRatio ?? 0.5);
   const selectedDensity = (params.density ?? 'normal') as Density;
 
@@ -153,7 +158,7 @@ export default function RouteCreateStep4() {
         setTokens(data.accessToken, data.refreshToken);
         setUser(data.user);
       } catch {
-        Alert.alert('서버 연결 실패', 'Spring 서버가 실행 중인지 확인해주세요.');
+        Alert.alert(t('routeCreateStep4.serverConnectFailedTitle'), t('routeCreateStep4.serverConnectFailedBody'));
         return;
       }
     }
@@ -173,7 +178,10 @@ export default function RouteCreateStep4() {
     if (selected) {
       const name = selected.source === 'manual' ? manualName.trim() : selected.name;
       if (!name) {
-        Alert.alert('숙소 이름을 입력해주세요', '지도에서 선택한 위치는 이름을 직접 입력해야 해요.');
+        Alert.alert(
+          t('routeCreateStep4.accommodationNameRequiredTitle'),
+          t('routeCreateStep4.accommodationNameRequiredBody'),
+        );
         return;
       }
       accommodations = [{
@@ -234,7 +242,7 @@ export default function RouteCreateStep4() {
         setIsGenerating(false);
         setIsStreaming(false);
         const msg = e instanceof Error ? e.message : JSON.stringify(e);
-        Alert.alert('루트 생성 실패', `오류가 발생했어요.\n${msg}`);
+        Alert.alert(t('routeCreateStep4.generateFailedTitle'), t('routeCreateStep4.generateFailedBody', { message: msg }));
       },
     );
   };
@@ -253,9 +261,9 @@ export default function RouteCreateStep4() {
             );
           })()}
         </Animated.View>
-        <Text className="text-2xl font-black text-slate-800 mb-2 text-center">루트 생성 중</Text>
+        <Text className="text-2xl font-black text-slate-800 mb-2 text-center">{t('routeCreateStep4.loadingTitle')}</Text>
         <Text className="text-slate-500 text-center mb-10 text-sm px-4">
-          {getLoadingMessage(progress, selectedRatio, destination)}
+          {getLoadingMessage(t, progress, selectedRatio, destinationLabel)}
         </Text>
         <View className="w-full bg-slate-100 rounded-full h-2 mb-3">
           <View className="bg-sky-500 h-2 rounded-full" style={{ width: `${progress}%` }} />
@@ -273,13 +281,13 @@ export default function RouteCreateStep4() {
         </TouchableOpacity>
         <View className="flex-1">
           <Text className="text-xs text-sky-500 font-bold mb-0.5">STEP 4 / 4</Text>
-          <Text className="text-xl font-bold text-slate-800">숙소가 있으신가요?</Text>
+          <Text className="text-xl font-bold text-slate-800">{t('routeCreateStep4.headerTitle')}</Text>
         </View>
       </View>
 
       <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Text className="text-xs text-slate-400 mb-4">
-          숙소를 알려주시면 그날 동선을 숙소 기준으로 짜드려요 (선택 사항)
+          {t('routeCreateStep4.hint')}
         </Text>
 
         {selected ? (
@@ -290,7 +298,7 @@ export default function RouteCreateStep4() {
                   <TextInput
                     value={manualName}
                     onChangeText={setManualName}
-                    placeholder="숙소 이름을 입력해주세요"
+                    placeholder={t('routeCreateStep4.accommodationNamePlaceholder')}
                     className="font-bold text-sky-700 text-sm mb-1"
                   />
                 ) : (
@@ -312,7 +320,7 @@ export default function RouteCreateStep4() {
               <TextInput
                 value={keyword}
                 onChangeText={setKeyword}
-                placeholder="숙소 이름으로 검색"
+                placeholder={t('routeCreateStep4.searchPlaceholder')}
                 className="flex-1 py-3 px-2 text-sm text-slate-700"
               />
               {searching && <ActivityIndicator size="small" />}
@@ -320,7 +328,7 @@ export default function RouteCreateStep4() {
 
             {keyword.trim().length > 0 && !searching && results.length === 0 && (
               <Text className="text-xs text-slate-400 mb-3">
-                검색 결과가 없어요 — 지도에서 직접 선택해보세요
+                {t('routeCreateStep4.noSearchResults')}
               </Text>
             )}
 
@@ -351,7 +359,7 @@ export default function RouteCreateStep4() {
               activeOpacity={0.8}
             >
               <MapPin size={16} color="#0ea5e9" />
-              <Text className="text-sky-600 font-semibold text-sm">지도에서 직접 선택</Text>
+              <Text className="text-sky-600 font-semibold text-sm">{t('routeCreateStep4.pickOnMap')}</Text>
             </TouchableOpacity>
           </>
         )}
@@ -367,7 +375,7 @@ export default function RouteCreateStep4() {
         >
           <Sparkles size={20} color="#ffffff" />
           <Text className="text-white font-bold text-base">
-            {selected ? 'AI 루트 생성하기' : '건너뛰고 루트 생성하기'}
+            {selected ? t('routeCreateStep4.generateWithAccommodation') : t('routeCreateStep4.generateSkip')}
           </Text>
         </TouchableOpacity>
       </View>

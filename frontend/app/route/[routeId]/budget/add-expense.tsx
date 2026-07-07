@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { router, useLocalSearchParams } from 'expo-router';
 import { X } from 'lucide-react-native';
 import { useQueryClient } from '@tanstack/react-query';
@@ -10,6 +11,7 @@ import type { ExpenseCategory } from '@/types';
 const CATEGORIES: ExpenseCategory[] = ['식음료', '교통', '입장료', '기념품', '기타'];
 
 export default function AddExpenseScreen() {
+  const { t } = useTranslation();
   const { routeId } = useLocalSearchParams<{ routeId: string }>();
   const queryClient = useQueryClient();
 
@@ -21,7 +23,7 @@ export default function AddExpenseScreen() {
   const handleSubmit = async () => {
     const actualAmount = Number(amount);
     if (!amount || Number.isNaN(actualAmount) || actualAmount < 0) {
-      Alert.alert('금액을 입력해주세요', '올바른 숫자를 입력해주세요.');
+      Alert.alert(t('budgetAddExpense.amountRequiredTitle'), t('budgetAddExpense.amountRequiredBody'));
       return;
     }
 
@@ -33,7 +35,7 @@ export default function AddExpenseScreen() {
       router.back();
     } catch (e) {
       console.error('[budget] addExpense 실패:', e);
-      Alert.alert('추가 실패', '지출을 추가하지 못했어요. 잠시 후 다시 시도해주세요.');
+      Alert.alert(t('budgetAddExpense.addFailedTitle'), t('budgetAddExpense.addFailedBody'));
     } finally {
       setSubmitting(false);
     }
@@ -42,14 +44,14 @@ export default function AddExpenseScreen() {
   return (
     <SafeAreaView className="flex-1 bg-white">
       <View className="flex-row items-center justify-between px-5 py-3 border-b border-slate-100">
-        <Text className="text-lg font-bold text-slate-800">지출 추가</Text>
+        <Text className="text-lg font-bold text-slate-800">{t('budgetAddExpense.headerTitle')}</Text>
         <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
           <X size={22} color="#475569" />
         </TouchableOpacity>
       </View>
 
       <ScrollView className="flex-1 px-6 pt-6" keyboardShouldPersistTaps="handled">
-        <Text className="font-bold text-slate-700 mb-3">카테고리</Text>
+        <Text className="font-bold text-slate-700 mb-3">{t('budgetAddExpense.categoryLabel')}</Text>
         <View className="flex-row flex-wrap gap-2 mb-6">
           {CATEGORIES.map((c) => {
             const selected = category === c;
@@ -68,23 +70,23 @@ export default function AddExpenseScreen() {
           })}
         </View>
 
-        <Text className="font-bold text-slate-700 mb-3">금액</Text>
+        <Text className="font-bold text-slate-700 mb-3">{t('budgetAddExpense.amountLabel')}</Text>
         <View className="flex-row items-center bg-slate-50 border-2 border-slate-200 rounded-2xl px-4 mb-6">
           <TextInput
             value={amount}
             onChangeText={(text) => setAmount(text.replace(/[^0-9]/g, ''))}
-            placeholder="0"
+            placeholder={t('budgetAddExpense.amountPlaceholder')}
             keyboardType="number-pad"
             className="flex-1 py-3 px-2 text-sm text-slate-700"
           />
-          <Text className="text-slate-400 text-sm">원</Text>
+          <Text className="text-slate-400 text-sm">{t('routeCreateStep3.currencyWon')}</Text>
         </View>
 
-        <Text className="font-bold text-slate-700 mb-3">메모 (선택)</Text>
+        <Text className="font-bold text-slate-700 mb-3">{t('budgetAddExpense.memoLabel')}</Text>
         <TextInput
           value={memo}
           onChangeText={setMemo}
-          placeholder="예: 저녁 식사"
+          placeholder={t('budgetAddExpense.memoPlaceholder')}
           className="bg-slate-50 border-2 border-slate-200 rounded-2xl px-4 py-3 text-sm text-slate-700 mb-6"
         />
       </ScrollView>
@@ -96,7 +98,7 @@ export default function AddExpenseScreen() {
           className="bg-sky-500 py-4 rounded-2xl items-center"
           activeOpacity={0.9}
         >
-          {submitting ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-bold text-base">추가하기</Text>}
+          {submitting ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-bold text-base">{t('budgetAddExpense.submitButton')}</Text>}
         </TouchableOpacity>
       </View>
     </SafeAreaView>

@@ -1,5 +1,6 @@
 import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
@@ -15,6 +16,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export default function BudgetReportScreen() {
+  const { t } = useTranslation();
   const { routeId } = useLocalSearchParams<{ routeId: string }>();
 
   const { data: report, isLoading } = useQuery({
@@ -35,7 +37,7 @@ export default function BudgetReportScreen() {
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
           <ChevronLeft size={24} color="#475569" />
         </TouchableOpacity>
-        <Text className="text-lg font-bold text-slate-800">여행 지출 리포트</Text>
+        <Text className="text-lg font-bold text-slate-800">{t('budgetReport.headerTitle')}</Text>
       </View>
 
       {isLoading ? (
@@ -45,14 +47,14 @@ export default function BudgetReportScreen() {
       ) : (
         <ScrollView className="flex-1 px-6 pt-6">
           <View className="bg-white border border-slate-100 rounded-2xl p-4 mb-6">
-            <Text className="text-xs font-bold text-slate-500 mb-1">현지 활동비</Text>
+            <Text className="text-xs font-bold text-slate-500 mb-1">{t('budgetReport.localActivityCost')}</Text>
             <Text className="text-2xl font-black text-slate-800">
-              {(report?.plannedTotal ?? 0).toLocaleString()}원
+              {t('routeResult.budgetExact', { amount: (report?.plannedTotal ?? 0).toLocaleString() })}
             </Text>
-            <Text className="text-xs text-slate-400 mt-1">계획된 일정 슬롯의 예상 비용 합계</Text>
+            <Text className="text-xs text-slate-400 mt-1">{t('budgetReport.localActivitySubtitle')}</Text>
           </View>
 
-          <Text className="font-bold text-slate-700 mb-3">비계획 지출</Text>
+          <Text className="font-bold text-slate-700 mb-3">{t('budget.unplannedExpense')}</Text>
           {hasUnplanned ? (
             <>
               <View style={{ height: 220 }} className="mb-4">
@@ -66,12 +68,14 @@ export default function BudgetReportScreen() {
                     <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: c.color }} />
                     <Text className="text-sm font-semibold text-slate-700">{c.label}</Text>
                   </View>
-                  <Text className="text-sm font-bold text-slate-800">{c.value.toLocaleString()}원</Text>
+                  <Text className="text-sm font-bold text-slate-800">
+                    {t('routeResult.budgetExact', { amount: c.value.toLocaleString() })}
+                  </Text>
                 </View>
               ))}
             </>
           ) : (
-            <Text className="text-slate-300 text-sm text-center mt-8">아직 기록된 지출이 없어요</Text>
+            <Text className="text-slate-300 text-sm text-center mt-8">{t('budget.noExpensesYet')}</Text>
           )}
 
           <View className="h-10" />

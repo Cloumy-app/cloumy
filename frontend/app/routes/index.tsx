@@ -1,12 +1,14 @@
 import { useRef } from 'react';
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, MapPin, Calendar, Sparkles, Trash2 } from 'lucide-react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { getMyRoutes, deleteRoute } from '@/lib/api/routes';
-import { getTripStatusLabel } from '@/lib/date';
+import { getTripStatusLabel, isTripCompleted } from '@/lib/date';
 import type { RouteListItem } from '@/types';
 
 interface SpringPage<T> {
@@ -21,9 +23,9 @@ function formatDateRange(start: string, end: string): string {
   return `${s.getMonth() + 1}.${s.getDate()} - ${e.getMonth() + 1}.${e.getDate()}`;
 }
 
-function RouteCard({ route }: { route: RouteListItem }) {
-  const dday = getTripStatusLabel(route.startDate, route.endDate);
-  const isPast = dday === '여행 완료';
+function RouteCard({ route, t }: { route: RouteListItem; t: TFunction }) {
+  const dday = getTripStatusLabel(t, route.startDate, route.endDate);
+  const isPast = isTripCompleted(route.startDate, route.endDate);
 
   return (
     <TouchableOpacity
@@ -69,9 +71,11 @@ function RouteCard({ route }: { route: RouteListItem }) {
 function SwipeableRouteCard({
   route,
   onDelete,
+  t,
 }: {
   route: RouteListItem;
   onDelete: (id: string) => void;
+  t: TFunction;
 }) {
   const swipeableRef = useRef<Swipeable>(null);
 
@@ -79,9 +83,9 @@ function SwipeableRouteCard({
     <TouchableOpacity
       onPress={() => {
         swipeableRef.current?.close();
-        Alert.alert('루트 삭제', `"${route.title}" 루트를 삭제할까요?`, [
-          { text: '취소', style: 'cancel' },
-          { text: '삭제', style: 'destructive', onPress: () => onDelete(route.id) },
+        Alert.alert(t('routeResult.deleteRouteTitle'), t('routesList.deleteConfirm', { title: route.title }), [
+          { text: t('routeResult.cancelButton'), style: 'cancel' },
+          { text: t('routesList.deleteButton'), style: 'destructive', onPress: () => onDelete(route.id) },
         ]);
       }}
       style={{
@@ -95,7 +99,7 @@ function SwipeableRouteCard({
       }}
     >
       <Trash2 size={20} color="white" />
-      <Text style={{ color: 'white', fontSize: 11, fontWeight: '700', marginTop: 4 }}>삭제</Text>
+      <Text style={{ color: 'white', fontSize: 11, fontWeight: '700', marginTop: 4 }}>{t('routesList.deleteButton')}</Text>
     </TouchableOpacity>
   );
 
@@ -106,50 +110,51 @@ function SwipeableRouteCard({
       overshootRight={false}
       friction={2}
     >
-      <RouteCard route={route} />
+      <RouteCard route={route} t={t} />
     </Swipeable>
   );
 }
 
-function ErrorState({ onRetry }: { onRetry: () => void }) {
+function ErrorState({ onRetry, t }: { onRetry: () => void; t: TFunction }) {
   return (
     <View className="flex-1 items-center justify-center px-8 mt-24">
       <Text className="text-slate-500 text-sm text-center mb-6">
-        루트를 불러오지 못했어요
+        {t('routesList.loadError')}
       </Text>
       <TouchableOpacity
         className="bg-slate-800 px-6 py-3 rounded-2xl"
         onPress={onRetry}
         activeOpacity={0.85}
       >
-        <Text className="text-white font-bold">다시 시도</Text>
+        <Text className="text-white font-bold">{t('routesList.retryButton')}</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
-function EmptyState() {
+function EmptyState({ t }: { t: TFunction }) {
   return (
     <View className="flex-1 items-center justify-center px-8 mt-24">
       <View className="w-20 h-20 bg-sky-50 rounded-full items-center justify-center mb-5">
         <Sparkles size={36} color="#0ea5e9" />
       </View>
-      <Text className="text-xl font-bold text-slate-800 mb-2">아직 루트가 없어요</Text>
+      <Text className="text-xl font-bold text-slate-800 mb-2">{t('routesList.emptyTitle')}</Text>
       <Text className="text-slate-400 text-sm text-center mb-8">
-        AI로 나만의 여행 루트를 만들어보세요
+        {t('routesList.emptySubtitle')}
       </Text>
       <TouchableOpacity
         className="bg-sky-500 px-8 py-4 rounded-2xl"
         onPress={() => router.push('/route/create/step-1' as never)}
         activeOpacity={0.85}
       >
-        <Text className="text-white font-bold">AI 루트 만들기</Text>
+        <Text className="text-white font-bold">{t('routesList.createButton')}</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
 export default function RoutesScreen() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['routes', 'all'],
@@ -180,13 +185,13 @@ export default function RoutesScreen() {
         <TouchableOpacity onPress={() => router.back()} className="mr-4">
           <ChevronLeft size={24} color="#475569" />
         </TouchableOpacity>
-        <Text className="text-xl font-bold text-slate-800 flex-1">내 루트</Text>
+        <Text className="text-xl font-bold text-slate-800 flex-1">{t('routesList.headerTitle')}</Text>
         <TouchableOpacity
           onPress={() => router.push('/route/create/step-1' as never)}
           className="bg-sky-500 px-4 py-2 rounded-xl"
           activeOpacity={0.85}
         >
-          <Text className="text-white text-sm font-bold">+ 새 루트</Text>
+          <Text className="text-white text-sm font-bold">{t('routesList.newRouteButton')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -195,15 +200,15 @@ export default function RoutesScreen() {
           <ActivityIndicator size="large" color="#0ea5e9" />
         </View>
       ) : isError ? (
-        <ErrorState onRetry={() => refetch()} />
+        <ErrorState onRetry={() => refetch()} t={t} />
       ) : routes.length === 0 ? (
-        <EmptyState />
+        <EmptyState t={t} />
       ) : (
         <FlatList
           data={routes}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <SwipeableRouteCard route={item} onDelete={handleDelete} />
+            <SwipeableRouteCard route={item} onDelete={handleDelete} t={t} />
           )}
           contentContainerStyle={{ paddingTop: 16, paddingBottom: 32 }}
           showsVerticalScrollIndicator={false}

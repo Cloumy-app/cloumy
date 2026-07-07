@@ -5,12 +5,20 @@ function toLocalDateString(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-export function getTripStatusLabel(startDate: string, endDate: string): string {
+export function isTripCompleted(startDate: string, endDate: string): boolean {
+  return toLocalDateString(new Date()) > endDate;
+}
+
+export function getTripStatusLabel(
+  t: (key: string) => string,
+  startDate: string,
+  endDate: string,
+): string {
   const todayStr = toLocalDateString(new Date());
 
-  if (todayStr > endDate) return '여행 완료';
-  if (todayStr === startDate) return 'D-Day';
-  if (todayStr > startDate) return '여행 중';
+  if (todayStr > endDate) return t('tripStatus.completed');
+  if (todayStr === startDate) return t('tripStatus.dDay');
+  if (todayStr > startDate) return t('tripStatus.inProgress');
 
   const diff = Math.ceil(
     (new Date(startDate).getTime() - new Date(todayStr).getTime()) / (1000 * 60 * 60 * 24),
