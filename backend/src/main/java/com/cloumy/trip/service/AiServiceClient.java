@@ -51,8 +51,10 @@ public class AiServiceClient {
                 ? String.format(":%.1f", req.hiddenGemRatio())
                 : ":0.2";
         String density = req.density() != null ? req.density().toLowerCase() : "normal";
-        return String.format("route:%s:%d:%s:%s:%s%s:%s",
-                req.destination(), req.nights(), req.groupType(), req.budgetLevel(), themes, ratio, density);
+        // language가 캐시 키에 없으면 다른 언어로 생성된 tip/day_summary가 그대로 재사용됨
+        String language = req.language() != null ? req.language() : "ko";
+        return String.format("route:%s:%d:%s:%s:%s%s:%s:%s",
+                req.destination(), req.nights(), req.groupType(), req.budgetLevel(), themes, ratio, density, language);
     }
 
     public record NearbySlotDto(String name, double lat, double lng) {}
@@ -185,7 +187,8 @@ public class AiServiceClient {
             LocalDate start_date,
             String density,
             String transport_mode,
-            List<AccommodationAnchorDto> accommodations
+            List<AccommodationAnchorDto> accommodations,
+            String language
     ) {}
 
     /**
@@ -232,7 +235,8 @@ public class AiServiceClient {
                     req.startDate(),
                     req.density() != null ? req.density().toLowerCase() : "normal",
                     req.transportMode() != null ? req.transportMode().toLowerCase() : null,
-                    accommodations
+                    accommodations,
+                    req.language()
             );
 
             String body = objectMapper.writeValueAsString(fastApiReq);

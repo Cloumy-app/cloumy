@@ -1,3 +1,5 @@
+import type { SupportedLanguage } from '@/stores/useLanguageStore';
+
 export interface User {
   id: string;
   nickname: string;
@@ -123,6 +125,7 @@ export interface RouteGenRequest {
   transportMode?: TransportMode;
   accommodations?: AccommodationInput[];
   totalBudget?: number; // 숙박비 제외 현지 활동/식사 예산, 선택 사항
+  language?: SupportedLanguage; // 앱 설정 언어 — 하루요약/팁 텍스트 생성 언어(장소명은 원본 유지)
 }
 
 export type GroupType = 'solo' | 'couple' | 'friends' | 'family';

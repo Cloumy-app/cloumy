@@ -22,6 +22,7 @@ class RouteGenRequest(BaseModel):
     density: Literal["relaxed", "normal", "packed"] = "normal"
     transport_mode: Literal["transit", "car", "walk"] | None = None
     accommodations: list[AccommodationAnchor] = Field(default_factory=list)
+    language: str | None = None  # ko/en/ja/zh — 앱 설정 언어(tip/day_summary 생성 언어, place_name은 원본 유지)
 
     @field_validator("nights")
     @classmethod
