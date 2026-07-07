@@ -1,5 +1,7 @@
 # 시스템 아키텍처
 
+> ⚠️ **2026-07-06 타겟 전환** 반영: 지도 내비(ADR-4)·결제(ADR-6) 관련 부분만 갱신함. 나머지 아키텍처 결정은 타겟 전환과 무관하게 유효.
+
 ## 전체 구조 다이어그램
 
 ```
@@ -7,9 +9,9 @@
 [클라이언트]
   React Native + Expo (iOS / Android)
   - 지도: react-native-maps (Google Maps SDK)
-  - 내비: 카카오맵 딥링크 → Phase 2: 인앱 내비
+  - 내비: Naver(대중교통)/Google(도보)/카카오T(택시) 3-way 딥링크 분기 (계획, 현재 Google만 구현) → Phase 2: 인앱 내비
   - 실시간: socket.io-client (챗봇 스트리밍, 그룹 동기화)
-  - 결제: 토스페이먼츠 웹뷰 (react-native-webview)
+  - 결제: ⚠️ PG 미확정 (react-native-webview 예정, Stripe 등 국제결제 검토)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [API Gateway — Spring Cloud Gateway]
   - JWT 인증 필터
@@ -57,9 +59,9 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [외부 API]
   Google Maps Platform    카카오 로컬 API    TourAPI (무료)
-  Claude API (Anthropic)  카카오맵 딥링크    토스페이먼츠
-  카카오 OAuth            구글 OAuth         애플 Sign In
-  FCM                     기상청 API
+  Claude API (Anthropic)  Naver/카카오T 딥링크(계획)  국제결제 PG(미정)
+  구글 OAuth              애플 Sign In       (카카오 OAuth 보류)
+  FCM                     OpenWeatherMap     Serper API(계획)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [인프라]
   AWS EC2 (MVP 초반) → ECS Fargate + Auto Scaling (Phase 2)
@@ -91,10 +93,10 @@
 - **이유**: AI 파이프라인(LangChain, OR-Tools, pgvector)이 Python 생태계에 최적화. Spring과 독립적으로 AI 스택 고도화 가능
 - **트레이드오프**: 서비스 간 HTTP 통신 오버헤드 발생 (내부 gRPC 전환 고려)
 
-### ADR-4: 지도 — Google Maps 단일 인프라
-- **결정**: 카카오맵 전체 대신 Google Maps 렌더링 + 카카오맵 딥링크(내비만)
-- **이유**: 해외 확장 시 카카오맵 전체 교체 비용 방지. 국내 장소 DB는 TourAPI + 카카오 로컬 API로 보강
-- **트레이드오프**: Google Maps 2025년 신요금 적용. MAU 1만 기준 월 $100~200 예상
+### ADR-4: 지도 — Google Maps 렌더링 + 3-way 내비 딥링크 분기
+- **결정**: 앱 내 지도 렌더링은 Google Maps SDK로 통일. 내비는 이동 수단별로 provider 분기: 지하철·버스 → Naver Maps, 도보 → Google Maps, 택시 → 카카오T
+- **이유**: 외국인 관광객에게 Google Maps가 가장 친숙한 영어 UI 제공. 단, 한국 대중교통 정확도는 Naver Maps가 압도적이고(영어 모드도 지원), 택시는 카카오T가 해외 카드 결제를 지원해 3-way 분기 채택 (기존에는 카카오맵 단일 딥링크였으나 국내 전용 UX라 외국인 이탈 위험이 커 변경)
+- **트레이드오프**: Google Maps 2025년 신요금 적용, MAU 1만 기준 월 $100~200 예상. 3-way 분기는 딥링크 URL scheme 3종 관리 필요 (현재 Google 딥링크만 구현됨, Naver/카카오T는 계획)
 
 ### ADR-5: 임베딩 — OpenAI text-embedding-3-small
 - **결정**: LLM은 Anthropic Claude, 임베딩은 OpenAI API 분리 사용
@@ -102,10 +104,10 @@
 - **트레이드오프**: API 키 이중 관리 필요 (ANTHROPIC_API_KEY, OPENAI_API_KEY)
 - **추후**: Anthropic 임베딩 API 출시 시 단일화 검토
 
-### ADR-6: 결제 — 토스페이먼츠 웹뷰
-- **결정**: 인앱결제(IAP) 대신 토스페이먼츠 웹뷰 결제
-- **이유**: 구글/애플 인앱결제 강제 시 30% 수수료 발생. 웹뷰 방식으로 우회
-- **트레이드오프**: 앱 내 결제 유도 UI 노출 금지 정책 주의 필요
+### ADR-6: 결제 — ⚠️ 재검토 필요 (PG 미확정)
+- **기존 결정**: 인앱결제(IAP) 대신 토스페이먼츠 웹뷰 결제로 30% 수수료 우회
+- **재검토 사유**: 토스페이먼츠는 국내 전용 PG라 외국인 관광객의 해외 발급 카드 결제를 지원하지 않음 — 타겟 전환 후 그대로 쓸 수 없음
+- **후보**: Stripe 등 국제결제 PG (웹뷰 방식 유지 시 인앱결제 수수료 우회 이점도 유지 가능). 결제 기능 자체가 아직 미구현이라 PG 선택 후 착수 (별도 논의 필요)
 
 ## 서비스 간 통신
 
@@ -169,9 +171,9 @@ OPENAI_API_KEY=sk-...
 # Google Maps
 GOOGLE_MAPS_API_KEY=...
 
-# 카카오
+# 카카오 (로컬 API는 유지, OAuth/맵 딥링크는 계획·보류 상태)
 KAKAO_REST_API_KEY=...
-KAKAO_OAUTH_CLIENT_ID=...
+KAKAO_OAUTH_CLIENT_ID=...  # 국내 전용 서비스라 보류 — 재검토 필요
 
 # DB
 POSTGRES_URL=jdbc:postgresql://localhost:5432/cloumy
@@ -181,7 +183,7 @@ REDIS_URL=redis://localhost:6379
 AWS_S3_BUCKET=cloumy-uploads
 AWS_REGION=ap-northeast-2
 
-# 결제
+# 결제 — PG 미확정, 토스페이먼츠는 국내 전용이라 재검토 필요 (ADR-6 참고)
 TOSS_PAYMENTS_SECRET_KEY=...
 
 # FCM

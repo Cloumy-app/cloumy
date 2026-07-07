@@ -13,10 +13,11 @@
 | 실시간 | socket.io-client | 챗봇 스트리밍, 그룹 동기화 |
 | UI 컴포넌트 | NativeWind v4 + Tailwind v3 | 와이어프레임 Tailwind 클래스 직접 이식 가능 |
 | 폼 | React Hook Form + Zod | 루트 생성 Step 입력, 예산 폼 |
-| 결제 | react-native-webview | 토스페이먼츠 웹뷰 |
-| 차트 | Victory Native | 예산 도넛 차트, 지출 리포트 |
+| 결제 | react-native-webview | ⚠️ PG 미확정 — 토스페이먼츠는 국내 전용이라 재검토 필요, Stripe 등 국제결제 검토 중 |
+| 차트 | Victory Native | 예산 도넛 차트, 지출 리포트 (구현 완료) |
 | 로컬 저장 | MMKV | AsyncStorage 대비 10~30x 빠름. 토큰·캐시 저장 |
-| 딥링크 | Expo Linking | 카카오맵 딥링크, 카카오 OAuth 콜백 |
+| 딥링크 | Expo Linking | Naver/Google/카카오T 3-way 내비 분기 (계획, 현재 Google만 구현) |
+| 다국어(i18n) | i18next + react-i18next + expo-localization | 한/영/일/중 4개 언어, MMKV 저장. 챗봇 화면 마이그레이션 완료(2026-07-06), 나머지 화면은 미마이그레이션 |
 
 ## 페이지 구성 및 라우팅
 
@@ -47,7 +48,7 @@ app/
 │
 └── payment/
     ├── index.tsx             # 트립 패스 선택
-    └── webview.tsx           # 토스페이먼츠 웹뷰
+    └── webview.tsx           # 결제 웹뷰 (PG 미확정)
 ```
 
 ## 핵심 컴포넌트 구조
@@ -148,7 +149,7 @@ interface BudgetStore {
 
 | 항목 | iOS | Android |
 |------|-----|---------|
-| 소셜 로그인 | 카카오·구글·애플 | 카카오·구글 (애플 불필요) |
+| 소셜 로그인 | 구글·애플 (카카오는 국내 전용이라 보류) | 구글 (애플 불필요) |
 | 결제 | 웹뷰 (앱스토어 정책) | 웹뷰 (플레이스토어 정책) |
 | 딥링크 | Expo Linking + Universal Links | Expo Linking + App Links |
 | 지도 | react-native-maps Google Maps | react-native-maps Google Maps |

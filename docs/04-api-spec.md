@@ -49,10 +49,10 @@
 소셜 로그인 후 Cloumy JWT 발급
 
 ```json
-// 요청
+// 요청 — provider: 'google' | 'apple' 우선 (카카오는 국내 전용이라 보류, 재검토 필요)
 {
-  "provider": "kakao",
-  "oauthAccessToken": "kakao_oauth_token_here"
+  "provider": "google",
+  "oauthAccessToken": "google_oauth_token_here"
 }
 
 // 응답 201
@@ -172,15 +172,18 @@ GET /routes?page=0&size=20
 
 ### 챗봇 (Chatbot)
 
+> 📌 실제 구현은 WebSocket 스트리밍이 아닌 REST 단발 응답 — 실제 요청/응답 구조는 `docs/06-ai-chatbot.md` 참고. 아래는 원래 계획 스펙에 다국어 `language` 필드만 반영.
+
 #### WebSocket ws://api.cloumy.app/v1/chat
 
 연결 후 메시지 형식:
 
 ```json
-// 클라이언트 → 서버
+// 클라이언트 → 서버 — language: 사용자 메시지 언어 감지 결과, 다국어 응답에 사용 (구현 완료, 2026-07-06)
 {
   "type": "message",
   "content": "3박 4일 부산, 친구 2명, 먹방 위주로",
+  "language": "ko",
   "routeId": "uuid (여행 중 컨텍스트용, 선택)",
   "location": { "lat": 35.1796, "lng": 129.0756 }
 }
@@ -320,29 +323,32 @@ Hidden Gem 등록
 #### POST /payments/trips
 트립 패스 결제 시작
 
+> ⚠️ **PG 미확정**: 아래는 토스페이먼츠 기준 예시였으나, 국내 전용 PG라 외국인 해외 카드 결제를 지원하지 않아 재검토 중(Stripe 등 후보, `docs/02-architecture.md` ADR-6 참고). 결제 기능 자체가 미구현이라 실제 스펙은 PG 확정 후 변경될 수 있음.
+
 ```json
 // 요청
-{ "passType": "3night" }
+{ "passType": "standard" }
 
 // 응답 200
 {
   "orderId": "cloumy-order-uuid",
-  "amount": 4900,
+  "amount": 4.99,
+  "currency": "USD",
   "successUrl": "https://cloumy.app/payment/success",
   "failUrl": "https://cloumy.app/payment/fail"
 }
-// → 클라이언트가 토스페이먼츠 웹뷰 오픈
+// → 클라이언트가 (PG 미확정) 결제 웹뷰 오픈
 ```
 
 #### POST /payments/trips/confirm
 결제 완료 서버 사이드 검증
 
 ```json
-// 요청
-{ "paymentKey": "토스페이먼츠_결제키", "orderId": "cloumy-order-uuid", "amount": 4900 }
+// 요청 — paymentKey는 PG 확정 후 실제 필드명으로 변경될 수 있음
+{ "paymentKey": "pg_transaction_key", "orderId": "cloumy-order-uuid", "amount": 4.99 }
 
 // 응답 200
-{ "passType": "3night", "passExpiresAt": "2026-07-14T23:59:59Z" }
+{ "passType": "standard", "passExpiresAt": "2026-07-14T23:59:59Z" }
 ```
 
 ---

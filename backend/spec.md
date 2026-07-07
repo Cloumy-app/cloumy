@@ -12,7 +12,7 @@
 | 지리 | PostGIS (PostgreSQL 확장) | - |
 | 캐시 | Spring Data Redis | - |
 | 비동기 | Spring @Async (MVP) → Kafka (Phase 2) | - |
-| 결제 | 토스페이먼츠 SDK | - |
+| 결제 | ⚠️ PG 미확정 (토스페이먼츠는 국내 전용, 재검토 필요) | - |
 | 파일 | AWS S3 SDK | - |
 | 푸시 | Firebase Admin SDK (FCM) | - |
 | 빌드 | Gradle | - |
@@ -26,7 +26,7 @@ com.cloumy/
 ├── auth/
 │   ├── AuthController.java
 │   ├── AuthService.java
-│   ├── OAuthService.java          # 카카오/구글/애플 OAuth 처리
+│   ├── OAuthService.java          # 구글/애플 우선, 카카오는 국내 전용이라 보류(재검토 필요)
 │   ├── JwtProvider.java
 │   └── dto/
 │
@@ -51,7 +51,7 @@ com.cloumy/
 │
 ├── payment/
 │   ├── PaymentController.java
-│   ├── TossPaymentsService.java    # 결제 검증
+│   ├── PaymentGatewayService.java  # 결제 검증 (PG 미확정 — 토스페이먼츠 → 국제결제 검토 중)
 │   ├── PassService.java           # 트립 패스 활성화
 │   └── dto/
 │
@@ -106,19 +106,21 @@ com.cloumy/
   2. Redis 캐시 무효화
 ```
 
-### 3. 결제 플로우 (토스페이먼츠)
+### 3. 결제 플로우 (⚠️ PG 미확정)
+
+> 토스페이먼츠는 국내 전용 PG라 외국인 관광객의 해외 카드 결제를 지원하지 않음 — 타겟 전환 후 재검토 필요 (Stripe 등 국제결제 후보, `docs/02-architecture.md` ADR-6 참고). 아래 흐름은 PG 확정 전까지 구조 참고용이며 아직 구현되지 않았다.
 
 ```
 [클라이언트] POST /payments/trips → orderId, amount 반환
     ↓
-[클라이언트] 토스페이먼츠 웹뷰에서 결제 진행
+[클라이언트] (PG 미확정) 결제 웹뷰에서 결제 진행
     ↓
 [클라이언트] 결제 완료 → POST /payments/trips/confirm (paymentKey 포함)
     ↓
-[TossPaymentsService]
-  1. 토스페이먼츠 서버에 결제 검증 API 호출 (서버 사이드 필수)
+[PaymentService]
+  1. PG 서버에 결제 검증 API 호출 (서버 사이드 필수)
   2. 검증 성공 → payments 테이블 저장
-  3. users.pass_type, pass_expires_at 업데이트
+  3. users.pass_type('standard'/'extended'), pass_expires_at 업데이트
   4. FCM 결제 완료 알림 발송
 ```
 
@@ -158,14 +160,15 @@ com.cloumy/
 | 서비스 | 용도 | 호출 방식 |
 |--------|------|----------|
 | FastAPI AI 서비스 | 루트 생성, 챗봇, Pin&Reshuffle, 지출 파싱 | HTTP (내부망) |
-| 카카오 OAuth | 소셜 로그인 | HTTP |
 | 구글 OAuth | 소셜 로그인 | HTTP |
+| 애플 Sign In | 소셜 로그인 | HTTP |
+| 카카오 OAuth | 소셜 로그인 (국내 전용이라 보류, 재검토 필요) | HTTP |
 | TourAPI | 장소 DB 수집 (배치, 1일 1회) | HTTP + Spring @Scheduled |
 | 카카오 로컬 API | 장소 DB 보강 (배치, 3일 1회) | HTTP + Spring @Scheduled |
-| 토스페이먼츠 | 결제 검증 | HTTP |
+| 국제결제 PG (미확정) | 결제 검증 | HTTP |
 | AWS S3 | 이미지 업로드 | AWS SDK |
 | FCM | 푸시 알림 | Firebase Admin SDK |
-| 기상청 API | 여행 중 날씨 (챗봇 연동) | HTTP |
+| OpenWeatherMap | 여행 중 날씨 (챗봇 연동) | HTTP |
 
 ## 보안 고려사항
 
@@ -175,9 +178,9 @@ com.cloumy/
 | LLM 프롬프트 인젝션 | 사용자 입력 sanitize, 시스템 프롬프트 분리 |
 | API 과호출 | Spring Cloud Gateway Rate Limiting (사용자별 분당 제한) |
 | Hidden Gems GPS 위조 | 서버 사이드 PostGIS 거리 검증, 반경 100m 이내만 인정 |
-| 결제 위변조 | 토스페이먼츠 서버 사이드 검증 필수 (클라이언트 단독 신뢰 금지) |
+| 결제 위변조 | PG 서버 사이드 검증 필수 (클라이언트 단독 신뢰 금지, PG 미확정) |
 | 위치 정보 | GPS 좌표 DB 저장 시 AES-256 암호화 |
-| 결제 정보 | 카드번호 등 원본 미저장 (토스페이먼츠 서버에만 존재) |
+| 결제 정보 | 카드번호 등 원본 미저장 (PG 서버에만 존재) |
 | 여행 이력 조회 | Row-level Security (본인만 조회 가능) |
 
 ## 데이터 수집 배치 (Spring @Scheduled)

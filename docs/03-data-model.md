@@ -28,11 +28,11 @@ group_trips
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | id | UUID | ✅ | PK |
-| oauth_provider | VARCHAR | ✅ | 'kakao' \| 'google' \| 'apple' |
+| oauth_provider | VARCHAR | ✅ | 'google' \| 'apple' \| 'kakao'(보류, 국내 전용이라 외국인 타겟과 안 맞음 — 재검토 필요) |
 | oauth_id | VARCHAR | ✅ | 소셜 로그인 식별자 |
 | nickname | VARCHAR | ✅ | 표시 이름 |
 | profile_image_url | VARCHAR | - | 프로필 이미지 |
-| pass_type | VARCHAR | - | 'none' \| 'domestic_day' \| 'domestic_3night' \| 'overseas_day' \| 'overseas_4night' |
+| pass_type | VARCHAR | - | 'none' \| 'standard' \| 'extended' — ⚠️ 2026-07-06 타겟 전환으로 `domestic_*`/`overseas_*` 구분에서 변경(결제 미구현이라 실제 마이그레이션은 결제 기능 구현 시점에 반영) |
 | pass_expires_at | TIMESTAMP | - | 트립 패스 만료 시각 |
 | is_beta_tester | BOOLEAN | ✅ | 베타 테스터 여부 (레전드 배지) |
 | created_at | TIMESTAMP | ✅ | |
@@ -42,10 +42,10 @@ group_trips
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | id | UUID | ✅ | PK |
-| name | VARCHAR | ✅ | 장소명 |
+| name | VARCHAR | ✅ | 장소명 (⚠️ 한국어만 존재, 영문 컬럼 없음 — 외국인 타겟 전환 후 영문화 방식 논의 필요, `planning/priorities.md` P2 참고) |
 | location | GEOGRAPHY(POINT) | ✅ | PostGIS 좌표 |
-| address | VARCHAR | - | 도로명 주소 |
-| category_tags | TEXT[] | ✅ | ['먹방', '한식', '전통시장'] |
+| address | VARCHAR | - | 도로명 주소 (영문 컬럼 없음, 위와 동일) |
+| category_tags | TEXT[] | ✅ | ['먹방', '한식', '전통시장'] — ⚠️ 여행자 취향 태그 시스템은 이 필드와 별개로 Notion 10종 영어 태그(K-pop Pilgrim 등)로 재설계 계획, `docs/01-prd.md` 참고 |
 | source | VARCHAR | ✅ | 'tourapi' \| 'kakao' \| 'hidden_gem' |
 | rarity_score | FLOAT | - | 희소성 점수 0~100 |
 | review_count | INTEGER | - | 카카오 플레이스 리뷰 수 |
@@ -62,6 +62,8 @@ group_trips
 | trend_source | TEXT[] | - | 트렌드 출처 ['naver_blog', 'youtube'] |
 | embedding | vector(1536) | - | pgvector 임베딩 |
 | created_at | TIMESTAMP | ✅ | |
+
+> 📌 **계획 — Foreigner Friendly Score 컬럼 (미구현)**: `friendly_score_english_menu`/`friendly_score_card_payment`/`friendly_score_english_kiosk`/`spice_level`/`dietary_tags` 등 5개 항목 추가 예정. 아직 스키마 설계 전이며 컬럼명은 가안. `docs/01-prd.md` P1 섹션 참고.
 
 ### routes
 
@@ -177,9 +179,9 @@ GET    /v1/users/me/bookmarks                    — 내 북마크 목록
 |------|------|------|------|
 | id | UUID | ✅ | PK |
 | user_id | UUID | ✅ | FK → users |
-| pass_type | VARCHAR | ✅ | 'domestic_day' \| 'domestic_3night' \| 'overseas_day' \| 'overseas_4night' — ※ 가격은 추후 확정 |
-| amount | INTEGER | ✅ | 결제 금액 |
-| payment_key | VARCHAR | ✅ | 토스페이먼츠 결제 키 |
+| pass_type | VARCHAR | ✅ | 'standard'($4.99) \| 'extended'($7.99) — Standard/Extended 가격 확정, `planning/strategy.md` 참고 |
+| amount | INTEGER | ✅ | 결제 금액 (통화 단위는 PG 확정 후 결정, 현재 USD 가정) |
+| payment_key | VARCHAR | ✅ | 결제 PG 거래 키 — ⚠️ PG 미확정(토스페이먼츠는 국내 전용이라 재검토 필요, Stripe 등 검토 중) |
 | status | VARCHAR | ✅ | 'pending' \| 'success' \| 'fail' |
 | pass_expires_at | TIMESTAMP | - | 패스 만료 시각 |
 | created_at | TIMESTAMP | ✅ | |
@@ -316,15 +318,15 @@ interface Expense {
   routeId: string;
   slotId?: string;
   expenseType: 'planned' | 'unplanned';
-  category: '숙박' | '식음료' | '교통' | '입장료' | '기념품' | '기타';
+  category: '숙박' | '식음료' | '교통' | '입장료' | '기념품' | '기타'; // ⚠️ 한글 하드코딩 — 언어중립 코드값(예: FOOD/TRANSPORT)으로 리팩터링 예정, `planning/milestones.md` Phase 2.5 "다음 단계" 참고
   plannedAmount?: number;
   actualAmount: number;
   memo?: string;
   createdAt: string;
 }
 
-// 트립 패스 (가격은 추후 확정)
-type PassType = 'none' | 'domestic_day' | 'domestic_3night' | 'overseas_day' | 'overseas_4night';
+// 트립 패스 (Standard $4.99 / Extended $7.99, 2026-07-06 타겟 전환으로 domestic/overseas 구분 폐기)
+type PassType = 'none' | 'standard' | 'extended';
 
 // 챗봇 메시지
 interface ChatMessage {
