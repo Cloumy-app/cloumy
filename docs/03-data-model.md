@@ -117,7 +117,7 @@ group_trips
 | slot_id | UUID | - | FK → route_slots (NULL이면 비계획 지출) |
 | user_id | UUID | ✅ | FK → users |
 | expense_type | VARCHAR | ✅ | 'planned' \| 'unplanned' |
-| category | VARCHAR | ✅ | '숙박' \| '식음료' \| '교통' \| '입장료' \| '기념품' \| '기타' |
+| category | VARCHAR | ✅ | 'ACCOMMODATION' \| 'FOOD' \| 'TRANSPORT' \| 'ADMISSION' \| 'SOUVENIR' \| 'ETC' |
 | planned_amount | INTEGER | - | 계획 금액 |
 | actual_amount | INTEGER | ✅ | 실제 지출 금액 |
 | memo | TEXT | - | 메모 |
@@ -318,7 +318,7 @@ interface Expense {
   routeId: string;
   slotId?: string;
   expenseType: 'planned' | 'unplanned';
-  category: '숙박' | '식음료' | '교통' | '입장료' | '기념품' | '기타'; // ⚠️ 한글 하드코딩 — 언어중립 코드값(예: FOOD/TRANSPORT)으로 리팩터링 예정, `planning/milestones.md` Phase 2.5 "다음 단계" 참고
+  category: 'ACCOMMODATION' | 'FOOD' | 'TRANSPORT' | 'ADMISSION' | 'SOUVENIR' | 'ETC';
   plannedAmount?: number;
   actualAmount: number;
   memo?: string;

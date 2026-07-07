@@ -8,14 +8,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import { addExpense } from '@/lib/api/budget';
 import type { ExpenseCategory } from '@/types';
 
-const CATEGORIES: ExpenseCategory[] = ['식음료', '교통', '입장료', '기념품', '기타'];
+const CATEGORIES: ExpenseCategory[] = ['FOOD', 'TRANSPORT', 'ADMISSION', 'SOUVENIR', 'ETC'];
 
 export default function AddExpenseScreen() {
   const { t } = useTranslation();
   const { routeId } = useLocalSearchParams<{ routeId: string }>();
   const queryClient = useQueryClient();
 
-  const [category, setCategory] = useState<ExpenseCategory>('식음료');
+  const [category, setCategory] = useState<ExpenseCategory>('FOOD');
   const [amount, setAmount] = useState('');
   const [memo, setMemo] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -64,7 +64,9 @@ export default function AddExpenseScreen() {
                 }`}
                 activeOpacity={0.8}
               >
-                <Text className={`text-sm font-bold ${selected ? 'text-sky-700' : 'text-slate-600'}`}>{c}</Text>
+                <Text className={`text-sm font-bold ${selected ? 'text-sky-700' : 'text-slate-600'}`}>
+                  {t(`budgetAddExpense.categories.${c.toLowerCase()}`)}
+                </Text>
               </TouchableOpacity>
             );
           })}

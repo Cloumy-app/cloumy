@@ -8,11 +8,11 @@ import { Pie, PolarChart } from 'victory-native';
 import { getBudgetReport } from '@/lib/api/budget';
 
 const CATEGORY_COLORS: Record<string, string> = {
-  식음료: '#0ea5e9',
-  교통: '#22c55e',
-  입장료: '#f59e0b',
-  기념품: '#ec4899',
-  기타: '#a855f7',
+  FOOD: '#0ea5e9',
+  TRANSPORT: '#22c55e',
+  ADMISSION: '#f59e0b',
+  SOUVENIR: '#ec4899',
+  ETC: '#a855f7',
 };
 
 export default function BudgetReportScreen() {
@@ -25,7 +25,7 @@ export default function BudgetReportScreen() {
   });
 
   const chartData = (report?.unplannedByCategory ?? []).map((c) => ({
-    label: c.category,
+    label: t(`budgetAddExpense.categories.${c.category.toLowerCase()}`),
     value: c.total,
     color: CATEGORY_COLORS[c.category] ?? '#94a3b8',
   }));

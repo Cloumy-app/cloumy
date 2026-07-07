@@ -197,7 +197,7 @@ GET /routes?page=0&size=20
 ```json
 // 지출 자연어 파싱 예시
 // 입력: "기념품 12,000원 썼어"
-{ "type": "done", "metadata": { "expenseParsed": { "category": "기념품", "amount": 12000 } } }
+{ "type": "done", "metadata": { "expenseParsed": { "category": "SOUVENIR", "amount": 12000 } } }
 ```
 
 ---
@@ -223,8 +223,8 @@ GET /routes?page=0&size=20
   "unplannedSpent": 30000,
   "remaining": 120000,
   "byCategory": {
-    "숙박": { "planned": 105000, "actual": 105000 },
-    "식음료": { "planned": 90000, "actual": 62000 }
+    "ACCOMMODATION": { "planned": 105000, "actual": 105000 },
+    "FOOD": { "planned": 90000, "actual": 62000 }
   }
 }
 ```
@@ -240,7 +240,7 @@ GET /routes?page=0&size=20
 {
   "slotId": "uuid (없으면 비계획)",
   "expenseType": "unplanned",
-  "category": "기념품",
+  "category": "SOUVENIR",
   "actualAmount": 12000,
   "memo": "자갈치 마그넷"
 }

@@ -301,6 +301,7 @@
   "budgetAddExpense": {
     "headerTitle": "지출 추가",
     "categoryLabel": "카테고리",
+    "categories": { "food": "식음료", "transport": "교통", "admission": "입장료", "souvenir": "기념품", "etc": "기타" },
     "amountLabel": "금액",
     "amountPlaceholder": "0",
     "memoLabel": "메모 (선택)",

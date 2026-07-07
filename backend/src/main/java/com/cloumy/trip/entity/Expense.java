@@ -43,7 +43,7 @@ public class Expense {
     private String expenseType; // 항상 "unplanned"
 
     @Column(nullable = false)
-    private String category; // 식음료/교통/입장료/기념품/기타 (숙박 제외)
+    private String category; // FOOD/TRANSPORT/ADMISSION/SOUVENIR/ETC (ACCOMMODATION 제외)
 
     @Column(name = "planned_amount")
     private Integer plannedAmount; // 항상 null

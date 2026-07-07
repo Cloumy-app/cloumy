@@ -301,6 +301,7 @@
   "budgetAddExpense": {
     "headerTitle": "Add expense",
     "categoryLabel": "Category",
+    "categories": { "food": "Food", "transport": "Transport", "admission": "Admission", "souvenir": "Souvenir", "etc": "Other" },
     "amountLabel": "Amount",
     "amountPlaceholder": "0",
     "memoLabel": "Memo (optional)",
