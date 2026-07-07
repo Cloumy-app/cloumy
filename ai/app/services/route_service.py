@@ -59,6 +59,21 @@ ROUTE_GEN_SYSTEM_PROMPT = """당신은 한국 여행 전문 플래너입니다. 
 - 해당 시간대 슬롯은 후보 목록의 "태그: ..." 표기에 #실내가 포함된 장소만 배치, #액티비티/#자연/#이벤트 등 실외 태그 장소는 그 시간대에 배치 금지
 - "종일 비"는 모든 슬롯 #실내 태그 장소만, "맑음"은 제약 없음"""
 
+# 프론트 SupportedLanguage 코드 → 프롬프트에 넣을 자연어 이름 (챗봇과 동일 패턴, ff1864c 참고)
+_LANGUAGE_NAMES: dict[str, str] = {"ko": "한국어", "en": "English", "ja": "日本語", "zh": "中文"}
+
+
+def _language_rule(language: str | None) -> str:
+    """ROUTE_GEN_SYSTEM_PROMPT 뒤에 붙일 언어 규칙 — .format()을 안 쓰고 concat만 쓰는 이유는
+    프롬프트 본문에 JSON 예시 중괄호가 많아 .format() placeholder로 오인되기 때문."""
+    name = _LANGUAGE_NAMES.get(language, "한국어")
+    return (
+        "\n\n[언어]\n"
+        f"- tip과 day_summary의 summary 텍스트는 {name}로 작성하세요.\n"
+        "- place_name은 후보 목록에 주어진 원본 이름을 그대로 사용하세요(번역·음차 금지)."
+    )
+
+
 BUDGET_GUIDE: dict[str, str] = {
     "tight":   "하루 활동비 목표 2만원 (슬롯당 4,000원 이하)",
     "budget":  "하루 활동비 목표 3만원 (슬롯당 6,000원)",
@@ -108,7 +123,12 @@ async def close_ai_clients() -> None:
 def _cache_key(req: RouteGenRequest) -> str:
     themes = ":".join(sorted(req.themes))
     ratio = req.hidden_gem_ratio if req.hidden_gem_ratio is not None else 0.2
-    return f"route:{req.city}:{req.nights}:{req.group_type}:{req.budget_level}:{themes}:{ratio:.1f}:{req.density}"
+    # language가 캐시 키에 없으면 다른 언어로 생성된 tip/day_summary가 그대로 재사용됨
+    language = req.language or "ko"
+    return (
+        f"route:{req.city}:{req.nights}:{req.group_type}:{req.budget_level}:"
+        f"{themes}:{ratio:.1f}:{req.density}:{language}"
+    )
 
 
 def _is_weather_sensitive(start_date: date | None, today: date | None = None) -> bool:
@@ -362,7 +382,7 @@ async def stream_route(
             system=[
                 {
                     "type": "text",
-                    "text": ROUTE_GEN_SYSTEM_PROMPT,
+                    "text": ROUTE_GEN_SYSTEM_PROMPT + _language_rule(request.language),
                     "cache_control": {"type": "ephemeral"},
                 }
             ],
