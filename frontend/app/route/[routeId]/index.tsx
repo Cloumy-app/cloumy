@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { useTranslation } from 'react-i18next';
 import { getRoute, getRouteSlots, getRouteDaySummaries, toggleSlotPin as apiToggleSlotPin, deleteRouteSlot, deleteRoute, replaceRouteSlot } from '@/lib/api/routes';
 import { getRouteAccommodations } from '@/lib/api/accommodations';
 import { fetchForecast } from '@/lib/api/weather';
@@ -30,11 +31,12 @@ function getDateForDay(startDate: string, dayNumber: number): string {
 // "앞쪽(1~2)=오전, 중간(3)=오후, 뒤쪽(4~5)=저녁" 근사치와 반드시 동일하게 맞춘다.
 function isSlotInRainyBlock(dayWeather: DayWeather | null | undefined, index: number): boolean {
   if (!dayWeather?.rainyBlocks.length) return false;
-  const block: RainBlock = index < 2 ? '오전' : index === 2 ? '오후' : '저녁';
+  const block: RainBlock = index < 2 ? 'morning' : index === 2 ? 'afternoon' : 'evening';
   return dayWeather.rainyBlocks.includes(block);
 }
 
 export default function RouteResultScreen() {
+  const { t } = useTranslation();
   const { routeId, budgetLevel, mode } = useLocalSearchParams<{
     routeId: string;
     budgetLevel?: string;
@@ -258,10 +260,10 @@ export default function RouteResultScreen() {
     const unsubscribe = navigation.addListener('beforeRemove', (e) => {
       if (exitConfirmedRef.current) return;
       e.preventDefault();
-      Alert.alert('루트 삭제', '나가면 생성된 루트가 삭제됩니다. 계속하시겠습니까?', [
-        { text: '취소', style: 'cancel' },
+      Alert.alert(t('routeResult.deleteRouteTitle'), t('routeResult.deleteRouteBody'), [
+        { text: t('routeResult.cancelButton'), style: 'cancel' },
         {
-          text: '삭제 후 나가기',
+          text: t('routeResult.deleteAndExitButton'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -357,7 +359,7 @@ export default function RouteResultScreen() {
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Text style={{ fontWeight: '800', color: '#1e293b', fontSize: 15 }}>
-              {destination || '루트 생성 완료'}
+              {destination ? t(`routeCreateStep1.cities.${destination}`) : t('routeResult.defaultTitle')}
             </Text>
             {isStreaming && <Sparkles size={13} color="#0ea5e9" />}
           </View>
@@ -432,7 +434,7 @@ export default function RouteResultScreen() {
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Text style={{ fontSize: 18, fontWeight: '900', color: '#1e293b' }}>
-                  {selectedDay}일차 타임라인
+                  {t('routeResult.dayTimelineTitle', { day: selectedDay })}
                 </Text>
                 {dayBudget > 0 && (
                   <View
@@ -449,8 +451,8 @@ export default function RouteResultScreen() {
                     <Wallet size={11} color="#0ea5e9" />
                     <Text style={{ color: '#0ea5e9', fontSize: 10, fontWeight: '700' }}>
                       {dayBudget >= 10000
-                        ? `약 ${Math.round(dayBudget / 10000)}만원`
-                        : `${dayBudget.toLocaleString()}원`}
+                        ? t('routeResult.budgetApprox', { amount: Math.round(dayBudget / 10000) })
+                        : t('routeResult.budgetExact', { amount: dayBudget.toLocaleString() })}
                     </Text>
                   </View>
                 )}
@@ -460,7 +462,7 @@ export default function RouteResultScreen() {
                 style={{ fontSize: 11, color: '#94a3b8', fontWeight: '500', marginTop: 2 }}
                 numberOfLines={1}
               >
-                {currentDaySummary ?? '위로 당기면 상세 일정이 펼쳐져요'}
+                {currentDaySummary ?? t('routeResult.pullUpHint')}
               </Text>
             </View>
 
@@ -502,7 +504,7 @@ export default function RouteResultScreen() {
                         color: selectedDay === day ? '#fff' : '#475569',
                       }}
                     >
-                      {day}일차
+                      {t('routeResult.dayTabLabel', { day })}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -570,7 +572,7 @@ export default function RouteResultScreen() {
           {isStreaming && (
             <View style={{ alignItems: 'center', paddingVertical: 16 }}>
               <ActivityIndicator color="#0ea5e9" />
-              <Text style={{ color: '#94a3b8', fontSize: 12, marginTop: 8 }}>장소를 찾는 중...</Text>
+              <Text style={{ color: '#94a3b8', fontSize: 12, marginTop: 8 }}>{t('routeResult.findingPlaces')}</Text>
             </View>
           )}
 
@@ -618,7 +620,7 @@ export default function RouteResultScreen() {
                   }}
                   activeOpacity={0.85}
                 >
-                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>저장하기</Text>
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>{t('routeResult.saveButton')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => router.back()}
@@ -632,7 +634,7 @@ export default function RouteResultScreen() {
                   }}
                   activeOpacity={0.85}
                 >
-                  <Text style={{ color: '#f43f5e', fontWeight: '700', fontSize: 14 }}>나가기</Text>
+                  <Text style={{ color: '#f43f5e', fontWeight: '700', fontSize: 14 }}>{t('routeResult.exitButton')}</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -650,7 +652,7 @@ export default function RouteResultScreen() {
                 }}
                 activeOpacity={0.85}
               >
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>수정하기</Text>
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>{t('routeResult.editButton')}</Text>
               </TouchableOpacity>
             )}
 
@@ -668,7 +670,7 @@ export default function RouteResultScreen() {
                   }}
                   activeOpacity={0.85}
                 >
-                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>변경완료</Text>
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>{t('routeResult.doneEditButton')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={handleEditCancel}
@@ -682,7 +684,7 @@ export default function RouteResultScreen() {
                   }}
                   activeOpacity={0.85}
                 >
-                  <Text style={{ color: '#64748b', fontWeight: '700', fontSize: 14 }}>취소</Text>
+                  <Text style={{ color: '#64748b', fontWeight: '700', fontSize: 14 }}>{t('routeResult.cancelButton')}</Text>
                 </TouchableOpacity>
               </>
             )}

@@ -5,45 +5,46 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { router } from 'expo-router';
 import { ChevronLeft, MapPin, Users, Calendar, ChevronRight, Bus, Car, Footprints } from 'lucide-react-native';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import DateTimePicker from '@expo/ui/community/datetime-picker';
 
 const CITIES = ['서울', '부산', '제주', '경주', '강릉', '전주', '여수', '속초', '춘천', '거제'];
-const GROUP_TYPES = [
-  { value: 'solo', label: '혼자' },
-  { value: 'couple', label: '커플' },
-  { value: 'friends', label: '친구들' },
-  { value: 'family', label: '가족' },
-] as const;
+const GROUP_TYPE_VALUES = ['solo', 'couple', 'friends', 'family'] as const;
 
 // 여행 전체 기본 이동수단 — 선택 사항(안 골라도 다음 단계 진행 가능).
 // 값이 있을 때만 이동시간 계산에 쓰이고, 대중교통은 Tmap 실API를 호출하므로
 // 기본 선택값을 두지 않는다(사용자가 명시적으로 고를 때만 호출 발생).
-const TRANSPORT_MODES = [
-  { value: 'transit', label: '대중교통', Icon: Bus },
-  { value: 'car', label: '자동차', Icon: Car },
-  { value: 'walk', label: '도보', Icon: Footprints },
+const TRANSPORT_MODE_VALUES = [
+  { value: 'transit', Icon: Bus },
+  { value: 'car', Icon: Car },
+  { value: 'walk', Icon: Footprints },
 ] as const;
 
-const step1Schema = z.object({
-  destination: z.string().min(1, '목적지를 선택해주세요'),
-  groupType: z.enum(['solo', 'couple', 'friends', 'family']),
-  transportMode: z.enum(['transit', 'car', 'walk']).optional(),
-});
+interface Step1Form {
+  destination: string;
+  groupType: (typeof GROUP_TYPE_VALUES)[number];
+  transportMode?: (typeof TRANSPORT_MODE_VALUES)[number]['value'];
+}
 
-type Step1Form = z.infer<typeof step1Schema>;
-
-const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+function buildStep1Schema(t: (key: string) => string) {
+  return z.object({
+    destination: z.string().min(1, t('routeCreateStep1.destinationRequired')),
+    groupType: z.enum(['solo', 'couple', 'friends', 'family']),
+    transportMode: z.enum(['transit', 'car', 'walk']).optional(),
+  });
+}
 
 function toDateStr(d: Date): string {
   return d.toISOString().split('T')[0];
 }
 
-function formatDisplayDate(d: Date): string {
-  return `${d.getMonth() + 1}월 ${d.getDate()}일 (${DAY_LABELS[d.getDay()]})`;
+function formatDisplayDate(d: Date, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { month: 'long', day: 'numeric', weekday: 'short' }).format(d);
 }
 
 export default function RouteCreateStep1() {
+  const { t, i18n } = useTranslation();
   const [startDate, setStartDate] = useState(new Date());
   const [endDate, setEndDate] = useState(() => {
     const d = new Date();
@@ -82,6 +83,7 @@ export default function RouteCreateStep1() {
   const minEndDate = new Date(startDate);
   minEndDate.setDate(minEndDate.getDate() + 1);
 
+  const step1Schema = useMemo(() => buildStep1Schema(t), [t]);
   const { control, handleSubmit, formState: { errors } } = useForm<Step1Form>({
     resolver: zodResolver(step1Schema),
     defaultValues: {
@@ -106,7 +108,7 @@ export default function RouteCreateStep1() {
         </TouchableOpacity>
         <View className="flex-1">
           <Text className="text-xs text-sky-500 font-bold mb-0.5">STEP 1 / 4</Text>
-          <Text className="text-xl font-bold text-slate-800">어디로 떠날까요?</Text>
+          <Text className="text-xl font-bold text-slate-800">{t('routeCreateStep1.headerTitle')}</Text>
         </View>
       </View>
 
@@ -115,7 +117,7 @@ export default function RouteCreateStep1() {
         <View className="mb-6">
           <View className="flex-row items-center gap-2 mb-3">
             <MapPin size={18} color="#0ea5e9" />
-            <Text className="font-bold text-slate-700">목적지</Text>
+            <Text className="font-bold text-slate-700">{t('routeCreateStep1.destinationLabel')}</Text>
           </View>
           <Controller
             control={control}
@@ -137,7 +139,7 @@ export default function RouteCreateStep1() {
                         value === city ? 'text-sky-600' : 'text-slate-600'
                       }`}
                     >
-                      {city}
+                      {t(`routeCreateStep1.cities.${city}`)}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -153,7 +155,7 @@ export default function RouteCreateStep1() {
         <View className="mb-6">
           <View className="flex-row items-center gap-2 mb-3">
             <Calendar size={18} color="#0ea5e9" />
-            <Text className="font-bold text-slate-700">여행 기간</Text>
+            <Text className="font-bold text-slate-700">{t('routeCreateStep1.tripDurationLabel')}</Text>
           </View>
 
           {/* 날짜 선택 버튼 행 */}
@@ -164,9 +166,9 @@ export default function RouteCreateStep1() {
               activeOpacity={0.8}
               className="flex-1 bg-sky-50 border-2 border-sky-200 rounded-2xl px-4 py-3"
             >
-              <Text className="text-[10px] font-bold text-sky-400 mb-0.5">출발일</Text>
+              <Text className="text-[10px] font-bold text-sky-400 mb-0.5">{t('routeCreateStep1.startDateLabel')}</Text>
               <Text className="text-sm font-bold text-sky-700" numberOfLines={1}>
-                {formatDisplayDate(startDate)}
+                {formatDisplayDate(startDate, i18n.language)}
               </Text>
             </TouchableOpacity>
 
@@ -178,9 +180,9 @@ export default function RouteCreateStep1() {
               activeOpacity={0.8}
               className="flex-1 bg-slate-50 border-2 border-slate-200 rounded-2xl px-4 py-3"
             >
-              <Text className="text-[10px] font-bold text-slate-400 mb-0.5">도착일</Text>
+              <Text className="text-[10px] font-bold text-slate-400 mb-0.5">{t('routeCreateStep1.endDateLabel')}</Text>
               <Text className="text-sm font-bold text-slate-700" numberOfLines={1}>
-                {formatDisplayDate(endDate)}
+                {formatDisplayDate(endDate, i18n.language)}
               </Text>
             </TouchableOpacity>
           </View>
@@ -188,7 +190,9 @@ export default function RouteCreateStep1() {
           {/* 박수 뱃지 */}
           <View className="items-center mt-3">
             <View className="bg-sky-500 px-5 py-1.5 rounded-full">
-              <Text className="text-white font-bold text-sm">{nights}박 {nights + 1}일</Text>
+              <Text className="text-white font-bold text-sm">
+                {t('routeCreateStep1.nightsBadge', { nights, days: nights + 1 })}
+              </Text>
             </View>
           </View>
 
@@ -206,7 +210,7 @@ export default function RouteCreateStep1() {
             />
             <View className="bg-white rounded-t-3xl px-6 pt-5 pb-10">
               <View className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4" />
-              <Text className="text-base font-bold text-slate-800 mb-3">출발일 선택</Text>
+              <Text className="text-base font-bold text-slate-800 mb-3">{t('routeCreateStep1.selectStartDate')}</Text>
               <DateTimePicker
                 value={tempStartDate}
                 mode="date"
@@ -220,7 +224,7 @@ export default function RouteCreateStep1() {
                 onPress={handleStartConfirm}
                 className="bg-sky-500 py-4 rounded-2xl items-center mt-4"
               >
-                <Text className="text-white font-bold text-base">확인</Text>
+                <Text className="text-white font-bold text-base">{t('routeCreateStep1.confirmButton')}</Text>
               </TouchableOpacity>
             </View>
           </Modal>
@@ -239,7 +243,7 @@ export default function RouteCreateStep1() {
             />
             <View className="bg-white rounded-t-3xl px-6 pt-5 pb-10">
               <View className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4" />
-              <Text className="text-base font-bold text-slate-800 mb-3">도착일 선택</Text>
+              <Text className="text-base font-bold text-slate-800 mb-3">{t('routeCreateStep1.selectEndDate')}</Text>
               <DateTimePicker
                 value={tempEndDate}
                 mode="date"
@@ -253,7 +257,7 @@ export default function RouteCreateStep1() {
                 onPress={handleEndConfirm}
                 className="bg-sky-500 py-4 rounded-2xl items-center mt-4"
               >
-                <Text className="text-white font-bold text-base">확인</Text>
+                <Text className="text-white font-bold text-base">{t('routeCreateStep1.confirmButton')}</Text>
               </TouchableOpacity>
             </View>
           </Modal>
@@ -263,25 +267,25 @@ export default function RouteCreateStep1() {
         <View className="mb-8">
           <View className="flex-row items-center gap-2 mb-3">
             <Users size={18} color="#0ea5e9" />
-            <Text className="font-bold text-slate-700">누구와 함께?</Text>
+            <Text className="font-bold text-slate-700">{t('routeCreateStep1.groupTypeLabel')}</Text>
           </View>
           <Controller
             control={control}
             name="groupType"
             render={({ field: { value, onChange } }) => (
               <View className="flex-row gap-2">
-                {GROUP_TYPES.map((g) => (
+                {GROUP_TYPE_VALUES.map((g) => (
                   <TouchableOpacity
-                    key={g.value}
-                    onPress={() => onChange(g.value)}
+                    key={g}
+                    onPress={() => onChange(g)}
                     className={`flex-1 py-3 rounded-2xl border-2 items-center ${
-                      value === g.value
+                      value === g
                         ? 'border-sky-500 bg-sky-50'
                         : 'border-slate-200 bg-white'
                     }`}
                   >
-                    <Text className={`font-semibold text-sm ${value === g.value ? 'text-sky-600' : 'text-slate-500'}`}>
-                      {g.label}
+                    <Text className={`font-semibold text-sm ${value === g ? 'text-sky-600' : 'text-slate-500'}`}>
+                      {t(`routeCreateStep1.groupTypes.${g}`)}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -292,14 +296,14 @@ export default function RouteCreateStep1() {
 
         {/* 이동수단 (선택) */}
         <View className="mb-8">
-          <Text className="font-bold text-slate-700 mb-1">주로 어떻게 이동하세요?</Text>
-          <Text className="text-xs text-slate-400 mb-4">선택하면 장소 사이 이동시간을 계산해드려요 (선택 사항)</Text>
+          <Text className="font-bold text-slate-700 mb-1">{t('routeCreateStep1.transportLabel')}</Text>
+          <Text className="text-xs text-slate-400 mb-4">{t('routeCreateStep1.transportHint')}</Text>
           <Controller
             control={control}
             name="transportMode"
             render={({ field: { value, onChange } }) => (
               <View className="flex-row gap-2">
-                {TRANSPORT_MODES.map(({ value: modeValue, label, Icon }) => {
+                {TRANSPORT_MODE_VALUES.map(({ value: modeValue, Icon }) => {
                   const selected = value === modeValue;
                   return (
                     <TouchableOpacity
@@ -311,7 +315,7 @@ export default function RouteCreateStep1() {
                     >
                       <Icon size={18} color={selected ? '#0284c7' : '#94a3b8'} />
                       <Text className={`font-semibold text-sm ${selected ? 'text-sky-600' : 'text-slate-500'}`}>
-                        {label}
+                        {t(`routeCreateStep1.transportModes.${modeValue}`)}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -331,7 +335,7 @@ export default function RouteCreateStep1() {
           className="bg-sky-500 py-4 rounded-2xl items-center"
           activeOpacity={0.9}
         >
-          <Text className="text-white font-bold text-base">다음 단계</Text>
+          <Text className="text-white font-bold text-base">{t('routeCreateStep1.nextButton')}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

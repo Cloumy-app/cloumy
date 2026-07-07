@@ -3,22 +3,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { useState } from 'react';
-import type { BudgetLevel, Density } from '@/types';
-import { BUDGET_LABEL } from '@/types';
+import { useTranslation } from 'react-i18next';
+import type { Density } from '@/types';
 
 const RATIO_OPTIONS = [
-  { label: '관광지 위주', desc: '유명 명소 중심으로 알차게', ratio: 0.1 },
-  { label: '혼합',       desc: '관광지와 숨은 명소 균형 있게', ratio: 0.5 },
-  { label: '숨은 명소 위주', desc: '현지인만 아는 특별한 장소', ratio: 0.9 },
+  { key: 'mainstream', ratio: 0.1 },
+  { key: 'mixed', ratio: 0.5 },
+  { key: 'hiddenGem', ratio: 0.9 },
 ] as const;
 
 const DENSITY_OPTIONS = [
-  { label: '널널하게', desc: '여유롭게 하루 3곳 정도', density: 'relaxed' as const },
-  { label: '보통',     desc: '하루 4~5곳, 기존과 동일', density: 'normal' as const },
-  { label: '알차게',   desc: '하루 6곳까지 알차게 이동', density: 'packed' as const },
+  { key: 'relaxed', density: 'relaxed' as const },
+  { key: 'normal', density: 'normal' as const },
+  { key: 'packed', density: 'packed' as const },
 ] as const;
 
 export default function RouteCreateStep3() {
+  const { t } = useTranslation();
   const params = useLocalSearchParams<{
     destination: string;
     nights: string;
@@ -54,24 +55,28 @@ export default function RouteCreateStep3() {
         </TouchableOpacity>
         <View className="flex-1">
           <Text className="text-xs text-sky-500 font-bold mb-0.5">STEP 3 / 4</Text>
-          <Text className="text-xl font-bold text-slate-800">어떤 장소를 원하세요?</Text>
+          <Text className="text-xl font-bold text-slate-800">{t('routeCreateStep3.headerTitle')}</Text>
         </View>
       </View>
 
       <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false}>
         {/* 목적지 요약 */}
         <View className="bg-sky-50 rounded-2xl px-4 py-3 mb-6 flex-row items-center gap-2">
-          <Text className="text-sky-600 font-bold">{params.destination}</Text>
+          <Text className="text-sky-600 font-bold">{t(`routeCreateStep1.cities.${params.destination}`)}</Text>
           <Text className="text-sky-400">·</Text>
-          <Text className="text-sky-600 font-medium">{params.nights}박{Number(params.nights)+1}일</Text>
+          <Text className="text-sky-600 font-medium">
+            {t('routeCreateStep1.nightsBadge', { nights: params.nights, days: Number(params.nights) + 1 })}
+          </Text>
           <Text className="text-sky-400">·</Text>
-          <Text className="text-sky-600 font-medium">{BUDGET_LABEL[(params.budgetLevel ?? 'mid') as BudgetLevel]}</Text>
+          <Text className="text-sky-600 font-medium">
+            {t(`routeCreateStep2.budgetLevels.${params.budgetLevel ?? 'mid'}.label`)}
+          </Text>
         </View>
 
         {/* 장소 성향 선택 */}
         <View className="mb-8">
-          <Text className="font-bold text-slate-700 mb-1">장소 성향</Text>
-          <Text className="text-xs text-slate-400 mb-4">AI가 후보 장소 중 비율을 맞춰 루트를 구성합니다</Text>
+          <Text className="font-bold text-slate-700 mb-1">{t('routeCreateStep3.placeSentimentLabel')}</Text>
+          <Text className="text-xs text-slate-400 mb-4">{t('routeCreateStep3.placeSentimentHint')}</Text>
           <View className="gap-3">
             {RATIO_OPTIONS.map((option) => {
               const selected = selectedRatio === option.ratio;
@@ -86,9 +91,11 @@ export default function RouteCreateStep3() {
                 >
                   <View className="flex-1">
                     <Text className={`font-bold text-sm ${selected ? 'text-sky-700' : 'text-slate-700'}`}>
-                      {option.label}
+                      {t(`routeCreateStep3.ratioOptions.${option.key}.label`)}
                     </Text>
-                    <Text className="text-xs text-slate-500 mt-0.5">{option.desc}</Text>
+                    <Text className="text-xs text-slate-500 mt-0.5">
+                      {t(`routeCreateStep3.ratioOptions.${option.key}.desc`)}
+                    </Text>
                   </View>
                   <View className={`w-5 h-5 rounded-full border-2 items-center justify-center ${
                     selected ? 'border-sky-500 bg-sky-500' : 'border-slate-300'
@@ -103,8 +110,8 @@ export default function RouteCreateStep3() {
 
         {/* 일정 밀도 선택 */}
         <View className="mb-8">
-          <Text className="font-bold text-slate-700 mb-1">일정 밀도</Text>
-          <Text className="text-xs text-slate-400 mb-4">하루에 몇 곳을 둘러볼지 선택하세요</Text>
+          <Text className="font-bold text-slate-700 mb-1">{t('routeCreateStep3.densityLabel')}</Text>
+          <Text className="text-xs text-slate-400 mb-4">{t('routeCreateStep3.densityHint')}</Text>
           <View className="gap-3">
             {DENSITY_OPTIONS.map((option) => {
               const selected = selectedDensity === option.density;
@@ -119,9 +126,11 @@ export default function RouteCreateStep3() {
                 >
                   <View className="flex-1">
                     <Text className={`font-bold text-sm ${selected ? 'text-sky-700' : 'text-slate-700'}`}>
-                      {option.label}
+                      {t(`routeCreateStep3.densityOptions.${option.key}.label`)}
                     </Text>
-                    <Text className="text-xs text-slate-500 mt-0.5">{option.desc}</Text>
+                    <Text className="text-xs text-slate-500 mt-0.5">
+                      {t(`routeCreateStep3.densityOptions.${option.key}.desc`)}
+                    </Text>
                   </View>
                   <View className={`w-5 h-5 rounded-full border-2 items-center justify-center ${
                     selected ? 'border-sky-500 bg-sky-500' : 'border-slate-300'
@@ -136,19 +145,19 @@ export default function RouteCreateStep3() {
 
         {/* 총예산 입력 */}
         <View className="mb-8">
-          <Text className="font-bold text-slate-700 mb-1">예산 (선택)</Text>
+          <Text className="font-bold text-slate-700 mb-1">{t('routeCreateStep3.budgetLabel')}</Text>
           <Text className="text-xs text-slate-400 mb-4">
-            숙박비는 제외한 현지 활동/식사 예산을 입력해주세요
+            {t('routeCreateStep3.budgetHint')}
           </Text>
           <View className="flex-row items-center bg-slate-50 border-2 border-slate-200 rounded-2xl px-4">
             <TextInput
               value={totalBudget}
               onChangeText={(text) => setTotalBudget(text.replace(/[^0-9]/g, ''))}
-              placeholder="예: 500000"
+              placeholder={t('routeCreateStep3.budgetPlaceholder')}
               keyboardType="number-pad"
               className="flex-1 py-3 px-2 text-sm text-slate-700"
             />
-            <Text className="text-slate-400 text-sm">원</Text>
+            <Text className="text-slate-400 text-sm">{t('routeCreateStep3.currencyWon')}</Text>
           </View>
         </View>
 
@@ -162,7 +171,7 @@ export default function RouteCreateStep3() {
           className="bg-sky-500 py-4 rounded-2xl items-center"
           activeOpacity={0.9}
         >
-          <Text className="text-white font-bold text-base">다음 단계</Text>
+          <Text className="text-white font-bold text-base">{t('routeCreateStep3.nextButton')}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

@@ -17,71 +17,9 @@ const CITY_CENTERS: Record<string, { lat: number; lng: number }> = {
   거제: { lat: 34.8800, lng: 128.6211 },
 };
 
-// OpenWeatherMap 공식 컨디션 설명 전체(그룹 2xx~800) 매핑 — 일부만 매핑돼 있으면
-// 매핑 안 된 항목은 영어 원문이 그대로 노출됨(예: drizzle 계열 누락으로 어색한 문구가 보이던 문제)
-const WEATHER_KO: Record<string, string> = {
-  // 2xx 천둥번개
-  'thunderstorm with light rain': '약한 비를 동반한 천둥번개',
-  'thunderstorm with rain': '비를 동반한 천둥번개',
-  'thunderstorm with heavy rain': '폭우를 동반한 천둥번개',
-  'light thunderstorm': '약한 천둥번개',
-  'thunderstorm': '천둥번개',
-  'heavy thunderstorm': '강한 천둥번개',
-  'ragged thunderstorm': '불규칙한 천둥번개',
-  'thunderstorm with light drizzle': '약한 이슬비를 동반한 천둥번개',
-  'thunderstorm with drizzle': '이슬비를 동반한 천둥번개',
-  'thunderstorm with heavy drizzle': '강한 이슬비를 동반한 천둥번개',
-  // 3xx 이슬비
-  'light intensity drizzle': '약한 이슬비',
-  'drizzle': '이슬비',
-  'heavy intensity drizzle': '강한 이슬비',
-  'light intensity drizzle rain': '약한 이슬비',
-  'drizzle rain': '이슬비',
-  'heavy intensity drizzle rain': '강한 이슬비',
-  'shower rain and drizzle': '소나기와 이슬비',
-  'heavy shower rain and drizzle': '강한 소나기와 이슬비',
-  'shower drizzle': '이슬비 소나기',
-  // 5xx 비
-  'light rain': '약한 비',
-  'moderate rain': '비',
-  'heavy intensity rain': '강한 비',
-  'very heavy rain': '매우 강한 비',
-  'extreme rain': '폭우',
-  'freezing rain': '얼어붙는 비',
-  'light intensity shower rain': '약한 소나기',
-  'shower rain': '소나기',
-  'heavy intensity shower rain': '강한 소나기',
-  'ragged shower rain': '불규칙한 소나기',
-  // 6xx 눈
-  'light snow': '약한 눈',
-  'snow': '눈',
-  'heavy snow': '폭설',
-  'sleet': '진눈깨비',
-  'light shower sleet': '약한 진눈깨비',
-  'shower sleet': '진눈깨비',
-  'light rain and snow': '비와 눈',
-  'rain and snow': '비와 눈',
-  'light shower snow': '약한 눈발',
-  'shower snow': '눈발',
-  'heavy shower snow': '강한 눈발',
-  // 7xx 대기
-  'mist': '옅은 안개',
-  'smoke': '연기',
-  'haze': '연무',
-  'sand/dust whirls': '모래바람',
-  'fog': '짙은 안개',
-  'sand': '황사',
-  'dust': '먼지',
-  'volcanic ash': '화산재',
-  'squalls': '돌풍',
-  'tornado': '토네이도',
-  // 800~ 맑음/구름
-  'clear sky': '맑음',
-  'few clouds': '구름 조금',
-  'scattered clouds': '구름',
-  'broken clouds': '흐림',
-  'overcast clouds': '흐림',
-};
+// description은 OpenWeatherMap 원본 영어 문자열을 그대로 저장한다 — 다국어 표시는
+// 화면단에서 `t(\`weather.conditions.${description}\`)`로 조회(locales/*.json "weather.conditions").
+// (예전엔 lang=kr로 한국어 원문을 받아 영어 키 매핑 dict를 그냥 통과시키던 죽은 코드였음)
 
 export interface WeatherInfo {
   description: string;
@@ -89,7 +27,7 @@ export interface WeatherInfo {
   icon: string;
 }
 
-export type RainBlock = '오전' | '오후' | '저녁';
+export type RainBlock = 'morning' | 'afternoon' | 'evening';
 
 export interface DayWeather extends WeatherInfo {
   rainyBlocks: RainBlock[]; // 강수확률 임계치 넘는 블록만
@@ -123,9 +61,9 @@ export function isPastDate(dateStr: string): boolean {
 }
 
 function hourToBlock(hour: number): RainBlock | null {
-  if (hour >= 6 && hour < 12) return '오전';
-  if (hour >= 12 && hour < 18) return '오후';
-  if (hour >= 18 && hour < 24) return '저녁';
+  if (hour >= 6 && hour < 12) return 'morning';
+  if (hour >= 12 && hour < 18) return 'afternoon';
+  if (hour >= 18 && hour < 24) return 'evening';
   return null; // 새벽 — 여행 활동 시간대 아님
 }
 
@@ -138,7 +76,7 @@ export async function fetchForecast(
   if (!coords) return {};
   try {
     const res = await fetch(
-      `${FORECAST_BASE}?lat=${coords.lat}&lon=${coords.lng}&units=metric&lang=kr&appid=${KEY}&cnt=40`,
+      `${FORECAST_BASE}?lat=${coords.lat}&lon=${coords.lng}&units=metric&appid=${KEY}&cnt=40`,
     );
     if (!res.ok) return {};
     const data = await res.json() as {
@@ -170,12 +108,12 @@ export async function fetchForecast(
         const pop = item.pop ?? 0;
         blockPop[block] = Math.max(blockPop[block] ?? 0, pop);
       }
-      const rainyBlocks = (['오전', '오후', '저녁'] as const).filter(
+      const rainyBlocks = (['morning', 'afternoon', 'evening'] as const).filter(
         (block) => (blockPop[block] ?? 0) >= RAIN_THRESHOLD,
       );
 
       result[date] = {
-        description: WEATHER_KO[rawDesc] ?? rawDesc,
+        description: rawDesc,
         temp: Math.round(avgTemp),
         icon: entry.weather[0]?.icon ?? '01d',
         rainyBlocks,
@@ -193,15 +131,14 @@ export async function fetchCurrentWeather(city: string): Promise<WeatherInfo | n
   if (!coords) return null;
   try {
     const res = await fetch(
-      `${BASE}?lat=${coords.lat}&lon=${coords.lng}&units=metric&lang=kr&appid=${KEY}`,
+      `${BASE}?lat=${coords.lat}&lon=${coords.lng}&units=metric&appid=${KEY}`,
     );
     if (!res.ok) return null;
     const data = await res.json() as {
       weather: { description: string; icon: string }[];
       main: { temp: number };
     };
-    const rawDesc = data.weather[0]?.description ?? '';
-    const description = WEATHER_KO[rawDesc] ?? rawDesc;
+    const description = data.weather[0]?.description ?? '';
     return {
       description,
       temp: Math.round(data.main.temp),

@@ -1,9 +1,11 @@
 import { Text, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Wallet } from 'lucide-react-native';
 import type { BudgetSummary } from '@/types';
 
 export function BudgetBanner({ routeId, summary }: { routeId: string; summary: BudgetSummary }) {
+  const { t } = useTranslation();
   if (summary.totalBudget === null) {
     return (
       <TouchableOpacity
@@ -12,7 +14,7 @@ export function BudgetBanner({ routeId, summary }: { routeId: string; summary: B
         activeOpacity={0.8}
       >
         <Wallet size={16} color="#0ea5e9" />
-        <Text className="text-sky-600 font-semibold text-sm">예산 설정하기</Text>
+        <Text className="text-sky-600 font-semibold text-sm">{t('budgetBanner.setBudget')}</Text>
       </TouchableOpacity>
     );
   }
@@ -29,9 +31,9 @@ export function BudgetBanner({ routeId, summary }: { routeId: string; summary: B
       activeOpacity={0.8}
     >
       <View className="flex-row justify-between items-center mb-2">
-        <Text className="text-xs font-bold text-slate-500">현지 활동/식사 예산</Text>
+        <Text className="text-xs font-bold text-slate-500">{t('budgetBanner.localBudgetLabel')}</Text>
         <Text className={`text-sm font-bold ${isOver ? 'text-rose-500' : 'text-sky-600'}`}>
-          잔여 {remaining.toLocaleString()}원
+          {t('budgetBanner.remaining', { amount: remaining.toLocaleString() })}
         </Text>
       </View>
       <View className="w-full bg-slate-100 rounded-full h-2">

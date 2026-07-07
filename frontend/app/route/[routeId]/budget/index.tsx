@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft, Plus, Trash2 } from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -9,6 +10,7 @@ import { getRoute } from '@/lib/api/routes';
 import { CategoryRatioSliders } from '@/components/route/CategoryRatioSliders';
 
 export default function BudgetScreen() {
+  const { t } = useTranslation();
   const { routeId } = useLocalSearchParams<{ routeId: string }>();
   const queryClient = useQueryClient();
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -41,7 +43,7 @@ export default function BudgetScreen() {
       queryClient.invalidateQueries({ queryKey: ['budget', routeId] });
     } catch (e) {
       console.error('[budget] updateBudgetRatios 실패:', e);
-      Alert.alert('저장 실패', '비율 저장에 실패했어요. 잠시 후 다시 시도해주세요.');
+      Alert.alert(t('budget.saveFailedTitle'), t('budget.saveFailedBody'));
     }
   };
 
@@ -53,7 +55,7 @@ export default function BudgetScreen() {
       queryClient.invalidateQueries({ queryKey: ['budget', routeId] });
     } catch (e) {
       console.error('[budget] deleteExpense 실패:', e);
-      Alert.alert('삭제 실패', '지출 삭제에 실패했어요. 잠시 후 다시 시도해주세요.');
+      Alert.alert(t('budget.deleteFailedTitle'), t('budget.deleteFailedBody'));
     } finally {
       setDeletingId(null);
     }
@@ -73,7 +75,7 @@ export default function BudgetScreen() {
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
           <ChevronLeft size={24} color="#475569" />
         </TouchableOpacity>
-        <Text className="text-lg font-bold text-slate-800">예산 관리</Text>
+        <Text className="text-lg font-bold text-slate-800">{t('budget.headerTitle')}</Text>
       </View>
 
       <FlatList
@@ -85,29 +87,33 @@ export default function BudgetScreen() {
             {!summary || summary.totalBudget === null ? (
               <View className="bg-slate-50 rounded-2xl p-4 mb-5">
                 <Text className="text-sm text-slate-500 text-center">
-                  이 루트는 예산이 설정되지 않았어요.{'\n'}루트 생성 시 총예산을 입력하면 여기서 관리할 수 있어요.
+                  {t('budget.noBudgetSet')}
                 </Text>
               </View>
             ) : (
               <>
                 <View className="bg-white border border-slate-100 rounded-2xl p-4 mb-4">
-                  <Text className="text-xs font-bold text-slate-500 mb-2">총예산</Text>
+                  <Text className="text-xs font-bold text-slate-500 mb-2">{t('budget.totalBudget')}</Text>
                   <Text className="text-2xl font-black text-slate-800 mb-3">
-                    {summary.totalBudget.toLocaleString()}원
+                    {t('routeResult.budgetExact', { amount: summary.totalBudget.toLocaleString() })}
                   </Text>
                   <View className="flex-row justify-between">
                     <View>
-                      <Text className="text-xs text-slate-400">계획 지출</Text>
-                      <Text className="text-sm font-bold text-slate-700">{summary.plannedTotal.toLocaleString()}원</Text>
+                      <Text className="text-xs text-slate-400">{t('budget.plannedExpense')}</Text>
+                      <Text className="text-sm font-bold text-slate-700">
+                        {t('routeResult.budgetExact', { amount: summary.plannedTotal.toLocaleString() })}
+                      </Text>
                     </View>
                     <View>
-                      <Text className="text-xs text-slate-400">비계획 지출</Text>
-                      <Text className="text-sm font-bold text-slate-700">{summary.unplannedTotal.toLocaleString()}원</Text>
+                      <Text className="text-xs text-slate-400">{t('budget.unplannedExpense')}</Text>
+                      <Text className="text-sm font-bold text-slate-700">
+                        {t('routeResult.budgetExact', { amount: summary.unplannedTotal.toLocaleString() })}
+                      </Text>
                     </View>
                     <View>
-                      <Text className="text-xs text-slate-400">잔여</Text>
+                      <Text className="text-xs text-slate-400">{t('budget.remaining')}</Text>
                       <Text className={`text-sm font-bold ${(summary.remaining ?? 0) < 0 ? 'text-rose-500' : 'text-sky-600'}`}>
-                        {(summary.remaining ?? 0).toLocaleString()}원
+                        {t('routeResult.budgetExact', { amount: (summary.remaining ?? 0).toLocaleString() })}
                       </Text>
                     </View>
                   </View>
@@ -119,11 +125,11 @@ export default function BudgetScreen() {
                     className="bg-sky-50 rounded-2xl p-4 mb-4 items-center"
                     activeOpacity={0.8}
                   >
-                    <Text className="text-sky-600 font-bold text-sm">여행 지출 리포트 보기</Text>
+                    <Text className="text-sky-600 font-bold text-sm">{t('budget.viewReport')}</Text>
                   </TouchableOpacity>
                 )}
 
-                <Text className="font-bold text-slate-700 mb-3">카테고리 비율</Text>
+                <Text className="font-bold text-slate-700 mb-3">{t('budget.categoryRatio')}</Text>
                 <CategoryRatioSliders
                   initial={{
                     food: summary.foodRatio ?? 0,
@@ -137,26 +143,28 @@ export default function BudgetScreen() {
             )}
 
             <View className="flex-row justify-between items-center mt-6 mb-2">
-              <Text className="font-bold text-slate-700">비계획 지출</Text>
+              <Text className="font-bold text-slate-700">{t('budget.unplannedExpense')}</Text>
               <TouchableOpacity
                 onPress={() => router.push({ pathname: '/route/[routeId]/budget/add-expense', params: { routeId } })}
                 className="flex-row items-center gap-1 bg-sky-500 px-3 py-1.5 rounded-full"
                 activeOpacity={0.85}
               >
                 <Plus size={14} color="#fff" />
-                <Text className="text-white text-xs font-bold">추가</Text>
+                <Text className="text-white text-xs font-bold">{t('budget.addButton')}</Text>
               </TouchableOpacity>
             </View>
           </View>
         }
         ListEmptyComponent={
-          <Text className="text-slate-300 text-sm text-center mt-4">아직 기록된 지출이 없어요</Text>
+          <Text className="text-slate-300 text-sm text-center mt-4">{t('budget.noExpensesYet')}</Text>
         }
         renderItem={({ item }) => (
           <View className="flex-row items-center justify-between bg-white border border-slate-100 rounded-xl px-4 py-3 mb-2">
             <View className="flex-1">
               <Text className="text-xs font-bold text-sky-600">{item.category}</Text>
-              <Text className="text-sm font-bold text-slate-800">{item.actualAmount.toLocaleString()}원</Text>
+              <Text className="text-sm font-bold text-slate-800">
+                {t('routeResult.budgetExact', { amount: item.actualAmount.toLocaleString() })}
+              </Text>
               {item.memo && <Text className="text-xs text-slate-400 mt-0.5">{item.memo}</Text>}
             </View>
             <TouchableOpacity onPress={() => handleDelete(item.id)} disabled={deletingId === item.id} hitSlop={8}>
