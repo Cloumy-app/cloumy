@@ -191,7 +191,7 @@ export interface BudgetSummary {
   remaining: number | null;
 }
 
-export type ExpenseCategory = '식음료' | '교통' | '입장료' | '기념품' | '기타';
+export type ExpenseCategory = 'FOOD' | 'TRANSPORT' | 'ADMISSION' | 'SOUVENIR' | 'ETC';
 
 export interface Expense {
   id: string;

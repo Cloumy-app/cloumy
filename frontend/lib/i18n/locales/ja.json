@@ -301,6 +301,7 @@
   "budgetAddExpense": {
     "headerTitle": "支出を追加",
     "categoryLabel": "カテゴリ",
+    "categories": { "food": "飲食", "transport": "交通", "admission": "入場料", "souvenir": "お土産", "etc": "その他" },
     "amountLabel": "金額",
     "amountPlaceholder": "0",
     "memoLabel": "メモ（任意）",

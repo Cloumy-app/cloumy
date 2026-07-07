@@ -161,7 +161,9 @@ export default function BudgetScreen() {
         renderItem={({ item }) => (
           <View className="flex-row items-center justify-between bg-white border border-slate-100 rounded-xl px-4 py-3 mb-2">
             <View className="flex-1">
-              <Text className="text-xs font-bold text-sky-600">{item.category}</Text>
+              <Text className="text-xs font-bold text-sky-600">
+                {t(`budgetAddExpense.categories.${item.category.toLowerCase()}`)}
+              </Text>
               <Text className="text-sm font-bold text-slate-800">
                 {t('routeResult.budgetExact', { amount: item.actualAmount.toLocaleString() })}
               </Text>
