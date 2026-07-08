@@ -138,7 +138,9 @@
     "priceWon": "₩{{amount}}",
     "budgetCaution": "Near budget",
     "budgetExceeded": "Over budget",
-    "alternativesTitle": "AI alternatives (matching this route)"
+    "alternativesTitle": "AI alternatives (matching this route)",
+    "locationPermissionTitle": "Location permission needed",
+    "locationPermissionBody": "Allow location access to get directions based on your actual current location."
   },
   "weather": {
     "blocks": { "morning": "Morning", "afternoon": "Afternoon", "evening": "Evening" },

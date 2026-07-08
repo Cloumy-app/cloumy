@@ -5,7 +5,7 @@ import { Star, RefreshCw, X, Check, Navigation, Wallet, MapPin, Sparkles, CloudR
 import type { BudgetLevel, RouteSlot, SlotAlternative, SlotWithCoords, TransitHop } from '@/types';
 import { getBudgetStatus } from '@/types';
 import { getSlotAlternatives } from '@/lib/api/routes';
-import { openTransitNavigation, openWalkNavigation } from '@/lib/navigation';
+import { getCurrentLocationOrFallback, openTransitNavigation, openWalkNavigation } from '@/lib/navigation';
 
 // transport_to_next 값('walk'/'taxi'/'transit')별 아이콘·색상 —
 // DayTabs.tsx의 WEATHER_THEME과 동일한 패턴(값별 테마 dict)으로 통일. 라벨은 i18n 키로 별도 관리.
@@ -164,7 +164,10 @@ export function SlotCard({
       return () => openWalkNavigation(nextPlace.lat, nextPlace.lng);
     }
     if (transportToNext === 'transit' && apiSlot) {
-      return () => openTransitNavigation({ lat: apiSlot.lat, lng: apiSlot.lng }, nextPlace);
+      return async () => {
+        const origin = await getCurrentLocationOrFallback({ lat: apiSlot.lat, lng: apiSlot.lng });
+        await openTransitNavigation(origin, nextPlace);
+      };
     }
     return undefined;
   })();

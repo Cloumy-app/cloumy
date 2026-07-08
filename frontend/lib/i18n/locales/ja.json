@@ -138,7 +138,9 @@
     "priceWon": "{{amount}}ウォン",
     "budgetCaution": "予算注意",
     "budgetExceeded": "予算超過",
-    "alternativesTitle": "AIおすすめの代替案（この動線に合う場所）"
+    "alternativesTitle": "AIおすすめの代替案（この動線に合う場所）",
+    "locationPermissionTitle": "位置情報の許可が必要です",
+    "locationPermissionBody": "位置情報を許可すると、現在地に基づいたより正確な道案内を受けられます。"
   },
   "weather": {
     "blocks": { "morning": "午前", "afternoon": "午後", "evening": "夕方" },

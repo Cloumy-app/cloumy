@@ -1,4 +1,6 @@
-import { Linking, Platform } from 'react-native';
+import { Alert, Linking, Platform } from 'react-native';
+import * as Location from 'expo-location';
+import i18next from 'i18next';
 
 // 도보 내비 — 목적지만 넘기면 출발지는 기기 GPS 위치로 자동 추정(Google Maps 기본 동작)
 export async function openWalkNavigation(lat: number, lng: number) {
@@ -50,4 +52,26 @@ export async function openTransitNavigation(
     return;
   }
   await Linking.openURL(googleWebUrl);
+}
+
+// 위치 권한이 없거나 GPS 획득에 실패하면 fallback 좌표로 대체하고, 거부 시에만 안내
+// 알림을 띄운다. transit 내비 출발지 전용 — walk는 외부 지도 앱이 자체적으로 기기
+// 위치를 추정하므로 이 함수를 쓰지 않는다.
+export async function getCurrentLocationOrFallback(
+  fallback: { lat: number; lng: number },
+): Promise<{ lat: number; lng: number }> {
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        i18next.t('slotCard.locationPermissionTitle'),
+        i18next.t('slotCard.locationPermissionBody'),
+      );
+      return fallback;
+    }
+    const position = await Location.getCurrentPositionAsync({});
+    return { lat: position.coords.latitude, lng: position.coords.longitude };
+  } catch {
+    return fallback;
+  }
 }

@@ -34,6 +34,12 @@
         {
           "googleMapsApiKey": ""
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Cloumy가 실제 위치 기준으로 정확한 길찾기를 제공하기 위해 위치 정보를 사용합니다."
+        }
       ]
     ]
   }

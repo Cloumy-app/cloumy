@@ -138,7 +138,9 @@
     "priceWon": "{{amount}}원",
     "budgetCaution": "예산 주의",
     "budgetExceeded": "예산 초과",
-    "alternativesTitle": "AI 대안 추천 (이 동선에 맞는 장소)"
+    "alternativesTitle": "AI 대안 추천 (이 동선에 맞는 장소)",
+    "locationPermissionTitle": "위치 권한이 필요해요",
+    "locationPermissionBody": "위치 권한을 허용하면 실제 내 위치 기준으로 더 정확한 길찾기를 받을 수 있어요."
   },
   "weather": {
     "blocks": { "morning": "오전", "afternoon": "오후", "evening": "저녁" },
