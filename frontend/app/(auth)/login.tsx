@@ -46,13 +46,6 @@ export default function LoginScreen() {
         {/* 소셜 로그인 버튼 */}
         <View className="w-full gap-3">
           <TouchableOpacity
-            className="w-full bg-yellow-400 rounded-xl py-4 items-center"
-            onPress={() => Alert.alert(t('login.comingSoonTitle'), t('login.kakaoComingSoonBody'))}
-          >
-            <Text className="text-slate-900 font-semibold text-base">{t('login.kakaoButton')}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
             className="w-full bg-white border border-slate-200 rounded-xl py-4 items-center"
             onPress={() => Alert.alert(t('login.comingSoonTitle'), t('login.googleComingSoonBody'))}
           >

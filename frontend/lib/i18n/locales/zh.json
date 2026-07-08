@@ -13,11 +13,9 @@
   },
   "login": {
     "subtitle": "AI 为你规划专属旅行路线",
-    "kakaoButton": "使用 Kakao 登录",
     "googleButton": "使用 Google 登录",
     "devLoginButton": "开发者登录",
     "comingSoonTitle": "即将上线",
-    "kakaoComingSoonBody": "Kakao 登录即将上线。",
     "googleComingSoonBody": "Google 登录即将上线。",
     "connectFailedTitle": "连接失败",
     "devProfileHint": "请使用 --spring.profiles.active=dev 运行 Spring。",
