@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -7,9 +7,10 @@ import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, MapPin, Calendar, Sparkles, Trash2 } from 'lucide-react-native';
 import { Swipeable } from 'react-native-gesture-handler';
-import { getMyRoutes, deleteRoute } from '@/lib/api/routes';
+import { getMyRoutes, deleteRoute, reorderRoutes } from '@/lib/api/routes';
 import { getTripStatusLabel, isTripCompleted } from '@/lib/date';
 import type { RouteListItem } from '@/types';
+import { ReorderableRouteList } from '@/components/route/ReorderableRouteList';
 
 interface SpringPage<T> {
   content: T[];
@@ -164,6 +165,9 @@ export default function RoutesScreen() {
   });
 
   const routes = data?.content ?? [];
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [orderedRoutes, setOrderedRoutes] = useState<RouteListItem[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleDelete = async (routeId: string) => {
     // optimistic update: 먼저 UI에서 제거
@@ -178,6 +182,31 @@ export default function RoutesScreen() {
     }
   };
 
+  const handleEnterEditMode = () => {
+    setOrderedRoutes(routes);
+    setIsEditMode(true);
+  };
+
+  const handleReorderDone = async () => {
+    setIsSaving(true);
+    try {
+      const updated = await reorderRoutes(orderedRoutes.map((r) => r.id));
+      queryClient.setQueryData<SpringPage<RouteListItem>>(['routes', 'all'], (old) =>
+        old ? { ...old, content: updated } : old,
+      );
+    } catch {
+      queryClient.invalidateQueries({ queryKey: ['routes', 'all'] });
+    } finally {
+      setIsSaving(false);
+      setIsEditMode(false);
+    }
+  };
+
+  const handleReorderCancel = () => {
+    queryClient.invalidateQueries({ queryKey: ['routes', 'all'] });
+    setIsEditMode(false);
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-slate-50">
       {/* 헤더 */}
@@ -186,13 +215,47 @@ export default function RoutesScreen() {
           <ChevronLeft size={24} color="#475569" />
         </TouchableOpacity>
         <Text className="text-xl font-bold text-slate-800 flex-1">{t('routesList.headerTitle')}</Text>
-        <TouchableOpacity
-          onPress={() => router.push('/route/create/step-1' as never)}
-          className="bg-sky-500 px-4 py-2 rounded-xl"
-          activeOpacity={0.85}
-        >
-          <Text className="text-white text-sm font-bold">{t('routesList.newRouteButton')}</Text>
-        </TouchableOpacity>
+        {isEditMode ? (
+          <View className="flex-row gap-2">
+            <TouchableOpacity
+              onPress={handleReorderCancel}
+              disabled={isSaving}
+              style={{ borderWidth: 2, borderColor: '#94a3b8', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 12 }}
+              activeOpacity={0.85}
+            >
+              <Text style={{ color: '#64748b', fontWeight: '700', fontSize: 13 }}>{t('routeResult.cancelButton')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleReorderDone}
+              disabled={isSaving}
+              style={{ backgroundColor: '#0ea5e9', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 12 }}
+              activeOpacity={0.85}
+            >
+              {isSaving ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>{t('routeResult.doneEditButton')}</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View className="flex-row gap-2">
+            <TouchableOpacity
+              onPress={handleEnterEditMode}
+              style={{ backgroundColor: '#0ea5e9', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 12 }}
+              activeOpacity={0.85}
+            >
+              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>{t('routeResult.editButton')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.push('/route/create/step-1' as never)}
+              className="bg-sky-500 px-4 py-2 rounded-xl"
+              activeOpacity={0.85}
+            >
+              <Text className="text-white text-sm font-bold">{t('routesList.newRouteButton')}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {isLoading ? (
@@ -203,6 +266,8 @@ export default function RoutesScreen() {
         <ErrorState onRetry={() => refetch()} t={t} />
       ) : routes.length === 0 ? (
         <EmptyState t={t} />
+      ) : isEditMode ? (
+        <ReorderableRouteList routes={orderedRoutes} onOrderChange={setOrderedRoutes} />
       ) : (
         <FlatList
           data={routes}
