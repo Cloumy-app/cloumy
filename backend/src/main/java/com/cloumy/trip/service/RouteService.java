@@ -28,7 +28,7 @@ public class RouteService {
     private final BudgetSettingsService budgetSettingsService;
 
     public Page<RouteListResponse> getMyRoutes(UUID userId, Pageable pageable) {
-        return routeRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable)
+        return routeRepository.findByUserIdOrderByDisplayOrderAsc(userId, pageable)
                 .map(r -> new RouteListResponse(
                         r.getId(), r.getTitle(), r.getDestination(),
                         r.getStartDate(), r.getEndDate(), r.getNights(),
@@ -55,6 +55,7 @@ public class RouteService {
 
         String title = req.destination() + " " + req.nights() + "박 여행";
         String[] tags = req.tags() != null ? req.tags().toArray(new String[0]) : new String[]{};
+        int displayOrder = routeRepository.findMinDisplayOrder(userId) - 1;
 
         Route route = Route.builder()
                 .userId(userId)
@@ -67,6 +68,7 @@ public class RouteService {
                 .budgetLevel(req.budgetLevel().toLowerCase())
                 .tags(tags)
                 .density(req.density() != null ? req.density().toLowerCase() : "normal")
+                .displayOrder(displayOrder)
                 .build();
 
         Route saved = routeRepository.save(route);

@@ -12,7 +12,15 @@ import java.util.UUID;
 
 public interface RouteRepository extends JpaRepository<Route, UUID> {
 
-    Page<Route> findByUserIdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
+    Page<Route> findByUserIdOrderByDisplayOrderAsc(UUID userId, Pageable pageable);
+
+    // 리오더 응답에서 페이지네이션 없이 전체 순서를 다시 내려줄 때 사용
+    List<Route> findByUserIdOrderByDisplayOrderAsc(UUID userId);
+
+    // 신규 루트를 목록 맨 앞에 배치하기 위한 현재 최소 display_order 조회
+    // (해당 유저의 루트가 하나도 없으면 0을 반환 — 첫 루트는 display_order=0-1=-1로 시작해도 무방)
+    @Query("SELECT COALESCE(MIN(r.displayOrder), 0) FROM Route r WHERE r.userId = :userId")
+    Integer findMinDisplayOrder(@Param("userId") UUID userId);
 
     // 폴백 — FastAPI 장애 시 유사 루트 추천 (destination + 박수±1 + 태그 겹침)
     // tags가 text[]라 JPQL로 && 연산자를 못 써서 native query 필요.

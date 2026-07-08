@@ -54,7 +54,7 @@ public class RouteController {
     @GetMapping("/routes")
     public ApiResponse<Page<RouteListResponse>> getMyRoutes(
             @AuthenticationPrincipal CloudmyUserDetails user,
-            @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+            @PageableDefault(size = 10, sort = "displayOrder", direction = Sort.Direction.ASC) Pageable pageable
     ) {
         UUID userId = UUID.fromString(user.userId());
         return ApiResponse.ok(routeService.getMyRoutes(userId, pageable));
