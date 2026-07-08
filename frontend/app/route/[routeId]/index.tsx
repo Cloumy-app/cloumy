@@ -460,7 +460,6 @@ export default function RouteResultScreen() {
               </View>
               <Text
                 style={{ fontSize: 11, color: '#94a3b8', fontWeight: '500', marginTop: 2 }}
-                numberOfLines={1}
               >
                 {currentDaySummary ?? t('routeResult.pullUpHint')}
               </Text>
