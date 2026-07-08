@@ -1,29 +1,13 @@
-import { View, Text, TouchableOpacity, Modal, ActivityIndicator, Linking, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { X, MapPin, Clock, Gem, Navigation } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import { getPlaceDetail } from '@/lib/api/routes';
+import { openWalkNavigation } from '@/lib/navigation';
 
 interface PlaceDetailSheetProps {
   placeId: string | null;
   onClose: () => void;
-}
-
-async function openGoogleMaps(lat: number, lng: number) {
-  const appUrl = Platform.select({
-    ios: `comgooglemaps://?q=${lat},${lng}&zoom=15`,
-    android: `geo:${lat},${lng}?q=${lat},${lng}`,
-  });
-  const webUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
-
-  if (appUrl) {
-    const canOpen = await Linking.canOpenURL(appUrl);
-    if (canOpen) {
-      await Linking.openURL(appUrl);
-      return;
-    }
-  }
-  await Linking.openURL(webUrl);
 }
 
 export function PlaceDetailSheet({ placeId, onClose }: PlaceDetailSheetProps) {
@@ -106,7 +90,7 @@ export function PlaceDetailSheet({ placeId, onClose }: PlaceDetailSheetProps) {
 
             {/* 구글 지도 딥링크 버튼 */}
             <TouchableOpacity
-              onPress={() => openGoogleMaps(place.lat, place.lng)}
+              onPress={() => openWalkNavigation(place.lat, place.lng)}
               className="flex-row items-center justify-center gap-2 bg-blue-500 rounded-2xl py-4"
               activeOpacity={0.85}
             >

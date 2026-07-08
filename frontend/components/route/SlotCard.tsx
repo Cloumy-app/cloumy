@@ -5,6 +5,7 @@ import { Star, RefreshCw, X, Check, Navigation, Wallet, MapPin, Sparkles, CloudR
 import type { BudgetLevel, RouteSlot, SlotAlternative, SlotWithCoords, TransitHop } from '@/types';
 import { getBudgetStatus } from '@/types';
 import { getSlotAlternatives } from '@/lib/api/routes';
+import { openTransitNavigation, openWalkNavigation } from '@/lib/navigation';
 
 // transport_to_next 값('walk'/'taxi'/'transit')별 아이콘·색상 —
 // DayTabs.tsx의 WEATHER_THEME과 동일한 패턴(값별 테마 dict)으로 통일. 라벨은 i18n 키로 별도 관리.
@@ -26,13 +27,14 @@ function parseTransitDetail(detail: string | null): TransitHop[] | null {
 }
 
 function TransportChip({
-  mode, minutes, summary, detail, marginLeft,
+  mode, minutes, summary, detail, marginLeft, onNavigate,
 }: {
   mode: string | null;
   minutes: number | null;
   summary: string | null;
   detail: string | null;
   marginLeft: number;
+  onNavigate?: () => void;
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -53,15 +55,35 @@ function TransportChip({
     </View>
   );
 
+  // walk는 환승 상세(hops)가 없어 배지 전체가 그대로 내비 버튼이 됨.
+  // transit은 배지 탭이 이미 환승 상세 펼치기에 쓰이므로, 내비는 옆의 별도 아이콘 버튼으로 분리.
+  const chipOpensNavigation = !hops && mode === 'walk' && !!onNavigate;
+  const showNavigateButton = mode === 'transit' && !!onNavigate;
+
   return (
     <View className="my-2 self-start max-w-[85%]" style={{ marginLeft }}>
-      {hops ? (
-        <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.7}>
-          {chip}
-        </TouchableOpacity>
-      ) : (
-        chip
-      )}
+      <View className="flex-row items-center gap-2">
+        {hops ? (
+          <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.7}>
+            {chip}
+          </TouchableOpacity>
+        ) : chipOpensNavigation ? (
+          <TouchableOpacity onPress={onNavigate} activeOpacity={0.7}>
+            {chip}
+          </TouchableOpacity>
+        ) : (
+          chip
+        )}
+        {showNavigateButton && (
+          <TouchableOpacity
+            onPress={onNavigate}
+            className="w-9 h-9 rounded-full bg-sky-500 items-center justify-center shadow-sm shadow-sky-500/30"
+            activeOpacity={0.8}
+          >
+            <Navigation size={16} color="#ffffff" />
+          </TouchableOpacity>
+        )}
+      </View>
       {expanded && hops && (
         <View className="mt-1.5 gap-2 border-l-2 border-slate-100 pl-3.5">
           {hops.map((hop, i) => (
@@ -89,6 +111,8 @@ interface SlotCardProps {
   showActions?: boolean;
   isFocused?: boolean;
   isRainy?: boolean;
+  // 다음 슬롯 좌표 — walk/transit 내비 목적지로 사용(apiSlot 기반 렌더링일 때만 전달됨)
+  nextPlace?: { lat: number; lng: number; name: string } | null;
   onPin: () => void;
   onRemove: () => void;
   onReplaceWithAlternative?: (alt: SlotAlternative) => void;
@@ -111,6 +135,7 @@ export function SlotCard({
   showActions = true,
   isFocused = false,
   isRainy = false,
+  nextPlace = null,
   onPin,
   onRemove,
   onReplaceWithAlternative,
@@ -131,6 +156,18 @@ export function SlotCard({
   const transportToNext = apiSlot?.transportToNext ?? null;
   const transitSummary = apiSlot?.transitSummary ?? null;
   const transitDetail = apiSlot?.transitDetail ?? null;
+
+  // walk/transit만 내비 대상(taxi는 이번 스코프 제외 — project_taxi_navigation_pending 메모리 참고)
+  const handleNavigate = (() => {
+    if (!nextPlace) return undefined;
+    if (transportToNext === 'walk') {
+      return () => openWalkNavigation(nextPlace.lat, nextPlace.lng);
+    }
+    if (transportToNext === 'transit' && apiSlot) {
+      return () => openTransitNavigation({ lat: apiSlot.lat, lng: apiSlot.lng }, nextPlace);
+    }
+    return undefined;
+  })();
 
   const handleReshuffle = async () => {
     if (pinned || !routeId || !apiSlot) return;
@@ -255,6 +292,7 @@ export function SlotCard({
             summary={transitSummary}
             detail={transitDetail}
             marginLeft={40}
+            onNavigate={handleNavigate}
           />
         )}
 
@@ -454,6 +492,7 @@ export function SlotCard({
           summary={transitSummary}
           detail={transitDetail}
           marginLeft={56}
+          onNavigate={handleNavigate}
         />
       )}
     </View>

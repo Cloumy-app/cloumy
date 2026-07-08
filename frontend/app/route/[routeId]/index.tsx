@@ -545,6 +545,15 @@ export default function RouteResultScreen() {
                     showActions={showEditControls}
                     isFocused={apiSlot.id === focusedSlotId}
                     isRainy={isSlotInRainyBlock(currentDayWeather, i)}
+                    nextPlace={
+                      currentDayApiSlots[i + 1]
+                        ? {
+                            lat: currentDayApiSlots[i + 1].lat,
+                            lng: currentDayApiSlots[i + 1].lng,
+                            name: currentDayApiSlots[i + 1].placeName,
+                          }
+                        : null
+                    }
                     onPin={() => handlePin(apiSlot.id)}
                     onRemove={() => handleDeleteSlot(apiSlot.id)}
                     onReplaceWithAlternative={(alt) => handleReplaceWithAlternative(apiSlot.id, alt)}
