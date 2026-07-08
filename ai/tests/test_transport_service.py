@@ -1,3 +1,5 @@
+import math
+
 import pytest
 from unittest.mock import AsyncMock, patch
 
@@ -8,9 +10,22 @@ from app.services.transport_service import (
     enrich_transport,
 )
 
-# 강남역 -> 서울역 직선거리 약 8.4km
+# 강남역 -> 서울역 직선거리 약 8.4km (1km 초과 → transit 자동 판정)
 _GANGNAM = (37.4979, 127.0276)
 _SEOUL_STATION = (37.5547, 126.9707)
+
+_R_METERS = 6_371_000
+
+
+def _point_north_of(origin: tuple[float, float], meters: float) -> tuple[float, float]:
+    """origin에서 정북 방향으로 meters만큼 떨어진 좌표. _haversine_m과 동일한 구면 모델이라
+    순수 위도 이동에서는 haversine 결과가 R * 라디안값과 정확히 일치해 경계값 테스트에 안전하다."""
+    lat, lng = origin
+    delta_deg = math.degrees(meters / _R_METERS)
+    return (lat + delta_deg, lng)
+
+
+_ORIGIN = (37.5000, 127.0000)
 
 
 def test_estimate_minutes_walk_reasonable():
@@ -27,34 +42,51 @@ def test_estimate_minutes_never_zero():
     assert _estimate_minutes(0.01, "car") >= 1
 
 
-async def test_enrich_transport_no_mode_returns_unchanged():
+async def test_enrich_transport_close_distance_is_walk_no_network():
+    """1km 이내는 Tmap 호출 없이 거리 근사치로 walk 판정."""
     slots = [{"place_id": "a"}, {"place_id": "b"}]
-    result = await enrich_transport(slots, {}, None, "")
-    assert result == slots
-    assert "transport_to_next" not in result[0]
-
-
-async def test_enrich_transport_walk_uses_approximation_no_network():
-    slots = [{"place_id": "a"}, {"place_id": "b"}]
-    coord_lookup = {"a": _GANGNAM, "b": _SEOUL_STATION}
-    result = await enrich_transport(slots, coord_lookup, "walk", "")
+    b = _point_north_of(_ORIGIN, 300)
+    coord_lookup = {"a": _ORIGIN, "b": b}
+    result = await enrich_transport(slots, coord_lookup, "")
     assert result[0]["transport_to_next"] == "walk"
     assert result[0]["transport_minutes"] > 0
     assert "transport_to_next" not in result[1]  # 마지막 슬롯은 다음 구간이 없음
 
 
-async def test_enrich_transport_car_maps_to_taxi_label():
-    # DB CHECK 제약(route_slots.transport_to_next)이 'car'가 아니라 'taxi'를 요구함
+async def test_enrich_transport_boundary_under_1km_is_walk():
     slots = [{"place_id": "a"}, {"place_id": "b"}]
-    coord_lookup = {"a": _GANGNAM, "b": _SEOUL_STATION}
-    result = await enrich_transport(slots, coord_lookup, "car", "")
-    assert result[0]["transport_to_next"] == "taxi"
+    b = _point_north_of(_ORIGIN, 999)
+    coord_lookup = {"a": _ORIGIN, "b": b}
+    result = await enrich_transport(slots, coord_lookup, "")
+    assert result[0]["transport_to_next"] == "walk"
+
+
+async def test_enrich_transport_boundary_exactly_1km_is_walk():
+    """정확히 1000m는 경계 포함(이하=walk) 규칙에 따라 walk로 판정되어야 한다.
+    _haversine_m이 int()로 내림하므로 nominal 1000m는 정확히 1000으로 떨어진다
+    (아래 python으로 사전 검증: raw=1000.0000, floored=1000)."""
+    slots = [{"place_id": "a"}, {"place_id": "b"}]
+    b = _point_north_of(_ORIGIN, 1000)
+    coord_lookup = {"a": _ORIGIN, "b": b}
+    result = await enrich_transport(slots, coord_lookup, "")
+    assert result[0]["transport_to_next"] == "walk"
+
+
+async def test_enrich_transport_boundary_over_1km_is_transit():
+    """nominal 1001m는 _haversine_m의 int() 내림 때문에 정확히 1000으로 떨어져
+    경계 포함 규칙상 walk가 되어버린다(사전 검증 완료) — 1002m을 사용해
+    내림 후에도 1000을 확실히 초과하도록 한다."""
+    slots = [{"place_id": "a"}, {"place_id": "b"}]
+    b = _point_north_of(_ORIGIN, 1002)
+    coord_lookup = {"a": _ORIGIN, "b": b}
+    result = await enrich_transport(slots, coord_lookup, "")
+    assert result[0]["transport_to_next"] == "transit"
 
 
 async def test_enrich_transport_transit_without_key_falls_back_to_approximation():
     slots = [{"place_id": "a"}, {"place_id": "b"}]
     coord_lookup = {"a": _GANGNAM, "b": _SEOUL_STATION}
-    result = await enrich_transport(slots, coord_lookup, "transit", "")
+    result = await enrich_transport(slots, coord_lookup, "")
     assert result[0]["transport_to_next"] == "transit"
     assert result[0]["transport_minutes"] > 0  # 근사치로 채워짐
     assert result[0]["transit_summary"] is None  # 키 없으면 노선 요약도 없음
@@ -68,7 +100,7 @@ async def test_enrich_transport_transit_api_error_falls_back_to_approximation():
         "app.services.transport_service._tmap_transit_route",
         new=AsyncMock(side_effect=Exception("Tmap API 장애")),
     ):
-        result = await enrich_transport(slots, coord_lookup, "transit", "dummy-key")
+        result = await enrich_transport(slots, coord_lookup, "dummy-key")
     assert result[0]["transport_minutes"] > 0  # 예외 발생해도 근사치로 폴백, 크래시 없음
     assert result[0]["transit_summary"] is None
     assert result[0]["transit_detail"] is None
@@ -77,7 +109,7 @@ async def test_enrich_transport_transit_api_error_falls_back_to_approximation():
 async def test_enrich_transport_missing_coord_skips_pair():
     slots = [{"place_id": "a"}, {"place_id": "unknown"}]
     coord_lookup = {"a": _GANGNAM}
-    result = await enrich_transport(slots, coord_lookup, "walk", "")
+    result = await enrich_transport(slots, coord_lookup, "")
     assert "transport_to_next" not in result[0]  # 좌표 없는 상대와는 계산 스킵
 
 

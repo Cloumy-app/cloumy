@@ -53,3 +53,6 @@ logs/
 # 데이터 볼륨 (로컬 개발)
 postgres_data/
 redis_data/
+
+# git worktree 격리 작업공간
+.worktrees/

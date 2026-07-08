@@ -112,11 +112,11 @@ public class AiServiceClient {
             String place_id, String transport_to_next, Integer transport_minutes,
             String transit_summary, JsonNode transit_detail) {}
 
-    private record SlotTransportReq(String transport_mode, List<TransportSlotDto> slots) {}
+    private record SlotTransportReq(List<TransportSlotDto> slots) {}
 
-    public List<TransportSlotResult> getSlotTransport(String transportMode, List<TransportSlotDto> slots) {
+    public List<TransportSlotResult> getSlotTransport(List<TransportSlotDto> slots) {
         try {
-            String body = objectMapper.writeValueAsString(new SlotTransportReq(transportMode, slots));
+            String body = objectMapper.writeValueAsString(new SlotTransportReq(slots));
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(fastapiUrl + "/ai/routes/slots/transport"))
@@ -186,7 +186,6 @@ public class AiServiceClient {
             Double hidden_gem_ratio,
             LocalDate start_date,
             String density,
-            String transport_mode,
             List<AccommodationAnchorDto> accommodations,
             String language
     ) {}
@@ -201,11 +200,10 @@ public class AiServiceClient {
             Consumer<Throwable> onError
     ) {
         try {
-            // 숙소/이동수단이 있으면 결과(앵커, 이동시간)가 캐시 키에 안 잡히므로 캐시를 완전히
+            // 숙소가 있으면 결과(앵커, 이동시간)가 캐시 키에 안 잡히므로 캐시를 완전히
             // 우회한다(날씨 민감 요청과 동일한 이유) — 안 그러면 그 값이 없던 옛 캐시가 그대로 나간다.
             boolean hasAccommodations = !req.accommodationsOrEmpty().isEmpty();
-            boolean hasTransportMode = req.transportMode() != null;
-            if (!hasAccommodations && !hasTransportMode) {
+            if (!hasAccommodations) {
                 try {
                     String cached = redisTemplate.opsForValue().get(cacheKey(req));
                     if (cached != null && !cached.isBlank()) {
@@ -234,7 +232,6 @@ public class AiServiceClient {
                     req.hiddenGemRatio(),
                     req.startDate(),
                     req.density() != null ? req.density().toLowerCase() : "normal",
-                    req.transportMode() != null ? req.transportMode().toLowerCase() : null,
                     accommodations,
                     req.language()
             );

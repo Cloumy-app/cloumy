@@ -304,6 +304,7 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 - [ ] 루트 생성 프롬프트 다국어화 (`route_service.py`의 `ROUTE_GEN_SYSTEM_PROMPT`, 챗봇과 동일 패턴 재사용)
 
 ### Phase 2 — 빠른 개선 (기존 데이터·백엔드 재사용, 저비용 고효율)
+- [x] 이동수단 자동 판단(거리 기반)으로 전환 — 이동수단 선택 질문(선택 사항이라 건너뛰면 전 구간 정보 누락) 삭제, `enrich_transport()`가 슬롯 간 거리(1km 기준)로 walk/transit 자동 판단. 슬롯 교체 시 `DEFAULT_TRANSPORT_MODE="car"` 하드코딩 불일치 버그도 함께 해소 — 지도 내비 분기(walk/transit 2-way) 기능이 실제로 모든 루트에서 동작하기 위한 선행 조건 — 2026-07-08
 - [ ] 지도 내비 3-way 분기 (Naver/Google/카카오T — `transportToNext` 필드 재사용)
 - [ ] 로그인 화면 우선순위 조정 (구글·애플 우선, 카카오 후순위 — 백엔드 변경 불필요, OAuth 4종 이미 구현됨)
 

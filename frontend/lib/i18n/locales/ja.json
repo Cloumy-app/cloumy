@@ -42,9 +42,6 @@
     "confirmButton": "確認",
     "groupTypeLabel": "誰と一緒に行きますか？",
     "groupTypes": { "solo": "ひとり", "couple": "カップル", "friends": "友達", "family": "家族" },
-    "transportLabel": "主にどう移動しますか？",
-    "transportHint": "選択すると場所間の移動時間を計算します（任意）",
-    "transportModes": { "transit": "公共交通機関", "car": "車", "walk": "徒歩" },
     "nextButton": "次へ"
   },
   "routeCreateStep2": {

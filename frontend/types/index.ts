@@ -111,8 +111,6 @@ export interface Accommodation {
   source: 'kakao' | 'manual';
 }
 
-export type TransportMode = 'transit' | 'car' | 'walk';
-
 export interface RouteGenRequest {
   destination: string;
   startDate: string;
@@ -122,7 +120,6 @@ export interface RouteGenRequest {
   tags: string[];
   hiddenGemRatio?: number;
   density?: Density;
-  transportMode?: TransportMode;
   accommodations?: AccommodationInput[];
   totalBudget?: number; // 숙박비 제외 현지 활동/식사 예산, 선택 사항
   language?: SupportedLanguage; // 앱 설정 언어 — 하루요약/팁 텍스트 생성 언어(장소명은 원본 유지)

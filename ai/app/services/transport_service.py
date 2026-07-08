@@ -17,9 +17,11 @@ _CAR_SPEED_KMH = 25.0
 _DETOUR_FACTOR = 1.3  # 직선거리 대비 실제 도로/보행로 왜곡 보정
 _TMAP_TRANSIT_URL = "https://apis.openapi.sk.com/transit/routes"
 
-# routes.transport_mode(walk/car/transit) → route_slots.transport_to_next 허용값 매핑
-# DB CHECK 제약이 'car'가 아니라 'taxi'를 요구함(V4 마이그레이션 기존 설계)
-_MODE_TO_SLOT_LABEL = {"walk": "walk", "car": "taxi", "transit": "transit"}
+# 슬롯 간 직선거리가 이 값 이하면 walk, 초과면 transit으로 자동 판단한다.
+# 500m는 관광지 밀집 구역의 흔한 이동 거리(예: 북촌↔경복궁 약 1km)까지 대중교통으로
+# 유도할 위험이 있고, 이런 짧은 거리는 정류장 이동·대기·환승 오버헤드 때문에
+# 대중교통이 오히려 도보보다 느린 경우가 많아 1km로 설정.
+_WALK_MAX_METERS = 1000
 
 # Tmap 대중교통 API legs[].mode → 노선 요약 표시용 한글 라벨(도보는 요약에서 제외)
 _TRANSIT_MODE_LABEL = {"BUS": "버스", "SUBWAY": "지하철", "TRAIN": "기차", "EXPRESSBUS": "고속버스"}
@@ -93,19 +95,14 @@ async def _tmap_transit_route(
 async def enrich_transport(
     ordered_slots: list[dict],
     coord_lookup: dict[str, tuple[float, float]],
-    transport_mode: str | None,
     tmap_api_key: str,
 ) -> list[dict]:
     """TSP로 이미 정렬된 하루치 슬롯에 slot[i] -> slot[i+1] 구간 이동시간을 채운다.
 
-    transport_mode가 없으면(대부분의 기존 호출자) 아무것도 안 하고 그대로 반환 —
-    완전 하위호환. 대중교통 API가 실패하면(키 미설정 포함) 거리 근사치로 폴백해서
-    "정보 없음"보다는 대략적인 값을 보여준다(도보/자동차와 UX 일관성).
+    각 구간의 직선거리로 walk/transit을 자동 판단한다(_WALK_MAX_METERS 이하=walk).
+    대중교통 API가 실패하면(키 미설정 포함) 거리 근사치로 폴백해서
+    "정보 없음"보다는 대략적인 값을 보여준다.
     """
-    if not transport_mode:
-        return ordered_slots
-
-    label = _MODE_TO_SLOT_LABEL[transport_mode]
     async with httpx.AsyncClient() as client:
         for i in range(len(ordered_slots) - 1):
             id_a = str(ordered_slots[i].get("place_id", ""))
@@ -115,8 +112,11 @@ async def enrich_transport(
             lat1, lng1 = coord_lookup[id_a]
             lat2, lng2 = coord_lookup[id_b]
 
+            distance_m = _haversine_m(lat1, lng1, lat2, lng2)
+            label = "walk" if distance_m <= _WALK_MAX_METERS else "transit"
+
             minutes, summary, detail = None, None, None
-            if transport_mode == "transit" and tmap_api_key:
+            if label == "transit" and tmap_api_key:
                 try:
                     result = await _tmap_transit_route(client, lat1, lng1, lat2, lng2, tmap_api_key)
                     if result is not None:
@@ -125,8 +125,8 @@ async def enrich_transport(
                     logger.warning("Tmap 대중교통 API 오류 — 근사치로 폴백: %s", e)
 
             if minutes is None:
-                distance_km = _haversine_m(lat1, lng1, lat2, lng2) / 1000
-                minutes = _estimate_minutes(distance_km, "walk" if transport_mode == "walk" else "car")
+                distance_km = distance_m / 1000
+                minutes = _estimate_minutes(distance_km, label)
 
             ordered_slots[i]["transport_to_next"] = label
             ordered_slots[i]["transport_minutes"] = minutes

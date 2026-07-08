@@ -167,13 +167,12 @@ async def stream_route(
     redis=None,
 ) -> AsyncGenerator[str, None]:
     weather_sensitive = _is_weather_sensitive(request.start_date)
-    # 숙소/이동수단이 있으면 결과(앵커, 이동시간)가 캐시 키에 안 잡히므로 캐시를 완전히
+    # 숙소가 있으면 결과(앵커, 이동시간)가 캐시 키에 안 잡히므로 캐시를 완전히
     # 우회한다 — 그렇지 않으면 반영 안 된 옛 캐시가 그대로 나갈 수 있다.
     has_accommodations = bool(request.accommodations)
-    has_transport_mode = bool(request.transport_mode)
 
-    # 캐시 히트 시 Redis에서 즉시 반환 (날씨 민감/숙소/이동수단 있는 요청은 매번 새로 생성)
-    if redis is not None and not weather_sensitive and not has_accommodations and not has_transport_mode:
+    # 캐시 히트 시 Redis에서 즉시 반환 (날씨 민감/숙소 있는 요청은 매번 새로 생성)
+    if redis is not None and not weather_sensitive and not has_accommodations:
         try:
             cached = await redis.get(_cache_key(request))
             if cached:
@@ -326,7 +325,7 @@ async def stream_route(
         """TSP 재정렬 + 이동시간 enrichment + start_time 계산을 거친 최종 ndjson 라인을 반환한다."""
         reordered = reorder_slots(day_lines, coord_lookup, anchor=accommodation_anchors.get(day_number))
         slots = [json.loads(line) for line in reordered]
-        enriched = await enrich_transport(slots, coord_lookup, request.transport_mode, settings.tmap_api_key)
+        enriched = await enrich_transport(slots, coord_lookup, settings.tmap_api_key)
         timed = _assign_start_times(enriched)
         return [json.dumps(s, ensure_ascii=False) + "\n" for s in timed]
 
@@ -435,7 +434,7 @@ async def stream_route(
 
     # Redis 캐시 저장 (TTL 24h) — collected는 이미 day별로 TSP 재정렬된 상태이므로
     # 그대로 저장하면 스트림으로 전달된 내용과 100% 동일
-    if redis is not None and collected and not weather_sensitive and not has_accommodations and not has_transport_mode:
+    if redis is not None and collected and not weather_sensitive and not has_accommodations:
         try:
             await redis.setex(_cache_key(request), 86400, "".join(collected))
             logger.info("캐시 저장: key=%s lines=%d", _cache_key(request), len(collected))
