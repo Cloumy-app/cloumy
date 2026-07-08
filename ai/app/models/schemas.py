@@ -20,7 +20,6 @@ class RouteGenRequest(BaseModel):
     hidden_gem_ratio: float | None = None  # 0.0(관광지 위주) ~ 1.0(숨은 명소 위주)
     start_date: date | None = None  # 여행 시작일 — 날씨 예보 조회 + 숙소 day 매핑에 사용
     density: Literal["relaxed", "normal", "packed"] = "normal"
-    transport_mode: Literal["transit", "car", "walk"] | None = None
     accommodations: list[AccommodationAnchor] = Field(default_factory=list)
     language: str | None = None  # ko/en/ja/zh — 앱 설정 언어(tip/day_summary 생성 언어, place_name은 원본 유지)
 
