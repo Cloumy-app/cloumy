@@ -113,7 +113,7 @@ async def enrich_transport(
             lat2, lng2 = coord_lookup[id_b]
 
             distance_m = _haversine_m(lat1, lng1, lat2, lng2)
-            label = "walk" if distance_m < _WALK_MAX_METERS else "transit"
+            label = "walk" if distance_m <= _WALK_MAX_METERS else "transit"
 
             minutes, summary, detail = None, None, None
             if label == "transit" and tmap_api_key:

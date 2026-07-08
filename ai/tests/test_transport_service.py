@@ -61,9 +61,23 @@ async def test_enrich_transport_boundary_under_1km_is_walk():
     assert result[0]["transport_to_next"] == "walk"
 
 
-async def test_enrich_transport_boundary_over_1km_is_transit():
+async def test_enrich_transport_boundary_exactly_1km_is_walk():
+    """정확히 1000m는 경계 포함(이하=walk) 규칙에 따라 walk로 판정되어야 한다.
+    _haversine_m이 int()로 내림하므로 nominal 1000m는 정확히 1000으로 떨어진다
+    (아래 python으로 사전 검증: raw=1000.0000, floored=1000)."""
     slots = [{"place_id": "a"}, {"place_id": "b"}]
-    b = _point_north_of(_ORIGIN, 1001)
+    b = _point_north_of(_ORIGIN, 1000)
+    coord_lookup = {"a": _ORIGIN, "b": b}
+    result = await enrich_transport(slots, coord_lookup, "")
+    assert result[0]["transport_to_next"] == "walk"
+
+
+async def test_enrich_transport_boundary_over_1km_is_transit():
+    """nominal 1001m는 _haversine_m의 int() 내림 때문에 정확히 1000으로 떨어져
+    경계 포함 규칙상 walk가 되어버린다(사전 검증 완료) — 1002m을 사용해
+    내림 후에도 1000을 확실히 초과하도록 한다."""
+    slots = [{"place_id": "a"}, {"place_id": "b"}]
+    b = _point_north_of(_ORIGIN, 1002)
     coord_lookup = {"a": _ORIGIN, "b": b}
     result = await enrich_transport(slots, coord_lookup, "")
     assert result[0]["transport_to_next"] == "transit"
