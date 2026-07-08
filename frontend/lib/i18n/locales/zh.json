@@ -138,7 +138,9 @@
     "priceWon": "{{amount}}韩元",
     "budgetCaution": "预算提醒",
     "budgetExceeded": "超出预算",
-    "alternativesTitle": "AI 推荐备选（符合此动线的地点）"
+    "alternativesTitle": "AI 推荐备选（符合此动线的地点）",
+    "locationPermissionTitle": "需要位置权限",
+    "locationPermissionBody": "允许位置权限后，可以根据您的实际位置获得更准确的路线指引。"
   },
   "weather": {
     "blocks": { "morning": "上午", "afternoon": "下午", "evening": "晚上" },

@@ -1,5 +1,6 @@
 import { Alert, Linking, Platform } from 'react-native';
 import * as Location from 'expo-location';
+import i18next from 'i18next';
 
 // 도보 내비 — 목적지만 넘기면 출발지는 기기 GPS 위치로 자동 추정(Google Maps 기본 동작)
 export async function openWalkNavigation(lat: number, lng: number) {
@@ -63,8 +64,8 @@ export async function getCurrentLocationOrFallback(
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert(
-        '위치 권한이 필요해요',
-        '위치 권한을 허용하면 실제 내 위치 기준으로 더 정확한 길찾기를 받을 수 있어요.',
+        i18next.t('slotCard.locationPermissionTitle'),
+        i18next.t('slotCard.locationPermissionBody'),
       );
       return fallback;
     }
