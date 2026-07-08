@@ -21,10 +21,12 @@
 `enrich_transport()`가 `transport_mode` 파라미터를 받지 않고, 슬롯 간 haversine 직선거리로 매 구간마다 자동 판단한다:
 
 ```
-거리 ≤ 500m → transport_to_next = "walk"  (기존 도보 근사치 로직 재사용)
-거리 > 500m → transport_to_next = "transit" (Tmap 대중교통 API 호출,
-              실패/경로없음 시 기존처럼 거리기반 근사치로 폴백)
+거리 ≤ 1km → transport_to_next = "walk"  (기존 도보 근사치 로직 재사용)
+거리 > 1km → transport_to_next = "transit" (Tmap 대중교통 API 호출,
+             실패/경로없음 시 기존처럼 거리기반 근사치로 폴백)
 ```
+
+1km(도보 약 12분) 기준. 500m는 관광지 밀집 구역의 흔한 이동 거리(예: 북촌↔경복궁 약 1km)까지 대중교통으로 유도할 위험이 있고, 이런 짧은 거리는 정류장 이동·대기·환승 오버헤드 때문에 대중교통이 오히려 도보보다 느린 경우가 많아 1km로 상향.
 
 이 함수는 초기 루트 생성(`/ai/routes/generate`)과 슬롯 교체 재계산(`/ai/routes/slots/transport`) 양쪽에서 그대로 재사용되므로, 시그니처 변경 하나로 두 경로가 자동으로 일관된 동작을 갖는다.
 
@@ -32,11 +34,11 @@
 
 ### FastAPI (`ai/`)
 
-- **`app/services/transport_service.py`**: `enrich_transport()` 시그니처에서 `transport_mode` 파라미터 제거. 거리 기반 판단 함수 추가(500m 임계값 상수화). `_MODE_TO_SLOT_LABEL`(car→taxi 매핑) 제거 — car 옵션 자체가 없어져 불필요. Tmap 실패 시 폴백 계산(`_estimate_minutes(distance_km, "car")`)은 그대로 유지(거리가 500m 초과라 도보 속도가 아닌 차량 속도 근사치가 맞음).
+- **`app/services/transport_service.py`**: `enrich_transport()` 시그니처에서 `transport_mode` 파라미터 제거. 거리 기반 판단 함수 추가(1km 임계값 상수화). `_MODE_TO_SLOT_LABEL`(car→taxi 매핑) 제거 — car 옵션 자체가 없어져 불필요. Tmap 실패 시 폴백 계산(`_estimate_minutes(distance_km, "car")`)은 그대로 유지(거리가 1km 초과라 도보 속도가 아닌 차량 속도 근사치가 맞음).
 - **`app/services/route_service.py`**: `_finalize_day()`의 `enrich_transport(...)` 호출에서 `request.transport_mode` 인자 제거.
 - **`app/models/schemas.py`**: `RouteGenRequest.transport_mode` 필드 삭제.
 - **`app/routes/slot_transport.py`**: `SlotTransportRequest.transport_mode` 필드 삭제, 호출부 인자 제거.
-- **`tests/test_transport_service.py`**: `test_enrich_transport_no_mode_returns_unchanged`, `test_enrich_transport_car_maps_to_taxi_label` 삭제(새 설계에 없는 시나리오). `test_enrich_transport_walk_uses_approximation_no_network`는 500m 이내 좌표 픽스처로 교체. 나머지 transit 관련 테스트는 `transport_mode` 인자만 제거(강남↔서울역 8.4km는 그대로 500m 초과라 자동 transit 판정됨). 500m 경계값(walk/transit 갈림) 테스트 신규 추가.
+- **`tests/test_transport_service.py`**: `test_enrich_transport_no_mode_returns_unchanged`, `test_enrich_transport_car_maps_to_taxi_label` 삭제(새 설계에 없는 시나리오). `test_enrich_transport_walk_uses_approximation_no_network`는 1km 이내 좌표 픽스처로 교체. 나머지 transit 관련 테스트는 `transport_mode` 인자만 제거(강남↔서울역 8.4km는 그대로 1km 초과라 자동 transit 판정됨). 1km 경계값(walk/transit 갈림) 테스트 신규 추가.
 
 ### Spring (`backend/`)
 
@@ -60,8 +62,8 @@
 거리 계산 자체는 순수 haversine 연산이라 실패하지 않는다. 기존 에러 처리를 그대로 재사용:
 
 - 좌표 없는 슬롯 쌍: 기존처럼 조용히 스킵.
-- Tmap API 실패/타임아웃/경로 없음(거리 500m 초과라 transit으로 판단된 구간): 기존 폴백(`_estimate_minutes(distance_km, "car")`) 그대로 재사용.
-- 500m 경계값은 `≤`/`>`로 명확히 양분해 동률 케이스 없음.
+- Tmap API 실패/타임아웃/경로 없음(거리 1km 초과라 transit으로 판단된 구간): 기존 폴백(`_estimate_minutes(distance_km, "car")`) 그대로 재사용.
+- 1km 경계값은 `≤`/`>`로 명확히 양분해 동률 케이스 없음.
 
 이번 변경으로 신규 도입되는 실패 시나리오는 없다.
 
@@ -70,7 +72,7 @@
 ```bash
 # 1. AI 서비스 단위 테스트
 cd ai && .venv/bin/pytest tests/test_transport_service.py -v
-# → 500m 경계값 테스트 포함 전체 통과
+# → 1km 경계값 테스트 포함 전체 통과
 
 # 2. 백엔드 컴파일
 cd backend && ./gradlew compileJava -q
