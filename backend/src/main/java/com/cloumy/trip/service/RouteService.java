@@ -67,7 +67,6 @@ public class RouteService {
                 .budgetLevel(req.budgetLevel().toLowerCase())
                 .tags(tags)
                 .density(req.density() != null ? req.density().toLowerCase() : "normal")
-                .transportMode(req.transportMode() != null ? req.transportMode().toLowerCase() : null)
                 .build();
 
         Route saved = routeRepository.save(route);

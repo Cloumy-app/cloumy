@@ -36,11 +36,6 @@ public class RouteSlotService {
     // AI(route_service.py)의 DAY_START_TIME과 동일한 값 — 슬롯 삽입/교체 후 재계산에도 동일 기준 사용
     private static final LocalTime DAY_START_TIME = LocalTime.of(9, 0);
 
-    // 챗봇 삽입 시 라우트에 이동수단이 지정 안 돼 있어도(transport_mode == null) 이동정보를
-    // 아예 안 보여주는 대신 자동차 근사치라도 채우기 위한 기본값. enrich_transport()가
-    // walk가 아니면 전부 자동차 속도로 근사하는 구조라 AI 쪽 변경 없이 그대로 재사용 가능.
-    private static final String DEFAULT_TRANSPORT_MODE = "car";
-
     private final RouteRepository routeRepository;
     private final RouteSlotRepository routeSlotRepository;
     private final PlaceRepository placeRepository;
@@ -186,8 +181,6 @@ public class RouteSlotService {
     @Transactional
     public List<SlotResponse> replaceSlot(UUID routeId, UUID slotId, UUID userId, ReplaceSlotRequest req) {
         verifyOwner(routeId, userId);
-        Route route = routeRepository.findById(routeId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
         RouteSlot target = routeSlotRepository.findById(slotId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SLOT_NOT_FOUND));
         PlaceProjection newPlace = placeRepository.findPlaceDetailById(req.placeId())
@@ -200,8 +193,8 @@ public class RouteSlotService {
         Optional<RouteSlot> next = routeSlotRepository.findByRouteIdAndDayNumberAndOrderIndex(
                 routeId, target.getDayNumber(), target.getOrderIndex() + 1);
 
-        if (route.getTransportMode() != null && (prev.isPresent() || next.isPresent())) {
-            recalculateNeighborTransport(route.getTransportMode(), req.placeId(), newPlace, target, prev, next);
+        if (prev.isPresent() || next.isPresent()) {
+            recalculateNeighborTransport(req.placeId(), newPlace, target, prev, next);
         }
 
         // 이동시간이 바뀌면 그 뒤 슬롯들의 start_time도 밀리므로, 이웃 몇 개가 아니라
@@ -233,7 +226,7 @@ public class RouteSlotService {
     // 교체된 슬롯과 직접 이웃(order_index ±1)한 구간만 재계산한다(같은 날 전체 재계산은 범위 밖).
     // 이동시간 계산 로직은 새로 만들지 않고 AI의 enrich_transport를 그대로 재사용(DRY).
     private void recalculateNeighborTransport(
-            String transportMode, UUID newPlaceId, PlaceProjection newPlace,
+            UUID newPlaceId, PlaceProjection newPlace,
             RouteSlot target, Optional<RouteSlot> prev, Optional<RouteSlot> next
     ) {
         List<AiServiceClient.TransportSlotDto> ordered = new ArrayList<>();
@@ -251,7 +244,7 @@ public class RouteSlotService {
                     n.getPlaceId().toString(), nextPlace.getLat(), nextPlace.getLng()));
         });
 
-        List<AiServiceClient.TransportSlotResult> results = aiServiceClient.getSlotTransport(transportMode, ordered);
+        List<AiServiceClient.TransportSlotResult> results = aiServiceClient.getSlotTransport(ordered);
 
         // AI 호출 자체가 실패(빈 리스트)하면 영향 구간을 null로 리셋 —
         // place가 이미 바뀌었으므로 옛 값을 그대로 두면 "정보 없음"보다 더 나쁜 틀린 정보가 된다.
@@ -280,8 +273,6 @@ public class RouteSlotService {
     public List<SlotResponse> insertSlotAfter(
             UUID routeId, UUID userId, UUID afterSlotId, UUID placeId, String reason) {
         verifyOwner(routeId, userId);
-        Route route = routeRepository.findById(routeId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
         RouteSlot afterSlot = routeSlotRepository.findById(afterSlotId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SLOT_NOT_FOUND));
         PlaceProjection newPlace = placeRepository.findPlaceDetailById(placeId)
@@ -321,13 +312,9 @@ public class RouteSlotService {
                 .build();
         routeSlotRepository.save(newSlot);
 
-        // replaceSlot과 동일한 이웃 이동정보 재계산 재사용: afterSlot(prev)→newSlot(target)→next
-        // 라우트에 이동수단이 지정 안 돼 있으면 DEFAULT_TRANSPORT_MODE("car")로 대체 —
-        // 챗봇으로 장소를 추가했는데 "어떻게 가는지" 정보가 아예 안 붙는 체감 버그 방지.
-        String effectiveTransportMode = route.getTransportMode() != null
-                ? route.getTransportMode() : DEFAULT_TRANSPORT_MODE;
-        recalculateNeighborTransport(
-                effectiveTransportMode, placeId, newPlace, newSlot, Optional.of(afterSlot), next);
+        // replaceSlot과 동일한 이웃 이동정보 재계산 재사용: afterSlot(prev)→newSlot(target)→next.
+        // 이제 enrich_transport가 거리 기반으로 자동 판단하므로 이동수단 인자 자체가 불필요.
+        recalculateNeighborTransport(placeId, newPlace, newSlot, Optional.of(afterSlot), next);
 
         // 새 슬롯이 끼어들면서 그 뒤 모든 슬롯의 시작 시각이 밀리므로 day 전체 재계산
         recomputeStartTimesForDay(routeId, dayNumber);

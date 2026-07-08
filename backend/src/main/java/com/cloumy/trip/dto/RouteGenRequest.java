@@ -7,7 +7,6 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -22,8 +21,6 @@ public record RouteGenRequest(
         List<String> tags,
         @DecimalMin("0.0") @DecimalMax("1.0") Double hiddenGemRatio,
         String density,
-        @Pattern(regexp = "transit|car|walk", message = "transportMode는 transit/car/walk 중 하나여야 합니다")
-        String transportMode,
         List<@Valid AccommodationCreateRequest> accommodations,
         // 숙박비 제외 현지 활동/식사 예산 — 선택 사항(숙소 선택과 동일 UX, null이면 예산 기능 자체를 건너뜀)
         @Min(1) Integer totalBudget,
