@@ -15,6 +15,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -101,5 +102,37 @@ public class RouteService {
             throw new BusinessException(ErrorCode.ROUTE_ACCESS_DENIED);
         }
         routeRepository.delete(route);
+    }
+
+    @Transactional
+    public List<RouteListResponse> reorderRoutes(UUID userId, List<UUID> routeIds) {
+        List<Route> routes = routeRepository.findAllById(routeIds);
+
+        if (routes.size() != routeIds.size()) {
+            throw new BusinessException(ErrorCode.ROUTE_NOT_FOUND);
+        }
+        for (Route route : routes) {
+            if (!route.getUserId().equals(userId)) {
+                throw new BusinessException(ErrorCode.ROUTE_ACCESS_DENIED);
+            }
+        }
+
+        for (int i = 0; i < routeIds.size(); i++) {
+            UUID targetId = routeIds.get(i);
+            int newOrder = i;
+            routes.stream()
+                    .filter(r -> r.getId().equals(targetId))
+                    .findFirst()
+                    .ifPresent(r -> r.updateDisplayOrder(newOrder));
+        }
+
+        return routeRepository.findByUserIdOrderByDisplayOrderAsc(userId)
+                .stream()
+                .map(r -> new RouteListResponse(
+                        r.getId(), r.getTitle(), r.getDestination(),
+                        r.getStartDate(), r.getEndDate(), r.getNights(),
+                        r.getCreatedAt()
+                ))
+                .toList();
     }
 }

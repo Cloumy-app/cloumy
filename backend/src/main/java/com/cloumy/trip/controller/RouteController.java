@@ -3,6 +3,7 @@ package com.cloumy.trip.controller;
 import com.cloumy.auth.security.CloudmyUserDetails;
 import com.cloumy.common.response.ApiResponse;
 import com.cloumy.trip.dto.DaySummaryResponse;
+import com.cloumy.trip.dto.ReorderRoutesRequest;
 import com.cloumy.trip.dto.RouteGenRequest;
 import com.cloumy.trip.dto.RouteListResponse;
 import com.cloumy.trip.entity.Route;
@@ -23,6 +24,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -85,6 +87,15 @@ public class RouteController {
             @AuthenticationPrincipal CloudmyUserDetails user
     ) {
         routeService.deleteRoute(routeId, UUID.fromString(user.userId()));
+    }
+
+    @PatchMapping("/routes/reorder")
+    public ApiResponse<List<RouteListResponse>> reorderRoutes(
+            @RequestBody @Valid ReorderRoutesRequest req,
+            @AuthenticationPrincipal CloudmyUserDetails user
+    ) {
+        UUID userId = UUID.fromString(user.userId());
+        return ApiResponse.ok(routeService.reorderRoutes(userId, req.routeIds()));
     }
 
     @PostMapping(value = "/routes/generate", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
