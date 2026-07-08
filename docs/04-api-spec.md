@@ -162,10 +162,21 @@ AI 루트 생성 (스트리밍 응답)
 슬롯 제거 (AI가 빈 슬롯 자동 채우기)
 
 #### GET /routes
-내 루트 목록
+내 루트 목록 (정렬: display_order ASC — 수동 드래그 정렬 반영)
 
 ```
 GET /routes?page=0&size=20
+```
+
+#### PATCH /routes/reorder
+내 루트 목록 수동 드래그 정렬 — 전체 순서를 담은 route ID 배열을 받아 display_order를 0..N-1로 일괄 재할당. 다른 유저 소유 route ID가 섞여 있으면 403.
+
+```json
+// 요청
+{ "routeIds": ["uuid1", "uuid2", "uuid3"] }
+
+// 응답 — 재정렬된 전체 목록
+{ "success": true, "data": [ { "id": "uuid1", "title": "...", ... }, ... ] }
 ```
 
 ---

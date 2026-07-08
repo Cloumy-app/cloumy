@@ -64,10 +64,14 @@ public class Route extends BaseEntity {
     @Column(name = "save_count", nullable = false)
     private int saveCount = 0;
 
+    @Column(name = "display_order", nullable = false)
+    private int displayOrder;
+
     @Builder
     private Route(UUID userId, String title, String destination,
                   LocalDate startDate, LocalDate endDate, int nights,
-                  String groupType, String budgetLevel, String[] tags, String density) {
+                  String groupType, String budgetLevel, String[] tags, String density,
+                  int displayOrder) {
         this.userId = userId;
         this.title = title;
         this.destination = destination;
@@ -80,5 +84,10 @@ public class Route extends BaseEntity {
         this.density = density;
         this.isPublic = false;
         this.saveCount = 0;
+        this.displayOrder = displayOrder;
+    }
+
+    public void updateDisplayOrder(int displayOrder) {
+        this.displayOrder = displayOrder;
     }
 }

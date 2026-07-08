@@ -90,6 +90,17 @@ export async function deleteRoute(routeId: string): Promise<void> {
   if (!res.ok) throw new Error(`${res.status}`);
 }
 
+export async function reorderRoutes(routeIds: string[]): Promise<RouteListItem[]> {
+  const res = await apiFetch('/v1/routes/reorder', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ routeIds }),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+  const body: { data: RouteListItem[] } = await res.json();
+  return body.data;
+}
+
 export async function getSlotAlternatives(
   routeId: string,
   slotId: string,
