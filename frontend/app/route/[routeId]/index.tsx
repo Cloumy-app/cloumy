@@ -313,7 +313,7 @@ export default function RouteResultScreen() {
       <View
         pointerEvents="box-none"
         style={[
-          StyleSheet.absoluteFillObject,
+          StyleSheet.absoluteFill,
           {
             bottom: undefined,
             zIndex: 30,
