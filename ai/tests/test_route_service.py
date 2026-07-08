@@ -42,8 +42,8 @@ def test_cache_key_density_distinguishes():
     key_normal = _cache_key(_make_req(density="normal"))
     key_packed = _cache_key(_make_req(density="packed"))
     assert key_normal != key_packed
-    assert key_normal.endswith(":normal")
-    assert key_packed.endswith(":packed")
+    assert ":normal:" in key_normal
+    assert ":packed:" in key_packed
 
 
 def test_is_weather_sensitive_none_start_date():
