@@ -42,9 +42,6 @@
     "confirmButton": "확인",
     "groupTypeLabel": "누구와 함께?",
     "groupTypes": { "solo": "혼자", "couple": "커플", "friends": "친구들", "family": "가족" },
-    "transportLabel": "주로 어떻게 이동하세요?",
-    "transportHint": "선택하면 장소 사이 이동시간을 계산해드려요 (선택 사항)",
-    "transportModes": { "transit": "대중교통", "car": "자동차", "walk": "도보" },
     "nextButton": "다음 단계"
   },
   "routeCreateStep2": {

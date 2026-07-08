@@ -42,9 +42,6 @@
     "confirmButton": "确认",
     "groupTypeLabel": "和谁一起旅行？",
     "groupTypes": { "solo": "独自", "couple": "情侣", "friends": "朋友", "family": "家人" },
-    "transportLabel": "主要交通方式是？",
-    "transportHint": "选择后可估算地点之间的移动时间（可选）",
-    "transportModes": { "transit": "公共交通", "car": "自驾", "walk": "步行" },
     "nextButton": "下一步"
   },
   "routeCreateStep2": {

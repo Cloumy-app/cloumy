@@ -14,7 +14,7 @@ import { useAuthStore } from '@/stores/useAuthStore';
 import { useRouteStore } from '@/stores/useRouteStore';
 import { useAccommodationPinStore } from '@/stores/useAccommodationPinStore';
 import { useLanguageStore } from '@/stores/useLanguageStore';
-import type { GroupType, BudgetLevel, Density, RouteSlot, AccommodationInput, TransportMode } from '@/types';
+import type { GroupType, BudgetLevel, Density, RouteSlot, AccommodationInput } from '@/types';
 
 type SelectedAccommodation = { name: string; address: string | null; lat: number; lng: number; source: 'kakao' | 'manual' };
 
@@ -52,7 +52,6 @@ export default function RouteCreateStep4() {
     budgetLevel: string;
     hiddenGemRatio: string;
     density: string;
-    transportMode?: string;
     totalBudget?: string;
   }>();
 
@@ -208,7 +207,6 @@ export default function RouteCreateStep4() {
         tags,
         hiddenGemRatio: selectedRatio,
         density: selectedDensity,
-        transportMode: params.transportMode as TransportMode | undefined,
         accommodations,
         totalBudget: params.totalBudget ? Number(params.totalBudget) : undefined,
         language: useLanguageStore.getState().language,

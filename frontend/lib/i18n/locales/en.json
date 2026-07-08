@@ -42,9 +42,6 @@
     "confirmButton": "Confirm",
     "groupTypeLabel": "Who's traveling?",
     "groupTypes": { "solo": "Solo", "couple": "Couple", "friends": "Friends", "family": "Family" },
-    "transportLabel": "How will you mostly get around?",
-    "transportHint": "Pick one and we'll estimate travel time between places (optional)",
-    "transportModes": { "transit": "Transit", "car": "Car", "walk": "Walking" },
     "nextButton": "Next"
   },
   "routeCreateStep2": {
