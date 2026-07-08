@@ -32,8 +32,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   logout: () => {
-    storage.delete('accessToken');
-    storage.delete('refreshToken');
+    storage.remove('accessToken');
+    storage.remove('refreshToken');
     set({ user: null, accessToken: null, refreshToken: null, passType: 'free' });
   },
 
