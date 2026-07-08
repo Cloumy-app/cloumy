@@ -13,11 +13,9 @@
   },
   "login": {
     "subtitle": "Your AI-planned travel route",
-    "kakaoButton": "Continue with Kakao",
     "googleButton": "Continue with Google",
     "devLoginButton": "Developer login",
     "comingSoonTitle": "Coming soon",
-    "kakaoComingSoonBody": "Kakao login is coming soon.",
     "googleComingSoonBody": "Google login is coming soon.",
     "connectFailedTitle": "Connection failed",
     "devProfileHint": "Please run Spring with --spring.profiles.active=dev.",

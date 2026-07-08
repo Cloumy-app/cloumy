@@ -13,11 +13,9 @@
   },
   "login": {
     "subtitle": "AI가 설계하는 나만의 여행 루트",
-    "kakaoButton": "카카오로 시작하기",
     "googleButton": "구글로 시작하기",
     "devLoginButton": "개발자 로그인",
     "comingSoonTitle": "준비 중",
-    "kakaoComingSoonBody": "카카오 로그인은 준비 중이에요.",
     "googleComingSoonBody": "구글 로그인은 준비 중이에요.",
     "connectFailedTitle": "연결 실패",
     "devProfileHint": "Spring을 --spring.profiles.active=dev 로 실행해주세요.",
