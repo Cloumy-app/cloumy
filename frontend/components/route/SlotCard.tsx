@@ -145,6 +145,7 @@ export function SlotCard({
   const [alternatives, setAlternatives] = useState<SlotAlternative[]>([]);
   const [loadingAlts, setLoadingAlts] = useState(false);
   const [showAlts, setShowAlts] = useState(false);
+  const [tipExpanded, setTipExpanded] = useState(false);
 
   const placeName = apiSlot?.placeName ?? slot?.place_name ?? '';
   const tip = apiSlot?.tips ?? slot?.tip ?? null;
@@ -202,15 +203,19 @@ export function SlotCard({
     return (
       <View className="mb-8">
         <TouchableOpacity
-          activeOpacity={onTap ? 0.85 : 1}
-          onPress={onTap}
+          activeOpacity={0.85}
+          onPress={() => setTipExpanded((v) => !v)}
         >
           <View className="flex-row">
-            {/* 좌측: dot + 수직 연결선 */}
+            {/* 좌측: dot(지도 이동 탭 타겟) + 수직 연결선 */}
             <View className="items-center" style={{ width: 32 }}>
-              <View className="w-8 h-8 rounded-full bg-sky-500 border-4 border-slate-50 items-center justify-center shadow-sm z-10">
+              <TouchableOpacity
+                onPress={onTap}
+                activeOpacity={onTap ? 0.7 : 1}
+                className="w-8 h-8 rounded-full bg-sky-500 border-4 border-slate-50 items-center justify-center shadow-sm z-10"
+              >
                 <MapPin size={12} color="white" />
-              </View>
+              </TouchableOpacity>
               {!isLast && <View className="flex-1 w-0.5 bg-sky-100 mt-1" style={{ minHeight: 24 }} />}
             </View>
 
@@ -234,9 +239,12 @@ export function SlotCard({
               </View>
 
               {tip && (
-                <Text className="text-xs text-slate-500 mb-3 leading-relaxed" numberOfLines={2}>
-                  {tip}
-                </Text>
+                <View className="flex-row items-start gap-1 mb-3">
+                  <Text className="flex-1 text-xs text-slate-500 leading-relaxed" numberOfLines={tipExpanded ? undefined : 2}>
+                    {tip}
+                  </Text>
+                  {tipExpanded ? <ChevronUp size={14} color="#94a3b8" /> : <ChevronDown size={14} color="#94a3b8" />}
+                </View>
               )}
 
               <View className="flex-row justify-between items-center pt-3 border-t border-slate-50">
@@ -343,8 +351,8 @@ export function SlotCard({
       )}
 
       <TouchableOpacity
-        activeOpacity={onTap ? 0.75 : 1}
-        onPress={onTap}
+        activeOpacity={0.75}
+        onPress={() => setTipExpanded((v) => !v)}
         style={{
           flexDirection: 'row',
           gap: 12,
@@ -355,11 +363,15 @@ export function SlotCard({
           backgroundColor: isFocused ? '#f0f9ff' : pinned ? 'rgba(240,249,255,0.4)' : '#f8fafc',
         }}
       >
-        {/* 번호 원 */}
+        {/* 번호 원(지도 이동 탭 타겟) */}
         <View className="items-center">
-          <View className={`relative w-10 h-10 rounded-full items-center justify-center z-10 shadow-sm ${
-            pinned ? 'bg-sky-500 shadow-sky-500/30' : 'bg-white border border-slate-200'
-          }`}>
+          <TouchableOpacity
+            onPress={onTap}
+            activeOpacity={onTap ? 0.7 : 1}
+            className={`relative w-10 h-10 rounded-full items-center justify-center z-10 shadow-sm ${
+              pinned ? 'bg-sky-500 shadow-sky-500/30' : 'bg-white border border-slate-200'
+            }`}
+          >
             <Text className={`font-black text-sm ${pinned ? 'text-white' : 'text-slate-500'}`}>
               {index + 1}
             </Text>
@@ -368,7 +380,7 @@ export function SlotCard({
                 <CloudRain size={19} color="#0ea5e9" />
               </View>
             )}
-          </View>
+          </TouchableOpacity>
           {startTime && (
             <Text className="text-[10px] font-bold text-slate-500 mt-2 whitespace-nowrap">{startTime}</Text>
           )}
@@ -418,9 +430,12 @@ export function SlotCard({
           </View>
 
           {tip && (
-            <Text className="text-xs text-slate-500 leading-relaxed mb-1.5" numberOfLines={2}>
-              {tip}
-            </Text>
+            <View className="flex-row items-start gap-1 mb-1.5">
+              <Text className="flex-1 text-xs text-slate-500 leading-relaxed" numberOfLines={tipExpanded ? undefined : 2}>
+                {tip}
+              </Text>
+              {tipExpanded ? <ChevronUp size={14} color="#94a3b8" /> : <ChevronDown size={14} color="#94a3b8" />}
+            </View>
           )}
 
           <View className="flex-row gap-3 mt-1 items-center flex-wrap">

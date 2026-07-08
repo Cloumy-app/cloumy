@@ -39,13 +39,15 @@ export async function openTransitNavigation(
     return;
   }
 
+  // origin을 안 넘기면 Google Maps가 기기 GPS 위치를 "내 위치"로 자동 표시한다(openWalkNavigation과 동일 원리).
+  // destination은 좌표 대신 이름을 넘겨 목적지가 좌표 숫자가 아닌 장소명으로 표시되게 한다.
+  const destinationName = encodeURIComponent(destination.name);
   const googleAppUrl = Platform.select({
-    ios: `comgooglemaps://?saddr=${origin.lat},${origin.lng}&daddr=${destination.lat},${destination.lng}&directionsmode=transit`,
-    android: `google.navigation:q=${destination.lat},${destination.lng}&mode=transit`,
+    ios: `comgooglemaps://?daddr=${destinationName}&directionsmode=transit`,
+    android: `google.navigation:q=${destinationName}&mode=transit`,
   });
   const googleWebUrl =
-    `https://www.google.com/maps/dir/?api=1&origin=${origin.lat},${origin.lng}` +
-    `&destination=${destination.lat},${destination.lng}&travelmode=transit`;
+    `https://www.google.com/maps/dir/?api=1&destination=${destinationName}&travelmode=transit`;
 
   if (googleAppUrl && (await Linking.canOpenURL(googleAppUrl))) {
     await Linking.openURL(googleAppUrl);
