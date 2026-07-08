@@ -8,7 +8,10 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.cloumy"
+      "bundleIdentifier": "com.anonymous.cloumy",
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": ["comgooglemaps", "nmap"]
+      }
     },
     "android": {
       "adaptiveIcon": {
