@@ -110,7 +110,7 @@ export function streamRoute(
 ): () => void {
   const headers = getAuthHeaders();
 
-  const es = new EventSource(`${API_BASE}/v1/routes/generate`, {
+  const es = new EventSource<'route_id' | 'done'>(`${API_BASE}/v1/routes/generate`, {
     method: 'POST',
     headers,
     body: JSON.stringify(req),

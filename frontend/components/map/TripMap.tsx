@@ -1,7 +1,7 @@
 import { useRef, useEffect } from 'react';
 import { View, Text } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import MapView, { Marker, Polyline, type MapViewMethods, type Region } from 'react-native-maps';
+import MapView, { Marker, Polyline, type Region } from 'react-native-maps';
 import type { Accommodation, SlotWithCoords } from '@/types';
 
 const DAY_COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6'];
@@ -17,7 +17,7 @@ interface TripMapProps {
 
 export function TripMap({ slots, accommodations = [], selectedDay, height = 300, focusedSlotId, onSlotPress }: TripMapProps) {
   const { t } = useTranslation();
-  const mapRef = useRef<MapViewMethods>(null);
+  const mapRef = useRef<MapView>(null);
 
   const days = [...new Set(slots.map((s) => s.dayNumber))].sort();
 
