@@ -22,8 +22,8 @@ import java.util.UUID;
 
 // FastAPI 장애 시 폴백 — DB에서 유사 루트를 찾아 AI 스트리밍과 동일한 ndjson 라인 포맷으로 변환한다.
 // (Redis 재확인은 여기서 하지 않음 — AiServiceClient가 이미 같은 캐시 키로 FastAPI 호출 전에 확인했으므로,
-//  accommodations/transportMode 없는 요청은 이 시점에 재조회해도 항상 미스. accommodations/transportMode가
-//  있는 요청은 애초에 캐시를 안 보고 오지만, 그 경우까지 챙기면 복잡도만 늘고 실익이 적어 생략함)
+//  accommodations 없는 요청은 이 시점에 재조회해도 항상 미스. accommodations가 있는 요청은
+//  애초에 캐시를 안 보고 오지만, 그 경우까지 챙기면 복잡도만 늘고 실익이 적어 생략함)
 @Slf4j
 @Service
 @Transactional(readOnly = true)
