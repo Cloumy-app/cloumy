@@ -1,7 +1,6 @@
 import asyncpg
 import pytest
-from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
-from openai import AsyncOpenAI
+from unittest.mock import AsyncMock, MagicMock
 
 from app.services.retrievers import PostgisTagRetriever, PgvectorRetriever
 
