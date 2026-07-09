@@ -84,13 +84,16 @@
   - `saveStreamingLine(UUID routeId, String jsonLine)` 수정 — `"is_fixed": true`인 라인이면 `applyFixedSlotResult(routeId, node)`로 분기, 아니면 기존 `saveStreamingSlot()` 그대로.
   - `applyFixedSlotResult(UUID routeId, JsonNode node)` 신규 — `route_id + day_number + place_id`로 기존 pinned `RouteSlot` 조회 후 `order_index`/`start_time`/`updateTransport(...)` 갱신(INSERT 아님, 기존 `RouteSlot.updateTransport()`/`updateStartTime()`/`updateOrderIndex()` 재사용 — "상세보기 슬롯 재정렬"에서 이미 추가한 메서드들).
 - **`controller/RouteController.java`**: `generate()`에서 `routeSlotService.createFixedSlots(route.getId(), req.fixedSlotsOrEmpty())`를 `createRoute()` 직후·스트리밍 시작 전에 호출. 그 외 스트리밍 라인 처리 흐름은 그대로(분기는 `RouteSlotService.saveStreamingLine()` 내부에서 처리).
-- **`service/AiServiceClient.java`**: `FastApiRequest`에 고정 슬롯 정보 추가 — 숙소 앵커(`AccommodationAnchorDto`)와 동일하게 day_number + place의 lat/lng + `durationMinutes`(방금 `createFixedSlots`가 저장한 값과 동일한 것을 그대로 전달, 재조회 없이 `createFixedSlots`가 반환한 `RouteSlot` 리스트에서 꺼내 씀)를 FastAPI가 바로 쓸 수 있는 형태로 변환해서 전달.
+- **`service/AiServiceClient.java`**: `FastApiRequest`에 고정 슬롯 정보 추가 — 숙소 앵커(`AccommodationAnchorDto`)와 동일하게 day_number + place의 lat/lng + `durationMinutes`(방금 `createFixedSlots`가 저장한 값과 동일한 것을 그대로 전달, 재조회 없이 `createFixedSlots`가 반환한 리스트에서 꺼내 씀 — `RouteSlot` 엔티티엔 좌표 필드가 없으므로 `createFixedSlots`는 `RouteSlot`이 아니라 좌표 포함 내부 record(예: `FixedSlotResult(placeId, dayNumber, lat, lng, durationMinutes)`)를 반환하도록 설계)를 FastAPI가 바로 쓸 수 있는 형태로 변환해서 전달.
+  - **캐시 우회**: `streamRoute()`가 이미 `hasAccommodations`일 때 Redis 캐시 조회·저장을 건너뛰는 것과 동일하게, `fixedSlots`가 비어있지 않으면(`hasFixedSlots`) 캐시를 완전히 우회한다. 그렇지 않으면 고정 슬롯 없이 생성된 옛 캐시가 그대로 나가 유저가 확정한 장소가 결과에서 빠지는 문제가 생긴다.
 
 ### FastAPI (`ai/`)
 
 - **`app/models/schemas.py`**: `RouteGenRequest`에 `fixed_slots: list[FixedSlot] = []` 필드 추가. `FixedSlot(place_id, day_number, lat, lng, duration_minutes)` 신규 모델(장소명 등은 이미 place_id로 DB에 있으니 불필요 — 단, `duration_minutes`는 `_assign_start_times`가 그대로 쓰므로 필수).
 - **`app/services/route_service.py`**:
+  - **캐시 우회**: `stream_route()`의 `has_accommodations` 조건과 동일하게 `has_fixed_slots = bool(request.fixed_slots)`를 추가해 캐시 조회(L175 근처)·저장(L437 근처) 양쪽 조건에 반영.
   - `_build_fixed_slots_by_day(fixed_slots)` 신규 헬퍼 — day_number → 그 날 고정된 슬롯 라인(`{"place_id", "day", "duration_minutes", "is_fixed": true}`) 리스트로 매핑(`_build_accommodation_anchors`와 같은 형태의 순수 함수, 좌표는 `coord_lookup`에도 합쳐 넣어야 TSP/enrich가 찾을 수 있음).
+  - `used_place_ids` 초기화(L320 근처)에 고정 슬롯 place_id를 시딩 — Claude가 후보 제외에도 불구하고 같은 장소를 다시 추천하면 `validate_route_slot`이 중복으로 감지해 교체하도록 이중 방어.
   - day별 프롬프트 생성 구간(`day_candidate_lookup` 빌드하는 부분, L250 근처): 그 day에 이미 고정된 place_id를 후보에서 제외.
   - `slot_cap` 계산 구간(L322 근처): 그 day의 고정 슬롯 개수만큼 차감(`slot_cap - len(fixed_for_day)`, 최소 0).
   - `_finalize_day()`(L324): `reorder_slots()` 호출 전에 그 day의 고정 슬롯 라인을 `day_lines`에 합류. `reorder_slots()`→`enrich_transport()`→`_assign_start_times()`까지 기존 파이프라인을 그대로 통과(고정 슬롯이 없는 day는 기존과 100% 동일 동작 — `duration_minutes`가 이미 채워져 있어 `_assign_start_times`도 별도 처리 불필요). 최종 출력 라인마다 원래 `is_fixed` 플래그를 유지해서 내보냄(AI 슬롯은 필드 자체가 없거나 `false`).
@@ -103,8 +106,9 @@
 | `fixedSlots`에 존재하지 않는/삭제된 `placeId` | 400 `PLACE_NOT_FOUND` (기존 에러코드 재사용) |
 | `dayNumber`가 여행 박수 범위 밖(예: 2박인데 dayNumber=5) | 400 `INVALID_SLOT_ORDER` (기존 에러코드 재사용) |
 | 같은 day에 고정 슬롯이 밀도 상한(`slot_cap`)보다 많음 | 에러 아님 — AI가 채우는 슬롯 수만 0으로 줄이고 고정 슬롯만으로 그 day 구성 |
-| 같은 `placeId`가 `fixedSlots`에 중복 | 400 — 같은 장소를 같은 루트에 두 번 고정할 이유 없음(유저 실수/버그로 간주) |
+| 같은 `placeId`가 `fixedSlots`에 중복 | 400 `INVALID_INPUT`(기존 에러코드 재사용) — 같은 장소를 같은 루트에 두 번 고정할 이유 없음(유저 실수/버그로 간주) |
 | FastAPI가 고정 슬롯 좌표 없이(place 조회 실패 등) 요청받음 | 그 고정 슬롯은 TSP 합류 없이 스킵 + 로그 경고(전체 생성은 계속 진행 — 다른 day/슬롯까지 막을 이유 없음) |
+| `fixedSlots`가 있는 요청이 Redis/FastAPI 캐시를 탐 | 에러는 아니지만 심각한 데이터 누락 버그 — `accommodations`와 동일하게 캐시 조회·저장 둘 다 완전히 우회(Spring `AiServiceClient`, FastAPI `stream_route()` 양쪽) |
 
 ## 검증 방법
 
