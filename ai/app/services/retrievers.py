@@ -41,6 +41,7 @@ class PostgisTagRetriever(BaseRetriever):
                 )
                 AND category_tags && $4::text[]
                 AND is_active = true
+                AND is_curated = true
                 ORDER BY RANDOM()
                 LIMIT 80
                 """,
@@ -60,6 +61,7 @@ class PostgisTagRetriever(BaseRetriever):
                 $3
             )
             AND is_active = true
+            AND is_curated = true
             ORDER BY RANDOM()
             LIMIT 80
             """,
@@ -140,6 +142,7 @@ class PgvectorRetriever(BaseRetriever):
                         $4
                     )
                     AND is_active = true
+                    AND is_curated = true
                     AND embedding IS NOT NULL
                     ORDER BY embedding <=> $1::vector
                     LIMIT 80
