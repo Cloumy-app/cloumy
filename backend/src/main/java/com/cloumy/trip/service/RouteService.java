@@ -4,6 +4,7 @@ import com.cloumy.common.exception.BusinessException;
 import com.cloumy.common.response.ErrorCode;
 import com.cloumy.payment.service.PassValidationService;
 import com.cloumy.trip.dto.AccommodationCreateRequest;
+import com.cloumy.trip.dto.PublicRouteListResponse;
 import com.cloumy.trip.dto.RouteGenRequest;
 import com.cloumy.trip.dto.RouteListResponse;
 import com.cloumy.trip.entity.Route;
@@ -33,7 +34,7 @@ public class RouteService {
                 .map(r -> new RouteListResponse(
                         r.getId(), r.getTitle(), r.getDestination(),
                         r.getStartDate(), r.getEndDate(), r.getNights(),
-                        r.getCreatedAt()
+                        r.getCreatedAt(), r.isPublic()
                 ));
     }
 
@@ -46,7 +47,7 @@ public class RouteService {
         return new RouteListResponse(
                 route.getId(), route.getTitle(), route.getDestination(),
                 route.getStartDate(), route.getEndDate(), route.getNights(),
-                route.getCreatedAt()
+                route.getCreatedAt(), route.isPublic()
         );
     }
 
@@ -95,6 +96,31 @@ public class RouteService {
     }
 
     @Transactional
+    public void updateVisibility(UUID routeId, UUID userId, boolean isPublic) {
+        Route route = routeRepository.findById(routeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
+        if (!route.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.ROUTE_ACCESS_DENIED);
+        }
+        route.updateVisibility(isPublic);
+    }
+
+    // 공유 루트 가져오기 — 소유자 검증 없음(공개 열람이므로), 요청자 본인 루트는 자동 제외
+    public Page<PublicRouteListResponse> getPublicRoutes(String destination, UUID requesterId, Pageable pageable) {
+        return routeRepository.findByDestinationAndIsPublicTrueAndUserIdNot(destination, requesterId, pageable)
+                .map(r -> new PublicRouteListResponse(
+                        r.getId(), r.getTitle(), r.getDestination(), r.getNights(), r.getTags(), r.getSaveCount()
+                ));
+    }
+
+    // fixedSlots를 가져온 원본 루트들의 save_count 증가 — 존재하지 않는 id는 findAllById가
+    // 조용히 걸러줘서 별도 예외 처리 불필요(실패해도 루트 생성 자체는 이미 끝난 뒤라 영향 없음)
+    @Transactional
+    public void incrementSaveCounts(List<UUID> routeIds) {
+        routeRepository.findAllById(routeIds).forEach(Route::incrementSaveCount);
+    }
+
+    @Transactional
     public void deleteRoute(UUID routeId, UUID userId) {
         Route route = routeRepository.findById(routeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
@@ -131,7 +157,7 @@ public class RouteService {
                 .map(r -> new RouteListResponse(
                         r.getId(), r.getTitle(), r.getDestination(),
                         r.getStartDate(), r.getEndDate(), r.getNights(),
-                        r.getCreatedAt()
+                        r.getCreatedAt(), r.isPublic()
                 ))
                 .toList();
     }

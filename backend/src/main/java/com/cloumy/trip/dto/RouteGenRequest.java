@@ -11,6 +11,7 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.UUID;
 
 public record RouteGenRequest(
         @NotBlank String destination,
@@ -24,7 +25,11 @@ public record RouteGenRequest(
         List<@Valid AccommodationCreateRequest> accommodations,
         // 숙박비 제외 현지 활동/식사 예산 — 선택 사항(숙소 선택과 동일 UX, null이면 예산 기능 자체를 건너뜀)
         @Min(1) Integer totalBudget,
-        String language // ko/en/ja/zh — 앱 설정 언어(선택 사항, 챗봇과 동일 패턴)
+        String language, // ko/en/ja/zh — 앱 설정 언어(선택 사항, 챗봇과 동일 패턴)
+        // 사전 고정(pinned) 슬롯 — 콘서트 앵커/공유 루트 가져오기가 공통으로 쓰는 계약(선택 사항)
+        List<@Valid FixedSlotRequest> fixedSlots,
+        // fixedSlots를 가져온 원본 공개 루트 id들 — save_count 증가 용도로만 씀(AI에는 전달 안 함)
+        List<UUID> sourceRouteIds
 ) {
     @AssertTrue(message = "종료일은 시작일 이후여야 합니다")
     public boolean isDateRangeValid() {
@@ -37,5 +42,13 @@ public record RouteGenRequest(
 
     public List<AccommodationCreateRequest> accommodationsOrEmpty() {
         return accommodations != null ? accommodations : List.of();
+    }
+
+    public List<FixedSlotRequest> fixedSlotsOrEmpty() {
+        return fixedSlots != null ? fixedSlots : List.of();
+    }
+
+    public List<UUID> sourceRouteIdsOrEmpty() {
+        return sourceRouteIds != null ? sourceRouteIds : List.of();
     }
 }

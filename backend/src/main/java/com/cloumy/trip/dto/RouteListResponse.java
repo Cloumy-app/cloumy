@@ -11,5 +11,6 @@ public record RouteListResponse(
         LocalDate startDate,
         LocalDate endDate,
         int nights,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        boolean isPublic
 ) {}

@@ -86,6 +86,22 @@ public class RouteSlot {
         this.pinned = !this.pinned;
     }
 
+    // 사전 고정 슬롯(콘서트 앵커/공유 루트 가져오기 공통 기반) — AI 생성 시작 전에 미리
+    // is_pinned=true로 만들어둔다. 생성자가 항상 pinned=false로 시작하므로 builder()로
+    // 만든 뒤 togglePin()으로 뒤집는다(별도 필드/생성자 파라미터 추가보다 변경 범위가 작음).
+    public static RouteSlot createFixed(
+            UUID routeId, UUID placeId, int dayNumber, int tempOrderIndex, Integer durationMinutes) {
+        RouteSlot slot = RouteSlot.builder()
+                .routeId(routeId)
+                .placeId(placeId)
+                .dayNumber(dayNumber)
+                .orderIndex(tempOrderIndex)
+                .durationMinutes(durationMinutes)
+                .build();
+        slot.togglePin();
+        return slot;
+    }
+
     // 챗봇 추천 장소를 기존 슬롯 사이에 삽입할 때, 뒤 슬롯들의 order_index를 미는 데 사용
     public void shiftOrderIndex(int delta) {
         this.orderIndex += delta;

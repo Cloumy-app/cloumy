@@ -22,6 +22,10 @@ public interface RouteRepository extends JpaRepository<Route, UUID> {
     @Query("SELECT COALESCE(MIN(r.displayOrder), 0) FROM Route r WHERE r.userId = :userId")
     Integer findMinDisplayOrder(@Param("userId") UUID userId);
 
+    // 공유 루트 가져오기 — 목적지 일치 + 공개 + 요청자 본인 루트는 자동 제외
+    Page<Route> findByDestinationAndIsPublicTrueAndUserIdNot(
+            String destination, UUID excludeUserId, Pageable pageable);
+
     // 폴백 — FastAPI 장애 시 유사 루트 추천 (destination + 박수±1 + 태그 겹침)
     // tags가 text[]라 JPQL로 && 연산자를 못 써서 native query 필요.
     // String[]를 JDBC 배열로 직접 바인딩하면 Hibernate native query에서 타입 매핑이 불안정해서,

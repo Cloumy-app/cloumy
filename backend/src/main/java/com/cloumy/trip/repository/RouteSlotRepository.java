@@ -16,6 +16,10 @@ public interface RouteSlotRepository extends JpaRepository<RouteSlot, UUID> {
 
     Optional<RouteSlot> findByRouteIdAndDayNumberAndOrderIndex(UUID routeId, int dayNumber, int orderIndex);
 
+    // 사전 고정 슬롯 결과 반영(applyFixedSlotResult)용 — FastAPI가 place_id로 알려주는
+    // 라인을 기존에 만들어둔 pinned 슬롯과 매칭
+    Optional<RouteSlot> findByRouteIdAndDayNumberAndPlaceId(UUID routeId, int dayNumber, UUID placeId);
+
     // start_time 캐스케이드 재계산용 — 해당 day 전체를 order_index 순으로 조회
     List<RouteSlot> findByRouteIdAndDayNumberOrderByOrderIndex(UUID routeId, int dayNumber);
 
