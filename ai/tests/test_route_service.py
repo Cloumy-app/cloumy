@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from langchain_core.documents import Document
 
 import app.services.route_service as route_service
-from app.services.route_service import _cache_key, _is_weather_sensitive, stream_route
+from app.services.route_service import _build_fixed_slots_by_day, _cache_key, _is_weather_sensitive, stream_route
 from app.services.geo_clustering import cluster_candidates
-from app.models.schemas import RouteGenRequest
+from app.models.schemas import FixedSlot, RouteGenRequest
 
 
 def _make_req(**kwargs) -> RouteGenRequest:
@@ -58,6 +58,31 @@ def test_is_weather_sensitive_within_window():
 def test_is_weather_sensitive_beyond_window():
     today = date(2026, 7, 2)
     assert _is_weather_sensitive(today + timedelta(days=10), today=today) is False
+
+
+def test_build_fixed_slots_by_day_empty():
+    assert _build_fixed_slots_by_day([]) == {}
+
+
+def test_build_fixed_slots_by_day_maps_by_day():
+    fixed = [
+        FixedSlot(place_id="a", day_number=1, lat=37.5, lng=127.0, duration_minutes=60),
+        FixedSlot(place_id="b", day_number=2, lat=37.6, lng=127.1, duration_minutes=90),
+    ]
+    by_day = _build_fixed_slots_by_day(fixed)
+    assert set(by_day.keys()) == {1, 2}
+    assert by_day[1] == [{"day": 1, "place_id": "a", "duration_minutes": 60, "is_fixed": True}]
+    assert by_day[2] == [{"day": 2, "place_id": "b", "duration_minutes": 90, "is_fixed": True}]
+
+
+def test_build_fixed_slots_by_day_groups_same_day():
+    fixed = [
+        FixedSlot(place_id="a", day_number=1, lat=37.5, lng=127.0, duration_minutes=60),
+        FixedSlot(place_id="b", day_number=1, lat=37.51, lng=127.01, duration_minutes=45),
+    ]
+    by_day = _build_fixed_slots_by_day(fixed)
+    assert len(by_day[1]) == 2
+    assert {s["place_id"] for s in by_day[1]} == {"a", "b"}
 
 
 @pytest.mark.asyncio
@@ -276,6 +301,109 @@ async def test_stream_route_day_summary_does_not_break_tsp_reorder():
 
     # 슬롯들은 여전히 day별로 정상 TSP 재정렬 대상이 됨 (회귀 없음)
     assert reorder_spy.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_stream_route_fixed_slot_merges_into_day_with_ai_slots():
+    # day1에 고정 슬롯 1개 + AI 슬롯 2개가 섞여도 셋 다 하나의 파이프라인(TSP/이동시간/시작시각)을
+    # 통과해 day1 결과에 함께 포함돼야 한다(사전 고정 슬롯 기반 핵심 시나리오).
+    day1 = (
+        '{"day":1,"order":1,"place_id":"p1","place_name":"A","tip":"","duration_minutes":60,"budget_estimate":5000}\n'
+        '{"day":1,"order":2,"place_id":"p2","place_name":"B","tip":"","duration_minutes":60,"budget_estimate":5000}\n'
+    )
+    day2 = (
+        '{"day":2,"order":1,"place_id":"p3","place_name":"C","tip":"","duration_minutes":60,"budget_estimate":5000}\n'
+        '{"day":2,"order":2,"place_id":"p4","place_name":"D","tip":"","duration_minutes":60,"budget_estimate":5000}\n'
+    )
+    fake_stream = _FakeAnthropicStream([day1, day2])
+
+    mock_pgvector = MagicMock()
+    mock_pgvector.return_value.ainvoke = AsyncMock(return_value=_candidates())
+
+    fixed_slots = [FixedSlot(place_id="fixed-1", day_number=1, lat=35.005, lng=129.005, duration_minutes=45)]
+
+    with patch.object(route_service, "PgvectorRetriever", mock_pgvector), \
+         patch.object(route_service._anthropic.messages, "stream", return_value=fake_stream):
+        results = []
+        async for line in stream_route(_make_req(fixed_slots=fixed_slots), db=MagicMock(), redis=None):
+            results.append(line)
+
+    parsed = [json.loads(r) for r in results]
+    day1_slots = [s for s in parsed if s["day"] == 1]
+    day2_slots = [s for s in parsed if s["day"] == 2]
+
+    assert len(day1_slots) == 3  # p1, p2, fixed-1
+    assert len(day2_slots) == 2
+
+    fixed_result = next(s for s in day1_slots if s["place_id"] == "fixed-1")
+    assert fixed_result["is_fixed"] is True
+    assert fixed_result["start_time"]  # _assign_start_times가 채움
+    assert {s["order"] for s in day1_slots} == {1, 2, 3}  # order 재할당(TSP) 완료
+
+    ai_results = [s for s in day1_slots if s["place_id"] != "fixed-1"]
+    assert all(not s.get("is_fixed") for s in ai_results)
+
+
+@pytest.mark.asyncio
+async def test_stream_route_fixed_slots_exhaust_cap_still_finalizes_day():
+    # day1의 고정 슬롯 수가 slot_cap 이상이면 AI 슬롯 없이 고정 슬롯만으로 그 day가
+    # 구성돼야 한다 — day 경계 전환이 한 번도 안 일어나(_ingest 미호출) 그냥 두면
+    # _finalize_day가 day1로 호출되지 않는 엣지케이스 회귀 방지.
+    day1_attempts = (
+        '{"day":1,"order":1,"place_id":"p1","place_name":"A","tip":"","duration_minutes":60,"budget_estimate":5000}\n'
+        '{"day":1,"order":2,"place_id":"p2","place_name":"B","tip":"","duration_minutes":60,"budget_estimate":5000}\n'
+    )
+    day2 = (
+        '{"day":2,"order":1,"place_id":"p3","place_name":"C","tip":"","duration_minutes":60,"budget_estimate":5000}\n'
+    )
+    fake_stream = _FakeAnthropicStream([day1_attempts, day2])
+
+    mock_pgvector = MagicMock()
+    mock_pgvector.return_value.ainvoke = AsyncMock(return_value=_candidates())
+
+    # relaxed density → slot_cap=4, day1에 고정 슬롯 4개 → effective_cap=0
+    fixed_slots = [
+        FixedSlot(place_id=f"fixed-{i}", day_number=1, lat=35.0 + i * 0.001, lng=129.0 + i * 0.001,
+                   duration_minutes=30)
+        for i in range(4)
+    ]
+
+    with patch.object(route_service, "PgvectorRetriever", mock_pgvector), \
+         patch.object(route_service._anthropic.messages, "stream", return_value=fake_stream):
+        results = []
+        async for line in stream_route(
+                _make_req(nights=1, density="relaxed", fixed_slots=fixed_slots), db=MagicMock(), redis=None):
+            results.append(line)
+
+    parsed = [json.loads(r) for r in results]
+    day1_slots = [s for s in parsed if s["day"] == 1]
+    day2_slots = [s for s in parsed if s["day"] == 2]
+
+    assert {s["place_id"] for s in day1_slots} == {f"fixed-{i}" for i in range(4)}
+    assert all(s["is_fixed"] is True for s in day1_slots)
+    assert len(day2_slots) == 1  # day2는 고정 슬롯이 없으니 기존과 동일하게 AI 슬롯만
+
+
+@pytest.mark.asyncio
+async def test_stream_route_fixed_slots_bypass_cache():
+    # accommodations와 동일하게, fixed_slots가 있으면 캐시 조회·저장을 완전히 건너뛴다.
+    fake_stream = _FakeAnthropicStream([])
+    mock_pgvector = MagicMock()
+    mock_pgvector.return_value.ainvoke = AsyncMock(return_value=_candidates())
+
+    redis_mock = AsyncMock()
+    redis_mock.get = AsyncMock(return_value=None)
+    redis_mock.setex = AsyncMock()
+
+    fixed_slots = [FixedSlot(place_id="fixed-1", day_number=1, lat=35.0, lng=129.0, duration_minutes=30)]
+
+    with patch.object(route_service, "PgvectorRetriever", mock_pgvector), \
+         patch.object(route_service._anthropic.messages, "stream", return_value=fake_stream):
+        async for _ in stream_route(_make_req(fixed_slots=fixed_slots), db=MagicMock(), redis=redis_mock):
+            pass
+
+    redis_mock.get.assert_not_called()
+    redis_mock.setex.assert_not_called()
 
 
 @pytest.mark.asyncio
