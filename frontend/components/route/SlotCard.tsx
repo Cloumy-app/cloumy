@@ -45,9 +45,9 @@ function TransportChip({
   const hops = parseTransitDetail(detail);
 
   const chip = (
-    <View className={`flex-row items-center gap-2 self-start max-w-full ${theme.bg} rounded-full px-3.5 py-2`}>
+    <View className={`flex-row items-center gap-2 self-start shrink min-w-0 ${theme.bg} rounded-full px-3.5 py-2`}>
       <Icon size={16} color={theme.dot} />
-      <Text className={`text-sm font-bold shrink ${theme.text}`} numberOfLines={1}>
+      <Text className={`text-sm font-bold shrink min-w-0 ${theme.text}`} numberOfLines={1}>
         {summary ?? t(`slotCard.transportModes.${theme.labelKey}`)}
         {minutes != null && (
           <Text className="font-semibold text-slate-400"> · {t('slotCard.minutesSuffix', { minutes })}</Text>
@@ -66,11 +66,19 @@ function TransportChip({
     <View className="my-2 self-start max-w-[85%]" style={{ marginLeft }}>
       <View className="flex-row items-center gap-2">
         {hops ? (
-          <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.7}>
+          <TouchableOpacity
+            onPress={() => setExpanded((v) => !v)}
+            activeOpacity={0.7}
+            style={{ flexShrink: 1, minWidth: 0 }}
+          >
             {chip}
           </TouchableOpacity>
         ) : chipOpensNavigation ? (
-          <TouchableOpacity onPress={onNavigate} activeOpacity={0.7}>
+          <TouchableOpacity
+            onPress={onNavigate}
+            activeOpacity={0.7}
+            style={{ flexShrink: 1, minWidth: 0 }}
+          >
             {chip}
           </TouchableOpacity>
         ) : (
@@ -525,6 +533,7 @@ export function SlotCard({
 // SlotCard는 팁 펼침·이동수단 chip 유무에 따라 높이가 제각각이라(ReorderableRouteList의
 // 고정 ROW_HEIGHT 나눗셈과 달리) 각 카드 높이의 절반을 임계값으로 넘었는지로 판정한다.
 function resolveTargetIndex(from: number, dy: number, heights: number[]): number {
+  'worklet';
   let acc = 0;
   if (dy > 0) {
     let i = from;
