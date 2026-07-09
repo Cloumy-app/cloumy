@@ -105,7 +105,10 @@ AI 루트 생성 (스트리밍 응답)
   "transportMode": "transit",
   "accommodationArea": "해운대",
   "anchorPlaces": ["place-uuid-1"],
-  "includeHiddenGems": true
+  "includeHiddenGems": true,
+  "fixedSlots": [
+    { "placeId": "place-uuid-2", "dayNumber": 1 }
+  ]
 }
 
 // 응답 200 (스트리밍 JSON, Day별 순차 반환)
