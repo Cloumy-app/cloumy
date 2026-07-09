@@ -42,23 +42,6 @@
     "groupTypes": { "solo": "独自", "couple": "情侣", "friends": "朋友", "family": "家人" },
     "nextButton": "下一步"
   },
-  "routeCreateImport": {
-    "badge": "可选",
-    "headerTitle": "要从共享路线导入吗？",
-    "hint": "可以从其他旅行者公开的路线中挑选喜欢的地点，提前加入你的行程",
-    "emptyState": "该目的地暂无共享路线",
-    "savedCount": "{{count}}人已导入",
-    "selectAll": "全选",
-    "deselectAll": "取消全选",
-    "dayLabel": "第{{day}}天",
-    "dayChip": "第{{day}}天",
-    "alreadyImported": "已导入",
-    "removeButton": "移除",
-    "importSelected": "导入{{count}}处",
-    "importedCount": "已导入{{count}}处",
-    "nextButton": "下一步",
-    "skipButton": "跳过"
-  },
   "routeCreateStep2": {
     "headerTitle": "想要什么样的旅行？",
     "themeLabel": "旅行主题",
@@ -146,9 +129,7 @@
     "editButton": "编辑",
     "doneEditButton": "完成修改",
     "reorderFailedTitle": "排序失败",
-    "reorderFailedBody": "未能保存新的行程顺序，请重试。",
-    "shareFailedTitle": "共享设置失败",
-    "shareFailedBody": "未能更改共享状态，请重试。"
+    "reorderFailedBody": "未能保存新的行程顺序，请重试。"
   },
   "slotCard": {
     "transportModes": { "walk": "步行", "taxi": "自驾", "transit": "公共交通", "default": "移动" },

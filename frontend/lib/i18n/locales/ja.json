@@ -42,23 +42,6 @@
     "groupTypes": { "solo": "ひとり", "couple": "カップル", "friends": "友達", "family": "家族" },
     "nextButton": "次へ"
   },
-  "routeCreateImport": {
-    "badge": "任意",
-    "headerTitle": "共有ルートから取り込みますか？",
-    "hint": "他の旅行者が公開したルートから気に入った場所だけを選んで、自分のルートに先に追加できます",
-    "emptyState": "この目的地にはまだ共有ルートがありません",
-    "savedCount": "{{count}}人が取り込み済み",
-    "selectAll": "すべて選択",
-    "deselectAll": "選択解除",
-    "dayLabel": "{{day}}日目",
-    "dayChip": "{{day}}日目",
-    "alreadyImported": "取り込み済み",
-    "removeButton": "削除",
-    "importSelected": "{{count}}件を取り込む",
-    "importedCount": "取り込んだ場所 {{count}}件",
-    "nextButton": "次へ",
-    "skipButton": "スキップ"
-  },
   "routeCreateStep2": {
     "headerTitle": "どんな旅行にしますか？",
     "themeLabel": "旅行テーマ",
@@ -146,9 +129,7 @@
     "editButton": "編集する",
     "doneEditButton": "変更完了",
     "reorderFailedTitle": "並び替えに失敗しました",
-    "reorderFailedBody": "予定の順序を保存できませんでした。もう一度お試しください。",
-    "shareFailedTitle": "共有設定に失敗しました",
-    "shareFailedBody": "共有状態を変更できませんでした。もう一度お試しください。"
+    "reorderFailedBody": "予定の順序を保存できませんでした。もう一度お試しください。"
   },
   "slotCard": {
     "transportModes": { "walk": "徒歩", "taxi": "車", "transit": "公共交通機関", "default": "移動" },
