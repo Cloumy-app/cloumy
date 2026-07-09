@@ -192,6 +192,23 @@ public class RouteSlotService {
 
     public List<SlotResponse> getSlots(UUID routeId, UUID userId) {
         verifyOwner(routeId, userId);
+        return listSlots(routeId);
+    }
+
+    // 공유 루트 가져오기 — 소유자 전용 verifyOwner 대신 route.isPublic()만 확인한다.
+    // 기존 getSlots()에 isPublic || owner 조건을 끼워 넣지 않고 아예 메서드를 분리한 이유:
+    // 나중에 조건을 잘못 바꾸면 사생활 루트가 새어나갈 위험이 있어, 코드 경로 자체를 나누는
+    // 쪽이 더 안전하다(스펙의 접근 제어 원칙).
+    public List<SlotResponse> getPublicSlots(UUID routeId) {
+        Route route = routeRepository.findById(routeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
+        if (!route.isPublic()) {
+            throw new BusinessException(ErrorCode.ROUTE_ACCESS_DENIED);
+        }
+        return listSlots(routeId);
+    }
+
+    private List<SlotResponse> listSlots(UUID routeId) {
         return routeSlotRepository.findSlotsByRouteId(routeId)
                 .stream()
                 .map(SlotResponse::from)

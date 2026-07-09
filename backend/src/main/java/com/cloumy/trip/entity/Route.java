@@ -90,4 +90,12 @@ public class Route extends BaseEntity {
     public void updateDisplayOrder(int displayOrder) {
         this.displayOrder = displayOrder;
     }
+
+    public void updateVisibility(boolean isPublic) {
+        this.isPublic = isPublic;
+    }
+
+    public void incrementSaveCount() {
+        this.saveCount += 1;
+    }
 }

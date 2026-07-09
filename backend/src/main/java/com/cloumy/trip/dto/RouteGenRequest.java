@@ -11,6 +11,7 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.UUID;
 
 public record RouteGenRequest(
         @NotBlank String destination,
@@ -26,7 +27,10 @@ public record RouteGenRequest(
         @Min(1) Integer totalBudget,
         String language, // ko/en/ja/zh — 앱 설정 언어(선택 사항, 챗봇과 동일 패턴)
         // 생성 전 이미 확정된 장소 — day_number + placeId. 사전 고정 슬롯 기반(공유 루트 가져오기/콘서트 앵커가 공통으로 사용)
-        List<@Valid FixedSlotRequest> fixedSlots
+        List<@Valid FixedSlotRequest> fixedSlots,
+        // 공유 루트 가져오기 — fixedSlots를 가져온 원본 루트 id 목록. AI 파이프라인엔 전달 안 하고
+        // Spring 레이어에서 save_count 증가 용도로만 소비
+        List<UUID> sourceRouteIds
 ) {
     @AssertTrue(message = "종료일은 시작일 이후여야 합니다")
     public boolean isDateRangeValid() {
@@ -43,5 +47,9 @@ public record RouteGenRequest(
 
     public List<FixedSlotRequest> fixedSlotsOrEmpty() {
         return fixedSlots != null ? fixedSlots : List.of();
+    }
+
+    public List<UUID> sourceRouteIdsOrEmpty() {
+        return sourceRouteIds != null ? sourceRouteIds : List.of();
     }
 }
