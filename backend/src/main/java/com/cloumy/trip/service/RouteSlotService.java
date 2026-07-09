@@ -2,6 +2,7 @@ package com.cloumy.trip.service;
 
 import com.cloumy.common.exception.BusinessException;
 import com.cloumy.common.response.ErrorCode;
+import com.cloumy.trip.dto.FixedSlotRequest;
 import com.cloumy.trip.dto.PlaceProjection;
 import com.cloumy.trip.dto.ReplaceSlotRequest;
 import com.cloumy.trip.dto.SlotAlternativeResponse;
@@ -57,9 +58,44 @@ public class RouteSlotService {
         JsonNode node = objectMapper.readTree(jsonLine);
         if ("day_summary".equals(node.path("type").asText(null))) {
             routeDaySummaryService.upsertFromStream(routeId, node);
+        } else if (node.path("is_fixed").asBoolean(false)) {
+            applyFixedSlotResult(routeId, node);
         } else {
             saveStreamingSlot(routeId, jsonLine);
         }
+    }
+
+    // 사전 고정 슬롯 기반 — FastAPI가 "is_fixed": true로 흘려보낸 라인은 INSERT가 아니라
+    // createFixedSlots()가 이미 저장해둔 pinned 슬롯의 최종 순서/이동정보를 UPDATE한다.
+    private void applyFixedSlotResult(UUID routeId, JsonNode node) {
+        String placeIdStr = node.path("place_id").asText(null);
+        if (placeIdStr == null || placeIdStr.isBlank()) {
+            return;
+        }
+        int dayNumber = node.path("day").asInt(1);
+
+        Optional<RouteSlot> slotOpt = routeSlotRepository
+                .findByRouteIdAndDayNumberAndPlaceIdAndPinnedTrue(routeId, dayNumber, UUID.fromString(placeIdStr));
+        if (slotOpt.isEmpty()) {
+            log.warn("고정 슬롯 결과 적용 실패 — 대상 없음: routeId={}, day={}, placeId={}",
+                    routeId, dayNumber, placeIdStr);
+            return;
+        }
+        RouteSlot slot = slotOpt.get();
+        slot.updateOrderIndex(node.path("order").asInt(1) - 1); // AI 1-indexed → DB 0-indexed
+
+        String startTimeStr = node.path("start_time").asText(null);
+        if (startTimeStr != null) {
+            slot.updateStartTime(LocalTime.parse(startTimeStr));
+        }
+
+        Integer transportMinutes = node.has("transport_minutes")
+                ? node.path("transport_minutes").asInt() : null;
+        slot.updateTransport(
+                node.path("transport_to_next").asText(null),
+                transportMinutes,
+                node.path("transit_summary").asText(null),
+                jsonArrayFieldToString(node, "transit_detail"));
     }
 
     // 스트리밍 중 AI ndjson 한 줄을 파싱해 route_slots에 저장
@@ -114,6 +150,44 @@ public class RouteSlotService {
     private static String jsonArrayFieldToString(JsonNode node, String field) {
         JsonNode value = node.path(field);
         return value.isMissingNode() || value.isNull() ? null : value.toString();
+    }
+
+    // 사전 고정 슬롯 기반 — FastAPI가 좌표를 재조회 없이 바로 쓸 수 있도록 place 좌표까지 포함해 반환.
+    public record FixedSlotResult(UUID placeId, int dayNumber, double lat, double lng, Integer durationMinutes) {}
+
+    // 생성 요청에 실려온 확정 장소를 AI 스트리밍 시작 전에 pinned=true route_slots로 즉시 저장한다.
+    // order_index는 day별 실제 인덱스와 절대 안 겹치는 임시값 — 실제 값은 FastAPI가 그 day를
+    // 마무리하는 시점에 TSP로 재정렬한 결과가 스트리밍으로 내려오면 applyFixedSlotResult()가 덮어쓴다.
+    @Transactional
+    public List<FixedSlotResult> createFixedSlots(UUID routeId, int nights, List<FixedSlotRequest> fixedSlots) {
+        if (fixedSlots.isEmpty()) {
+            return List.of();
+        }
+
+        Set<UUID> seenPlaceIds = new HashSet<>();
+        List<FixedSlotResult> results = new ArrayList<>();
+        int tempOrderIndex = 100_000; // reorderSlots의 10_000 오프셋 관례보다 훨씬 큰 값 — 실제 인덱스와 절대 안 겹침
+
+        for (FixedSlotRequest fs : fixedSlots) {
+            if (fs.dayNumber() < 1 || fs.dayNumber() > nights + 1) {
+                throw new BusinessException(ErrorCode.INVALID_SLOT_ORDER);
+            }
+            if (!seenPlaceIds.add(fs.placeId())) {
+                throw new BusinessException(ErrorCode.INVALID_INPUT, "같은 장소를 중복 고정할 수 없습니다");
+            }
+            PlaceProjection place = placeRepository.findPlaceDetailById(fs.placeId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.PLACE_NOT_FOUND));
+
+            // duration_minutes가 비면 _assign_start_times()가 체류시간을 0분으로 계산해
+            // 뒷 슬롯들의 시작 시각이 전부 당겨진다 — insertSlotAfter()와 동일하게 평균 체류시간을 채우되,
+            // place에 값이 없는 경우까지 대비해 최소 기본값(60분)으로 폴백한다.
+            Integer duration = place.getAvgDurationMinutes() != null ? place.getAvgDurationMinutes() : 60;
+
+            RouteSlot slot = RouteSlot.createFixed(routeId, fs.placeId(), fs.dayNumber(), tempOrderIndex++, duration);
+            routeSlotRepository.save(slot);
+            results.add(new FixedSlotResult(fs.placeId(), fs.dayNumber(), place.getLat(), place.getLng(), duration));
+        }
+        return results;
     }
 
     public List<SlotResponse> getSlots(UUID routeId, UUID userId) {

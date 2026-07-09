@@ -108,6 +108,11 @@ public class RouteController {
         // 패스 검증 + Route 엔티티 저장 (스트리밍 전 — 실패 시 SSE 대신 HTTP 에러 반환)
         Route route = routeService.createRoute(req, userId);
 
+        // 사전 고정 슬롯 기반 — AI 스트리밍 시작 전 확정 장소를 pinned=true로 즉시 저장
+        // (역시 스트리밍 전이라 검증 실패 시 SSE 대신 HTTP 에러로 반환됨)
+        List<RouteSlotService.FixedSlotResult> fixedSlots =
+                routeSlotService.createFixedSlots(route.getId(), req.nights(), req.fixedSlotsOrEmpty());
+
         SseEmitter emitter = new SseEmitter(120_000L);
 
         executor.execute(() -> {
@@ -117,6 +122,7 @@ public class RouteController {
 
                 aiServiceClient.streamRoute(
                         req,
+                        fixedSlots,
                         line -> {
                             try {
                                 emitter.send(SseEmitter.event().data(line));
