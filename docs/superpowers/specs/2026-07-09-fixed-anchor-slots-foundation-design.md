@@ -42,24 +42,32 @@
 4. FastAPI stream_route()
    → day별 클러스터링/프롬프트 생성 시, 그 day에 이미 고정된 place_id를
      candidate_lookup에서 제외 + slot_cap에서 고정 개수만큼 차감
-   → _finalize_day()의 reorder_slots() 호출 시, AI가 만든 좌표 리스트에
-     고정 슬롯 좌표를 합류시켜 TSP가 함께 최적 경로를 계산
-   → 고정 슬롯 자체는 개별 스트리밍 라인으로 다시 내보내지 않음(이미 DB에 있음).
-     대신 day 완료 시점에 그 day의 "최종 순서"(고정 + AI 슬롯 전체를 아우르는
-     place_id 배열)를 day_summary와 같은 자리에 별도 라인(type: "day_order")으로
-     한 번 내보낸다 — Spring이 이걸로 order_index를 최종 확정하는 데 씀
+   → _finalize_day(day_lines, day_number)가 그 day의 고정 슬롯 라인
+     (place_id만 있는 최소 dict, "is_fixed": true)을 day_lines에 합류시킨 뒤
+     reorder_slots() → enrich_transport() → _assign_start_times()까지
+     기존 파이프라인 전체를 "고정 + AI 슬롯이 섞인 하나의 리스트"로 그대로 통과시킴
+     → 고정 슬롯 앞뒤의 이동시간(transport_to_next)도 정확히 계산됨
+     (별도 "순서만 알려주는 신호"를 만들지 않는 이유: 이동수단 계산은 반드시
+     "그 자리에 낀 상태"로 이웃과 함께 계산돼야 하고, 계산 후 결과를 다시
+     솎아내는 것보다 처음부터 하나의 파이프라인으로 흘리는 게 더 단순하고 안전함)
+   → 최종적으로 그 day의 모든 슬롯(고정 포함)이 각자 "is_fixed" 플래그를 단 채
+     최종 순서·이동정보·시작시각이 채워진 상태로 스트리밍 라인으로 내보내짐
 
-5. Spring 쪽:
-   - saveStreamingLine()이 개별 슬롯을 저장할 때는 order_index를 고정 슬롯과
-     충돌하지 않는 임시 값(day별로 매우 큰 오프셋)으로 잠정 배정
-   - "day_order" 라인을 받으면, 그 day의 전체 슬롯(고정 + 방금 스트리밍된 것)을
-     이 배열 순서대로 최종 order_index로 확정 — "상세보기 슬롯 재정렬"에서 만든
-     `RouteSlotService.reorderSlots()`의 2단계 안전 갱신(유니크 제약 회피용 임시
-     오프셋 → 최종 인덱스, 슬롯별 개별 flush)을 그대로 재사용
-   - 이후 recomputeStartTimesForDay()로 시작 시각 재계산(기존 로직 재사용)
+5. Spring 쪽 saveStreamingLine()이 라인별로 분기:
+   - "is_fixed": true인 라인 → INSERT 아님, applyFixedSlotResult()(신규)로
+     기존 pinned 슬롯(route_id+day_number+place_id로 조회)의 order_index/
+     start_time/transport_to_next/transport_minutes/transit_summary/
+     transit_detail만 갱신(UPDATE) — pinned 여부·id는 그대로 유지
+   - 그 외(일반 AI 슬롯) → 기존 saveStreamingSlot() 그대로(INSERT)
+   - 두 경로 모두 order_index는 라인에 실려오는 최종 순서를 그대로 씀
+     (FastAPI가 이미 TSP로 확정한 순서라 Spring에서 별도 재정렬 불필요 —
+      "상세보기 재정렬" 때처럼 사후에 순서를 바꾸는 상황이 아니라 최초 생성
+      시점이라 유니크 제약 충돌 걱정 없이 순서대로 INSERT/UPDATE하면 끝)
 ```
 
 **왜 TSP 쪽 변경이 없는가**: `tsp_service.py`의 `_tsp_order(coords, anchor=...)`는 이미 "그 날 방문해야 할 좌표 전체"를 받아 순회 경로를 최적화하는 구조다. 고정 슬롯은 "반드시 방문해야 할 좌표 하나"일 뿐이므로, `reorder_slots()` 호출 시점에 AI가 만든 좌표 리스트에 그냥 합류시키면 TSP가 자연스럽게 포함시킨다. 숙소 앵커처럼 "출발=도착점 고정"이라는 특수 취급이 필요 없다 — 그건 완전히 다른 제약(depot)이라 그대로 유지.
+
+**왜 "day_order 신호" 방식을 버렸는가** (설계 중 발견한 문제): 처음엔 고정 슬롯을 TSP 계산에만 참여시키고 스트리밍 출력에서는 빼려고 했는데, 그러면 `enrich_transport()`가 고정 슬롯의 존재를 모른 채 그 앞뒤 슬롯끼리 이동시간을 계산해버려 — 실제로는 A→고정슬롯→B인데 A→B로 잘못 계산됨. 고정 슬롯도 이동수단 계산 파이프라인에 실제로 포함시켜야 앞뒤 구간이 다 정확해지므로, "빼고 나중에 순서만 알려주기"가 아니라 "처음부터 같이 흘리고 저장 시점에 INSERT/UPDATE만 분기"하는 쪽으로 바꿨다.
 
 ## 파일별 변경 사항
 
@@ -69,9 +77,10 @@
 - **`dto/FixedSlotRequest.java`** (신규): `record FixedSlotRequest(@NotNull UUID placeId, @NotNull @Min(1) Integer dayNumber)`.
 - **`entity/RouteSlot.java`**: 고정 슬롯 생성 경로만 별도로 `pinned=true`를 세팅할 수 있는 정적 팩토리 `RouteSlot.createFixed(...)` 추가(기존 `builder()`는 스트리밍 저장용으로 그대로 둠, 신규 팩토리로 관심사 분리. 기존 생성자는 항상 `pinned=false`로 시작해 이 팩토리가 없으면 고정 슬롯을 만들 수 없음).
 - **`service/RouteSlotService.java`**:
-  - `createFixedSlots(UUID routeId, List<FixedSlotRequest> fixedSlots)` 신규 — `placeId` 존재 검증(`PlaceRepository`) 후 `RouteSlot.createFixed(...)` 형태로 저장(임시 order_index는 day별로 겹치지 않는 큰 오프셋). `dayNumber`가 여행 박수(`req.nights()+1`) 범위를 벗어나면 `BusinessException(ErrorCode.INVALID_SLOT_ORDER)`(기존 코드 재사용 — 상세보기 재정렬 때 추가한 것과 같은 검증 성격).
-  - `applyFinalDayOrder(UUID routeId, int dayNumber, List<UUID> placeIdsInOrder)` 신규 — "상세보기 슬롯 재정렬"에서 만든 `reorderSlots()`의 2단계 안전 갱신(임시 오프셋 → 최종 인덱스, 슬롯별 개별 flush) 로직을 `place_id` 기준으로 조회해 재사용할 수 있도록, 그 두 메서드가 공통으로 쓰는 `private void applyOrderSafely(List<RouteSlot> targets, List<?> orderedKeys, Function<RouteSlot,?> keyFn)` 형태로 추출 — 기존 `reorderSlots()`(slotId 기준)와 이번 케이스(placeId 기준, 같은 day에 같은 place가 중복될 일은 없음이 보장돼 있어 안전)가 같은 헬퍼를 씀. 이후 `recomputeStartTimesForDay()` 호출까지 동일.
-- **`controller/RouteController.java`**: `generate()`에서 `routeSlotService.createFixedSlots(route.getId(), req.fixedSlotsOrEmpty())`를 `createRoute()` 직후·스트리밍 시작 전에 호출. 스트리밍 라인 처리 분기(`saveStreamingLine()` 호출부)에 `type: "day_order"` 라인이 오면 `routeSlotService.applyFinalDayOrder(routeId, dayNumber, placeIdsInOrder)`를 호출하는 분기 추가.
+  - `createFixedSlots(UUID routeId, List<FixedSlotRequest> fixedSlots)` 신규 — `placeId` 존재 검증(`PlaceRepository`) 후 `RouteSlot.createFixed(...)` 형태로 저장(order_index는 day별로 겹치지 않는 큰 임시값 — 실제 값은 곧 `applyFixedSlotResult()`가 덮어씀). `dayNumber`가 여행 박수(`req.nights()+1`) 범위를 벗어나면 `BusinessException(ErrorCode.INVALID_SLOT_ORDER)`(기존 코드 재사용 — 상세보기 재정렬 때 추가한 것과 같은 검증 성격).
+  - `saveStreamingLine(UUID routeId, String jsonLine)` 수정 — `"is_fixed": true`인 라인이면 `applyFixedSlotResult(routeId, node)`로 분기, 아니면 기존 `saveStreamingSlot()` 그대로.
+  - `applyFixedSlotResult(UUID routeId, JsonNode node)` 신규 — `route_id + day_number + place_id`로 기존 pinned `RouteSlot` 조회 후 `order_index`/`start_time`/`updateTransport(...)` 갱신(INSERT 아님, 기존 `RouteSlot.updateTransport()`/`updateStartTime()`/`updateOrderIndex()` 재사용 — "상세보기 슬롯 재정렬"에서 이미 추가한 메서드들).
+- **`controller/RouteController.java`**: `generate()`에서 `routeSlotService.createFixedSlots(route.getId(), req.fixedSlotsOrEmpty())`를 `createRoute()` 직후·스트리밍 시작 전에 호출. 그 외 스트리밍 라인 처리 흐름은 그대로(분기는 `RouteSlotService.saveStreamingLine()` 내부에서 처리).
 - **`service/AiServiceClient.java`**: `FastApiRequest`에 고정 슬롯 정보 추가 — 숙소 앵커(`AccommodationAnchorDto`)와 동일하게 day_number + place의 lat/lng을 FastAPI가 바로 쓸 수 있는 형태로 변환해서 전달(place 좌표 조회는 `PlaceRepository` 재사용).
 
 ### FastAPI (`ai/`)
@@ -81,7 +90,7 @@
   - `_build_fixed_slots_by_day(fixed_slots)` 신규 헬퍼 — day_number → 그 날 고정된 place_id 집합 + 좌표 리스트로 매핑(`_build_accommodation_anchors`와 같은 형태의 순수 함수).
   - day별 프롬프트 생성 구간(`day_candidate_lookup` 빌드하는 부분, L250 근처): 그 day에 이미 고정된 place_id를 후보에서 제외.
   - `slot_cap` 계산 구간(L322 근처): 그 day의 고정 슬롯 개수만큼 차감(`slot_cap - len(fixed_for_day)`, 최소 0).
-  - `_finalize_day()`(L324): `reorder_slots()` 호출 전에 그 day의 고정 슬롯 좌표를 AI가 만든 좌표 리스트에 합류. 재정렬된 최종 순서를 `{"type": "day_order", "day": N, "place_ids": [...]}` 라인으로 day_summary와 같은 자리에서 한 번 내보내도록 반환값에 추가(고정 슬롯이 없는 day는 기존과 동일하게 이 라인을 생략 — Spring 쪽 order_index는 이미 스트리밍 순서대로 맞게 저장되므로 불필요한 재정렬 호출 안 함).
+  - `_finalize_day()`(L324): `reorder_slots()` 호출 전에 그 day의 고정 슬롯을 최소 라인(`{"place_id": ..., "day": N, "is_fixed": true}`)으로 만들어 `day_lines`에 합류. `reorder_slots()`→`enrich_transport()`→`_assign_start_times()`까지 기존 파이프라인을 그대로 통과(고정 슬롯이 없는 day는 기존과 100% 동일 동작). 최종 출력 라인마다 원래 `is_fixed` 플래그를 유지해서 내보냄(AI 슬롯은 필드 자체가 없거나 `false`).
 - **`tests/test_route_service.py`**: `_build_fixed_slots_by_day` 순수 함수 단위 테스트 추가(day 매핑, 빈 리스트 케이스). day별 슬롯 생성 로직에 고정 슬롯이 있을 때 후보 제외/개수 차감이 되는지는 통합 테스트 성격이라 기존 테스트 인프라 확인 후 스코프 결정.
 
 ## 에러 처리
