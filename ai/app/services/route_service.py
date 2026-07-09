@@ -9,7 +9,7 @@ from openai import AsyncOpenAI
 
 from app.config.city_centers import CITY_CENTERS
 from app.config.settings import settings
-from app.models.schemas import AccommodationAnchor, RouteGenRequest
+from app.models.schemas import AccommodationAnchor, FixedSlot, RouteGenRequest
 from app.services.geo_clustering import cluster_candidates, cluster_label
 from app.services.place_validator import validate_day_summary, validate_route_slot
 from app.services.retrievers import PostgisTagRetriever, PgvectorRetriever
@@ -161,18 +161,35 @@ def _build_accommodation_anchors(
     return anchors
 
 
+def _build_fixed_slots_by_day(fixed_slots: list[FixedSlot]) -> dict[int, list[dict]]:
+    """day_number → 그 날 고정된 슬롯 라인(dict) 리스트. TSP(reorder_slots)/
+    enrich_transport/_assign_start_times 파이프라인에 AI 슬롯과 함께 흘려보낼
+    최소 형태 — place_name 등은 이미 place_id로 DB에 있어 프론트/Spring이 채운다.
+    is_fixed=True로 표시해 Spring이 INSERT 대신 기존 pinned 슬롯을 UPDATE하게 한다."""
+    by_day: dict[int, list[dict]] = {}
+    for fs in fixed_slots:
+        by_day.setdefault(fs.day_number, []).append({
+            "place_id": fs.place_id,
+            "day": fs.day_number,
+            "duration_minutes": fs.duration_minutes,
+            "is_fixed": True,
+        })
+    return by_day
+
+
 async def stream_route(
     request: RouteGenRequest,
     db: asyncpg.Pool,
     redis=None,
 ) -> AsyncGenerator[str, None]:
     weather_sensitive = _is_weather_sensitive(request.start_date)
-    # 숙소가 있으면 결과(앵커, 이동시간)가 캐시 키에 안 잡히므로 캐시를 완전히
-    # 우회한다 — 그렇지 않으면 반영 안 된 옛 캐시가 그대로 나갈 수 있다.
+    # 숙소나 사전 고정 슬롯이 있으면 결과(앵커/고정 슬롯, 이동시간)가 캐시 키에 안 잡히므로
+    # 캐시를 완전히 우회한다 — 그렇지 않으면 반영 안 된 옛 캐시가 그대로 나갈 수 있다.
     has_accommodations = bool(request.accommodations)
+    has_fixed_slots = bool(request.fixed_slots)
 
-    # 캐시 히트 시 Redis에서 즉시 반환 (날씨 민감/숙소 있는 요청은 매번 새로 생성)
-    if redis is not None and not weather_sensitive and not has_accommodations:
+    # 캐시 히트 시 Redis에서 즉시 반환 (날씨 민감/숙소·고정 슬롯 있는 요청은 매번 새로 생성)
+    if redis is not None and not weather_sensitive and not has_accommodations and not has_fixed_slots:
         try:
             cached = await redis.get(_cache_key(request))
             if cached:
@@ -231,6 +248,15 @@ async def stream_route(
         doc.metadata["id"]: (float(doc.metadata["lat"]), float(doc.metadata["lng"]))
         for doc in candidates
     }
+    # 사전 고정 슬롯은 candidates(pgvector/PostGIS 검색 결과)에 없을 수도 있으므로 별도 병합 —
+    # 없으면 TSP/enrich_transport가 그 좌표를 못 찾아 고정 슬롯이 최적화 대상에서 빠진다.
+    coord_lookup.update({fs.place_id: (fs.lat, fs.lng) for fs in request.fixed_slots})
+
+    fixed_slots_by_day = _build_fixed_slots_by_day(request.fixed_slots)
+    fixed_place_ids_by_day: dict[int, set[str]] = {
+        day: {f["place_id"] for f in fixed} for day, fixed in fixed_slots_by_day.items()
+    }
+    fixed_place_ids_flat: set[str] = {fs.place_id for fs in request.fixed_slots}
 
     # 5. 후보 장소 목록 텍스트 구성 — 지역 클러스터링으로 Day별 구역을 미리 나눔
     # 숙소가 있으면 Day 1 구역이 숙소 인근이 되도록 k-means 초기 centroid를 유도한다
@@ -250,16 +276,25 @@ async def stream_route(
     day_candidate_lookup: dict[int, dict[str, str]] = {}
     if clustering_active:
         for c_idx, cluster in enumerate(clusters):
-            day_candidate_lookup[c_idx + 1] = {
-                doc.metadata["id"]: doc.metadata["name"] for doc in cluster
+            day_num = c_idx + 1
+            fixed_ids = fixed_place_ids_by_day.get(day_num, set())
+            day_candidate_lookup[day_num] = {
+                doc.metadata["id"]: doc.metadata["name"]
+                for doc in cluster if doc.metadata["id"] not in fixed_ids
             }
 
+    # 사전 고정 슬롯은 이미 확정된 자리라 Claude에게 다시 추천받으면 중복이므로
+    # 프롬프트 후보 목록 자체에서도 제외한다.
     if clustering_active:
         lines: list[str] = []
         idx = 1
         for c_idx, cluster in enumerate(clusters):
             label = cluster_label(c_idx)
+            day_num = c_idx + 1
+            fixed_ids = fixed_place_ids_by_day.get(day_num, set())
             for doc in cluster:
+                if doc.metadata["id"] in fixed_ids:
+                    continue
                 lines.append(f"[구역 {label}] [{idx}] id={doc.metadata['id']} | {doc.page_content}")
                 idx += 1
         candidates_text = "\n".join(lines)
@@ -272,6 +307,7 @@ async def stream_route(
         candidates_text = "\n".join(
             f"[{i + 1}] id={doc.metadata['id']} | {doc.page_content}"
             for i, doc in enumerate(candidates)
+            if doc.metadata["id"] not in fixed_place_ids_flat
         )
         day_region_line = (
             f"총 {request.nights}박이므로 {request.nights + 1}개 지역 구역으로 나눠 Day별 집중 배치할 것\n"
@@ -317,12 +353,18 @@ async def stream_route(
     day_buffer: list[str] = []
     current_day: int | None = None
     valid_days = set(range(1, request.nights + 2))
-    used_place_ids: set[str] = set()  # 루트 전체에서 이미 배치된 장소 추적 — 중복 슬롯 방지
+    # 루트 전체에서 이미 배치된 장소 추적 — 중복 슬롯 방지. 사전 고정 슬롯도 이미 배치된
+    # 것이므로 미리 넣어둔다 — 안 그러면 Claude가 다른 day에서 같은 place_id를 또 추천할 수 있음.
+    used_place_ids: set[str] = set(fixed_place_ids_flat)
     day_slot_counts: dict[int, int] = {}  # day → 채택된 슬롯 수 (DENSITY_SLOT_CAP 판정용)
     slot_cap = DENSITY_SLOT_CAP.get(request.density, DENSITY_SLOT_CAP["normal"])
 
     async def _finalize_day(day_lines: list[str], day_number: int | None) -> list[str]:
-        """TSP 재정렬 + 이동시간 enrichment + start_time 계산을 거친 최종 ndjson 라인을 반환한다."""
+        """TSP 재정렬 + 이동시간 enrichment + start_time 계산을 거친 최종 ndjson 라인을 반환한다.
+        그 day의 사전 고정 슬롯도 함께 병합해 하나의 파이프라인으로 흘린다 — 고정 슬롯을 빼고
+        계산하면 그 앞뒤 슬롯끼리 이동시간이 고정 슬롯을 건너뛴 채로(틀리게) 계산되기 때문."""
+        fixed_for_day = fixed_slots_by_day.get(day_number, [])
+        day_lines = day_lines + [json.dumps(f, ensure_ascii=False) for f in fixed_for_day]
         reordered = reorder_slots(day_lines, coord_lookup, anchor=accommodation_anchors.get(day_number))
         slots = [json.loads(line) for line in reordered]
         enriched = await enrich_transport(slots, coord_lookup, settings.tmap_api_key)
@@ -360,10 +402,13 @@ async def stream_route(
         # 한 day에 슬롯이 계속 쌓이는 걸 못 막는다(실측: 환각/중복 재시도로 10슬롯까지 증가).
         # validate_route_slot보다 먼저 체크해야 캡 초과로 버릴 슬롯의 place_id가
         # used_place_ids에 낙인찍혀 낭비되는 걸 막을 수 있다.
-        if day_slot_counts.get(day, 0) >= slot_cap:
+        # 그 day에 사전 고정 슬롯이 있으면 AI가 채울 몫만큼 상한을 낮춘다.
+        effective_cap = max(0, slot_cap - len(fixed_place_ids_by_day.get(day, set())))
+        if day_slot_counts.get(day, 0) >= effective_cap:
             logger.warning(
-                "day=%d 슬롯 상한(%d) 도달 — 스킵: place_id=%s place_name=%s",
-                day, slot_cap, obj.get("place_id"), obj.get("place_name"),
+                "day=%d 슬롯 상한(%d, 고정 슬롯 %d건 반영) 도달 — 스킵: place_id=%s place_name=%s",
+                day, effective_cap, len(fixed_place_ids_by_day.get(day, set())),
+                obj.get("place_id"), obj.get("place_name"),
             )
             return []
         # Day별 구역 강제 배치를 어기지 않도록, 환각/중복 치환도 그 Day에 배정된
@@ -434,7 +479,7 @@ async def stream_route(
 
     # Redis 캐시 저장 (TTL 24h) — collected는 이미 day별로 TSP 재정렬된 상태이므로
     # 그대로 저장하면 스트림으로 전달된 내용과 100% 동일
-    if redis is not None and collected and not weather_sensitive and not has_accommodations:
+    if redis is not None and collected and not weather_sensitive and not has_accommodations and not has_fixed_slots:
         try:
             await redis.setex(_cache_key(request), 86400, "".join(collected))
             logger.info("캐시 저장: key=%s lines=%d", _cache_key(request), len(collected))

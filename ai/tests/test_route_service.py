@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from langchain_core.documents import Document
 
 import app.services.route_service as route_service
-from app.services.route_service import _cache_key, _is_weather_sensitive, stream_route
+from app.services.route_service import _build_fixed_slots_by_day, _cache_key, _is_weather_sensitive, stream_route
 from app.services.geo_clustering import cluster_candidates
-from app.models.schemas import RouteGenRequest
+from app.models.schemas import FixedSlot, RouteGenRequest
 
 
 def _make_req(**kwargs) -> RouteGenRequest:
@@ -360,3 +360,48 @@ async def test_pgvector_failure_falls_back_with_request_themes():
 
     _, kwargs = mock_postgis_cls.call_args
     assert kwargs["tags"] == ["카페", "등산"]
+
+
+def test_build_fixed_slots_by_day_empty():
+    assert _build_fixed_slots_by_day([]) == {}
+
+
+def test_build_fixed_slots_by_day_groups_by_day():
+    fixed = [
+        FixedSlot(place_id="p1", day_number=1, lat=37.5, lng=127.0, duration_minutes=60),
+        FixedSlot(place_id="p2", day_number=1, lat=37.6, lng=127.1, duration_minutes=90),
+        FixedSlot(place_id="p3", day_number=2, lat=37.7, lng=127.2, duration_minutes=30),
+    ]
+    by_day = _build_fixed_slots_by_day(fixed)
+
+    assert set(by_day.keys()) == {1, 2}
+    assert len(by_day[1]) == 2
+    assert len(by_day[2]) == 1
+    assert by_day[1][0] == {
+        "place_id": "p1", "day": 1, "duration_minutes": 60, "is_fixed": True,
+    }
+    assert by_day[2][0]["place_id"] == "p3"
+
+
+@pytest.mark.asyncio
+async def test_stream_route_excludes_fixed_place_from_candidates():
+    # 고정 슬롯의 place_id는 이미 확정된 자리라 Claude 프롬프트 후보 목록에서 제외돼야 한다
+    # (클러스터링 비활성 상태 — 후보 4건은 test_route_service.py의 _candidates()보다 적어
+    # 클러스터링 임계치를 넘지 않음).
+    req = _make_req(nights=1, fixed_slots=[
+        FixedSlot(place_id="p1", day_number=1, lat=35.0, lng=129.0, duration_minutes=60),
+    ])
+
+    mock_pgvector = MagicMock()
+    mock_pgvector.return_value.ainvoke = AsyncMock(return_value=_candidates())
+    fake_stream = _FakeAnthropicStream([])  # 빈 스트림 — 프롬프트 구성만 검증
+
+    with patch.object(route_service, "PgvectorRetriever", mock_pgvector), \
+         patch.object(route_service._anthropic.messages, "stream", return_value=fake_stream) as stream_mock:
+        async for _ in stream_route(req, db=MagicMock(), redis=None):
+            pass
+
+    _, kwargs = stream_mock.call_args
+    user_message = kwargs["messages"][0]["content"]
+    assert "id=p1 " not in user_message  # 고정된 p1은 후보 텍스트에서 빠짐
+    assert "id=p2 " in user_message  # 나머지 후보는 그대로 유지
