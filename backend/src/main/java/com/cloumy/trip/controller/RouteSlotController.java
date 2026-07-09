@@ -3,6 +3,7 @@ package com.cloumy.trip.controller;
 import com.cloumy.auth.security.CloudmyUserDetails;
 import com.cloumy.common.response.ApiResponse;
 import com.cloumy.trip.dto.InsertSlotRequest;
+import com.cloumy.trip.dto.ReorderSlotsRequest;
 import com.cloumy.trip.dto.ReplaceSlotRequest;
 import com.cloumy.trip.dto.SlotAlternativeResponse;
 import com.cloumy.trip.dto.SlotResponse;
@@ -76,6 +77,16 @@ public class RouteSlotController {
     ) {
         return ApiResponse.ok(routeSlotService.insertSlotAfter(
                 routeId, UUID.fromString(user.userId()), req.afterSlotId(), req.placeId(), req.reason()));
+    }
+
+    @PatchMapping("/reorder")
+    public ApiResponse<List<SlotResponse>> reorderSlots(
+            @PathVariable UUID routeId,
+            @RequestBody @Valid ReorderSlotsRequest req,
+            @AuthenticationPrincipal CloudmyUserDetails user
+    ) {
+        return ApiResponse.ok(routeSlotService.reorderSlots(
+                routeId, UUID.fromString(user.userId()), req.dayNumber(), req.slotIds()));
     }
 
     @PatchMapping("/{slotId}")

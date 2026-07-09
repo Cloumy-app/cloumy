@@ -42,6 +42,23 @@
     "groupTypes": { "solo": "Solo", "couple": "Couple", "friends": "Friends", "family": "Family" },
     "nextButton": "Next"
   },
+  "routeCreateImport": {
+    "badge": "Optional",
+    "headerTitle": "Import from a shared route?",
+    "hint": "Pick places you like from other travelers' public routes and add them to your trip ahead of time",
+    "emptyState": "No shared routes for this destination yet",
+    "savedCount": "Saved by {{count}}",
+    "selectAll": "Select all",
+    "deselectAll": "Deselect all",
+    "dayLabel": "Day {{day}}",
+    "dayChip": "Day {{day}}",
+    "alreadyImported": "Imported",
+    "removeButton": "Remove",
+    "importSelected": "Import {{count}} places",
+    "importedCount": "{{count}} places imported",
+    "nextButton": "Next",
+    "skipButton": "Skip"
+  },
   "routeCreateStep2": {
     "headerTitle": "What kind of trip do you want?",
     "themeLabel": "Trip theme",
@@ -127,7 +144,11 @@
     "saveButton": "Save",
     "exitButton": "Exit",
     "editButton": "Edit",
-    "doneEditButton": "Done"
+    "doneEditButton": "Done",
+    "reorderFailedTitle": "Reorder failed",
+    "reorderFailedBody": "Couldn't save the new order. Please try again.",
+    "shareFailedTitle": "Sharing update failed",
+    "shareFailedBody": "Couldn't update the sharing status. Please try again."
   },
   "slotCard": {
     "transportModes": { "walk": "Walk", "taxi": "Car", "transit": "Transit", "default": "Travel" },

@@ -23,9 +23,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -220,6 +225,73 @@ public class RouteSlotService {
             int duration = slot.getDurationMinutes() != null ? slot.getDurationMinutes() : 0;
             int transport = slot.getTransportMinutes() != null ? slot.getTransportMinutes() : 0;
             current = current.plusMinutes(duration + transport);
+        }
+    }
+
+    // 상세보기 드래그 재정렬 — 같은 day 안에서 슬롯 순서를 통째로 교체한다.
+    @Transactional
+    public List<SlotResponse> reorderSlots(UUID routeId, UUID userId, int dayNumber, List<UUID> slotIds) {
+        verifyOwner(routeId, userId);
+        List<RouteSlot> current = routeSlotRepository.findByRouteIdAndDayNumberOrderByOrderIndex(routeId, dayNumber);
+
+        Set<UUID> currentIds = current.stream().map(RouteSlot::getId).collect(Collectors.toSet());
+        if (current.size() != slotIds.size() || !currentIds.equals(new HashSet<>(slotIds))) {
+            throw new BusinessException(ErrorCode.INVALID_SLOT_ORDER);
+        }
+
+        Map<UUID, RouteSlot> byId = current.stream()
+                .collect(Collectors.toMap(RouteSlot::getId, s -> s, (a, b) -> a, HashMap::new));
+
+        // 1차: (route_id, day_number, order_index) 유니크 제약 회피용 임시 오프셋.
+        // order_index >= 0 CHECK 제약이 있어 insertSlotAfter처럼 음수 트릭을 못 쓴다 —
+        // 하루 슬롯 수보다 훨씬 큰 오프셋을 써서 실제 인덱스와 절대 겹치지 않게 한다.
+        for (int i = 0; i < slotIds.size(); i++) {
+            byId.get(slotIds.get(i)).updateOrderIndex(10_000 + i);
+            routeSlotRepository.flush();
+        }
+        // 2차: 요청받은 순서대로 최종 인덱스 반영
+        List<RouteSlot> ordered = new ArrayList<>();
+        for (int i = 0; i < slotIds.size(); i++) {
+            RouteSlot slot = byId.get(slotIds.get(i));
+            slot.updateOrderIndex(i);
+            ordered.add(slot);
+            routeSlotRepository.flush();
+        }
+
+        recalculateDayTransport(ordered);
+        recomputeStartTimesForDay(routeId, dayNumber);
+        routeSlotRepository.flush();
+
+        return routeSlotRepository.findSlotsByRouteId(routeId).stream()
+                .filter(p -> p.getDayNumber() == dayNumber)
+                .map(SlotResponse::from)
+                .toList();
+    }
+
+    // 재정렬된 day 전체 순서로 이동정보를 일괄 재계산한다. getSlotTransport 응답은 입력과
+    // 같은 길이(n)로 오고 마지막 원소는 항상 null이라, 그대로 적용하면 새로 마지막이 된
+    // 슬롯의 옛 이동정보도 자동으로 지워진다 — recalculateNeighborTransport와 동일 계약 재사용.
+    private void recalculateDayTransport(List<RouteSlot> ordered) {
+        List<AiServiceClient.TransportSlotDto> dtos = ordered.stream()
+                .map(s -> {
+                    PlaceProjection p = placeRepository.findPlaceDetailById(s.getPlaceId())
+                            .orElseThrow(() -> new BusinessException(ErrorCode.PLACE_NOT_FOUND));
+                    return new AiServiceClient.TransportSlotDto(s.getPlaceId().toString(), p.getLat(), p.getLng());
+                })
+                .toList();
+
+        List<AiServiceClient.TransportSlotResult> results = aiServiceClient.getSlotTransport(dtos);
+
+        // AI 호출 실패 시 전체를 null로 리셋 — 순서 자체는 사용자가 원한 변경이니 커밋하되,
+        // "정보 없음"보다 나쁜 틀린 이동정보를 남기지 않는다(recalculateNeighborTransport와 동일 원칙).
+        if (results.size() != ordered.size()) {
+            ordered.forEach(s -> s.updateTransport(null, null, null, null));
+            return;
+        }
+        for (int i = 0; i < ordered.size(); i++) {
+            AiServiceClient.TransportSlotResult r = results.get(i);
+            ordered.get(i).updateTransport(r.transport_to_next(), r.transport_minutes(), r.transit_summary(),
+                    transitDetailToString(r.transit_detail()));
         }
     }
 

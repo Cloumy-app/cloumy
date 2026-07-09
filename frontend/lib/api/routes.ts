@@ -1,6 +1,6 @@
 import EventSource from 'react-native-sse';
 import { API_BASE, getAuthHeaders, apiFetch } from './client';
-import type { PlaceDetail, RouteDaySummary, RouteGenRequest, RouteListItem, RouteSlot, SlotAlternative, SlotWithCoords } from '@/types';
+import type { PlaceDetail, PublicRouteListItem, RouteDaySummary, RouteGenRequest, RouteListItem, RouteSlot, SlotAlternative, SlotWithCoords } from '@/types';
 
 interface SpringPage<T> {
   content: T[];
@@ -98,6 +98,44 @@ export async function reorderRoutes(routeIds: string[]): Promise<RouteListItem[]
   });
   if (!res.ok) throw new Error(`${res.status}`);
   const body: { data: RouteListItem[] } = await res.json();
+  return body.data;
+}
+
+export async function reorderRouteSlots(
+  routeId: string,
+  dayNumber: number,
+  slotIds: string[],
+): Promise<SlotWithCoords[]> {
+  const res = await apiFetch(`/v1/routes/${routeId}/slots/reorder`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dayNumber, slotIds }),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+  const body: { data: SlotWithCoords[] } = await res.json();
+  return body.data;
+}
+
+export async function updateRouteVisibility(routeId: string, isPublic: boolean): Promise<void> {
+  const res = await apiFetch(`/v1/routes/${routeId}/visibility`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ isPublic }),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+}
+
+export async function getPublicRoutes(destination: string, page = 0, size = 10): Promise<SpringPage<PublicRouteListItem>> {
+  const res = await apiFetch(`/v1/routes/public?destination=${encodeURIComponent(destination)}&page=${page}&size=${size}`);
+  if (!res.ok) throw new Error(`${res.status}`);
+  const body: { data: SpringPage<PublicRouteListItem> } = await res.json();
+  return body.data;
+}
+
+export async function getPublicRouteSlots(routeId: string): Promise<SlotWithCoords[]> {
+  const res = await apiFetch(`/v1/routes/${routeId}/public-slots`);
+  if (!res.ok) throw new Error(`${res.status}`);
+  const body: { data: SlotWithCoords[] } = await res.json();
   return body.data;
 }
 
