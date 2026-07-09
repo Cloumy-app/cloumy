@@ -39,6 +39,17 @@ export interface RouteListItem {
   endDate: string;
   nights: number;
   createdAt: string;
+  isPublic: boolean;
+}
+
+// 공유 루트 가져오기 — 공개 루트 목록 항목(소유자 전용 RouteListItem과 별도)
+export interface PublicRouteListItem {
+  id: string;
+  title: string;
+  destination: string;
+  nights: number;
+  tags: string[];
+  saveCount: number;
 }
 
 export interface SlotWithCoords {
@@ -111,6 +122,12 @@ export interface Accommodation {
   source: 'kakao' | 'manual';
 }
 
+// 사전 고정 슬롯(콘서트 앵커/공유 루트 가져오기 공통 기반) — 생성 전 이미 확정된 장소
+export interface FixedSlotInput {
+  placeId: string;
+  dayNumber: number;
+}
+
 export interface RouteGenRequest {
   destination: string;
   startDate: string;
@@ -123,6 +140,8 @@ export interface RouteGenRequest {
   accommodations?: AccommodationInput[];
   totalBudget?: number; // 숙박비 제외 현지 활동/식사 예산, 선택 사항
   language?: SupportedLanguage; // 앱 설정 언어 — 하루요약/팁 텍스트 생성 언어(장소명은 원본 유지)
+  fixedSlots?: FixedSlotInput[];
+  sourceRouteIds?: string[]; // fixedSlots를 가져온 원본 공개 루트 id들 — save_count 증가 용도
 }
 
 export type GroupType = 'solo' | 'couple' | 'friends' | 'family';

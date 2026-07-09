@@ -83,7 +83,7 @@ export default function RouteCreateStep1() {
 
   const onNext = (data: Step1Form) => {
     router.push({
-      pathname: '/route/create/step-2',
+      pathname: '/route/create/import-slots',
       params: { ...data, startDate: toDateStr(startDate), endDate: toDateStr(endDate), nights },
     });
   };
