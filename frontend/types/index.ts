@@ -92,6 +92,19 @@ export interface PlaceDetail {
   isHiddenGem: boolean;
 }
 
+// 외부/수동 장소 find-or-create — 콘서트 검색/카카오 라이브 검색/유저 직접 입력이 공통으로 사용
+export interface ExternalPlaceRequest {
+  name: string;
+  address: string | null;
+  lat: number;
+  lng: number;
+  source: 'manual' | 'kakao' | 'event';
+}
+
+export interface ExternalPlaceResponse {
+  placeId: string;
+}
+
 export interface SlotAlternative {
   placeId: string;
   placeName: string;
