@@ -129,7 +129,20 @@
     "editButton": "編集する",
     "doneEditButton": "変更完了",
     "reorderFailedTitle": "並び替えに失敗しました",
-    "reorderFailedBody": "予定の順序を保存できませんでした。もう一度お試しください。"
+    "reorderFailedBody": "予定の順序を保存できませんでした。もう一度お試しください。",
+    "shareToggleFailedTitle": "共有設定の変更に失敗しました",
+    "shareToggleFailedBody": "しばらくしてからもう一度お試しください。"
+  },
+  "routeCreateImport": {
+    "headerTitle": "共有ルートから取り込む",
+    "hint": "他の旅行者が共有したルートから気に入った場所だけを選んで、自分の日程にあらかじめ入れられます",
+    "noPublicRoutes": "この目的地にはまだ共有されたルートがありません",
+    "nightsLabel": "{{nights}}泊",
+    "selectAll": "すべて選択",
+    "originalDay": "元の{{day}}日目",
+    "dayChip": "{{day}}日目",
+    "nextWithCount": "{{count}}件を取り込む",
+    "skip": "スキップ"
   },
   "slotCard": {
     "transportModes": { "walk": "徒歩", "taxi": "車", "transit": "公共交通機関", "default": "移動" },

@@ -129,7 +129,20 @@
     "editButton": "수정하기",
     "doneEditButton": "변경완료",
     "reorderFailedTitle": "순서 변경 실패",
-    "reorderFailedBody": "일정 순서를 저장하지 못했어요. 다시 시도해주세요."
+    "reorderFailedBody": "일정 순서를 저장하지 못했어요. 다시 시도해주세요.",
+    "shareToggleFailedTitle": "공유 설정 변경 실패",
+    "shareToggleFailedBody": "잠시 후 다시 시도해주세요."
+  },
+  "routeCreateImport": {
+    "headerTitle": "공유 루트에서 가져오기",
+    "hint": "다른 여행자가 공유한 루트에서 마음에 드는 장소만 골라 내 일정에 미리 넣을 수 있어요",
+    "noPublicRoutes": "아직 이 지역에 공유된 루트가 없어요",
+    "nightsLabel": "{{nights}}박",
+    "selectAll": "전체 선택",
+    "originalDay": "원본 {{day}}일차",
+    "dayChip": "{{day}}일차",
+    "nextWithCount": "{{count}}곳 가져오기",
+    "skip": "건너뛰기"
   },
   "slotCard": {
     "transportModes": { "walk": "도보", "taxi": "자동차", "transit": "대중교통", "default": "이동" },

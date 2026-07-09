@@ -129,7 +129,20 @@
     "editButton": "编辑",
     "doneEditButton": "完成修改",
     "reorderFailedTitle": "排序失败",
-    "reorderFailedBody": "未能保存新的行程顺序，请重试。"
+    "reorderFailedBody": "未能保存新的行程顺序，请重试。",
+    "shareToggleFailedTitle": "共享设置修改失败",
+    "shareToggleFailedBody": "请稍后重试。"
+  },
+  "routeCreateImport": {
+    "headerTitle": "从共享路线导入",
+    "hint": "从其他旅行者共享的路线中挑选喜欢的地点，提前加入到你的行程中",
+    "noPublicRoutes": "该目的地暂时还没有共享的路线",
+    "nightsLabel": "{{nights}}晚",
+    "selectAll": "全选",
+    "originalDay": "原第{{day}}天",
+    "dayChip": "第{{day}}天",
+    "nextWithCount": "导入{{count}}个地点",
+    "skip": "跳过"
   },
   "slotCard": {
     "transportModes": { "walk": "步行", "taxi": "自驾", "transit": "公共交通", "default": "移动" },

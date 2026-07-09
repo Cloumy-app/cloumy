@@ -13,6 +13,7 @@ import { devLogin } from '@/lib/api/auth';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useRouteStore } from '@/stores/useRouteStore';
 import { useAccommodationPinStore } from '@/stores/useAccommodationPinStore';
+import { useImportedSlotsStore } from '@/stores/useImportedSlotsStore';
 import { useLanguageStore } from '@/stores/useLanguageStore';
 import type { GroupType, BudgetLevel, Density, RouteSlot, AccommodationInput } from '@/types';
 
@@ -102,6 +103,8 @@ export default function RouteCreateStep4() {
   const { setTokens, setUser } = useAuthStore();
   const pin = useAccommodationPinStore((s) => s.pin);
   const clearPin = useAccommodationPinStore((s) => s.clearPin);
+  const importedSlots = useImportedSlotsStore((s) => s.slots);
+  const clearImportedSlots = useImportedSlotsStore((s) => s.clear);
   const queryClient = useQueryClient();
 
   // 지도 핀 선택 화면에서 돌아오면 선택 상태로 반영 (좌표만 있고 이름은 사용자가 직접 입력)
@@ -210,6 +213,12 @@ export default function RouteCreateStep4() {
         accommodations,
         totalBudget: params.totalBudget ? Number(params.totalBudget) : undefined,
         language: useLanguageStore.getState().language,
+        fixedSlots: importedSlots.length > 0
+          ? importedSlots.map((s) => ({ placeId: s.placeId, dayNumber: s.dayNumber }))
+          : undefined,
+        sourceRouteIds: importedSlots.length > 0
+          ? [...new Set(importedSlots.map((s) => s.sourceRouteId))]
+          : undefined,
       },
       (slot: RouteSlot) => {
         if (!isMountedRef.current) return;
@@ -227,6 +236,7 @@ export default function RouteCreateStep4() {
         if (!isMountedRef.current) return;
         const id = routeIdRef.current;
         finalizeRoute(id, params.destination ?? '서울', startDate, endDate);
+        clearImportedSlots();
         queryClient.invalidateQueries({ queryKey: ['routes'] });
         setProgress(100);
         setTimeout(() => {
@@ -280,7 +290,7 @@ export default function RouteCreateStep4() {
           <ChevronLeft size={24} color="#475569" />
         </TouchableOpacity>
         <View className="flex-1">
-          <Text className="text-xs text-sky-500 font-bold mb-0.5">STEP 4 / 4</Text>
+          <Text className="text-xs text-sky-500 font-bold mb-0.5">STEP 5 / 5</Text>
           <Text className="text-xl font-bold text-slate-800">{t('routeCreateStep4.headerTitle')}</Text>
         </View>
       </View>
