@@ -230,6 +230,11 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 - [x] `SlotCard.tsx` `DraggableSlotRow` — 카드 실측 높이 기반 드래그 재정렬 — 2026-07-09
 - [x] 재정렬 후속 버그 수정 — Reanimated 워클릿 에러(`resolveTargetIndex` non-worklet 호출) + 이동수단 칩 오버플로(TouchableOpacity flexShrink 누락) — 2026-07-09
 
+### 2026-07-09: 사전 고정(pinned) 슬롯 기반 ✅
+
+**[공통]**
+- [x] `fixedSlots`(day+place) 계약 신설 — AI 생성 파이프라인에 확정 장소 통합(TSP/이동시간 계산 포함) + Redis 캐시 우회. 공유 루트 가져오기/콘서트 앵커가 공통으로 쓸 기반 — 2026-07-09
+
 ---
 
 ## Phase 2: AI 챗봇 + 예산 관리 (~2026-07-25 ~)
