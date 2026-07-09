@@ -40,6 +40,13 @@ public class RouteSlotController {
         return ApiResponse.ok(routeSlotService.getSlots(routeId, UUID.fromString(user.userId())));
     }
 
+    // 공유 루트 가져오기 — 소유자 아니어도 그 루트가 공개(is_public)면 조회 가능.
+    // 위 getSlots()(소유자 전용)와는 완전히 별도 경로.
+    @GetMapping("/public-slots")
+    public ApiResponse<List<SlotResponse>> getPublicSlots(@PathVariable UUID routeId) {
+        return ApiResponse.ok(routeSlotService.getPublicSlots(routeId));
+    }
+
     @PatchMapping("/{slotId}/pin")
     public ApiResponse<SlotResponse> togglePin(
             @PathVariable UUID routeId,

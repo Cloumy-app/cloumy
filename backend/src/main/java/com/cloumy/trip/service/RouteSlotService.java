@@ -2,6 +2,7 @@ package com.cloumy.trip.service;
 
 import com.cloumy.common.exception.BusinessException;
 import com.cloumy.common.response.ErrorCode;
+import com.cloumy.trip.dto.FixedSlotRequest;
 import com.cloumy.trip.dto.PlaceProjection;
 import com.cloumy.trip.dto.ReplaceSlotRequest;
 import com.cloumy.trip.dto.SlotAlternativeResponse;
@@ -57,9 +58,70 @@ public class RouteSlotService {
         JsonNode node = objectMapper.readTree(jsonLine);
         if ("day_summary".equals(node.path("type").asText(null))) {
             routeDaySummaryService.upsertFromStream(routeId, node);
+        } else if (node.path("is_fixed").asBoolean(false)) {
+            // 사전 고정 슬롯 — createFixedSlots()가 이미 INSERT해둔 pinned 슬롯이라
+            // 다시 INSERT하면 안 되고, FastAPI가 계산한 최종 순서·이동정보만 반영한다.
+            applyFixedSlotResult(routeId, node);
         } else {
             saveStreamingSlot(routeId, jsonLine);
         }
+    }
+
+    // 사전 고정 슬롯 결과 반영 — route_id+day_number+place_id로 기존 pinned 슬롯을 찾아
+    // order_index/start_time/transport 정보만 갱신한다(INSERT 아님).
+    private void applyFixedSlotResult(UUID routeId, JsonNode node) {
+        String placeIdStr = node.path("place_id").asText(null);
+        if (placeIdStr == null || placeIdStr.isBlank()) {
+            return;
+        }
+        int dayNumber = node.path("day").asInt(1);
+        int orderIndex = node.path("order").asInt(1) - 1;
+
+        routeSlotRepository.findByRouteIdAndDayNumberAndPlaceId(routeId, dayNumber, UUID.fromString(placeIdStr))
+                .ifPresent(slot -> {
+                    slot.updateOrderIndex(orderIndex);
+                    String startTimeStr = node.path("start_time").asText(null);
+                    if (startTimeStr != null) {
+                        slot.updateStartTime(LocalTime.parse(startTimeStr));
+                    }
+                    Integer transportMinutes = node.has("transport_minutes")
+                            ? node.path("transport_minutes").asInt() : null;
+                    slot.updateTransport(
+                            node.path("transport_to_next").asText(null),
+                            transportMinutes,
+                            node.path("transit_summary").asText(null),
+                            jsonArrayFieldToString(node, "transit_detail"));
+                });
+        // 못 찾으면(이론상 createFixedSlots가 항상 먼저 만들어두므로 발생 안 함) 조용히
+        // 무시 — 스트리밍 한 줄 실패가 전체 생성을 막을 이유 없음(saveStreamingSlot과 동일 원칙).
+    }
+
+    // 사전 고정 슬롯(콘서트 앵커/공유 루트 가져오기 공통 기반) — AI 생성 시작 전에
+    // is_pinned=true로 미리 저장한다. day_number는 여행 박수(nights+1) 범위 안이어야 하고,
+    // 같은 place를 두 번 고정할 수 없다.
+    @Transactional
+    public List<RouteSlot> createFixedSlots(UUID routeId, int nights, List<FixedSlotRequest> fixedSlots) {
+        Set<UUID> seen = new HashSet<>();
+        Map<Integer, Integer> perDayCount = new HashMap<>();
+        List<RouteSlot> created = new ArrayList<>();
+
+        for (FixedSlotRequest req : fixedSlots) {
+            if (!seen.add(req.placeId())) {
+                throw new BusinessException(ErrorCode.INVALID_SLOT_ORDER);
+            }
+            if (req.dayNumber() < 1 || req.dayNumber() > nights + 1) {
+                throw new BusinessException(ErrorCode.INVALID_SLOT_ORDER);
+            }
+            PlaceProjection place = placeRepository.findPlaceDetailById(req.placeId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.PLACE_NOT_FOUND));
+
+            // 같은 day 안 임시 오프셋끼리만 안 겹치면 되므로 day별 로컬 카운터로 충분
+            int localIdx = perDayCount.merge(req.dayNumber(), 1, Integer::sum) - 1;
+            Integer duration = place.getAvgDurationMinutes() != null ? place.getAvgDurationMinutes() : 0;
+            RouteSlot slot = RouteSlot.createFixed(routeId, req.placeId(), req.dayNumber(), 10_000 + localIdx, duration);
+            created.add(routeSlotRepository.save(slot));
+        }
+        return created;
     }
 
     // 스트리밍 중 AI ndjson 한 줄을 파싱해 route_slots에 저장
@@ -118,6 +180,20 @@ public class RouteSlotService {
 
     public List<SlotResponse> getSlots(UUID routeId, UUID userId) {
         verifyOwner(routeId, userId);
+        return routeSlotRepository.findSlotsByRouteId(routeId)
+                .stream()
+                .map(SlotResponse::from)
+                .toList();
+    }
+
+    // 공유 루트 가져오기 — 소유자 검증(verifyOwner) 대신 공개 여부만 확인한다.
+    // 기존 getSlots()(소유자 전용)는 절대 건드리지 않고 완전히 별도 경로로 분리한다.
+    public List<SlotResponse> getPublicSlots(UUID routeId) {
+        Route route = routeRepository.findById(routeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
+        if (!route.isPublic()) {
+            throw new BusinessException(ErrorCode.ROUTE_ACCESS_DENIED);
+        }
         return routeSlotRepository.findSlotsByRouteId(routeId)
                 .stream()
                 .map(SlotResponse::from)

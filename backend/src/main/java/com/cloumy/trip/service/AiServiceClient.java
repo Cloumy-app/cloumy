@@ -3,8 +3,11 @@ package com.cloumy.trip.service;
 import com.cloumy.common.exception.BusinessException;
 import com.cloumy.common.response.ErrorCode;
 import com.cloumy.trip.dto.ChatResponse;
+import com.cloumy.trip.dto.PlaceProjection;
 import com.cloumy.trip.dto.RouteGenRequest;
 import com.cloumy.trip.dto.SlotAlternativeResponse;
+import com.cloumy.trip.entity.RouteSlot;
+import com.cloumy.trip.repository.PlaceRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,6 +35,7 @@ public class AiServiceClient {
 
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate redisTemplate;
+    private final PlaceRepository placeRepository;
 
     @Value("${app.fastapi.url}")
     private String fastapiUrl;
@@ -62,6 +66,13 @@ public class AiServiceClient {
     // FastAPI AccommodationAnchor와 필드명을 맞춤(snake_case) — 숙소를 하루 시작/종료 고정점으로 사용
     private record AccommodationAnchorDto(
             double lat, double lng, LocalDate check_in_date, LocalDate check_out_date
+    ) {}
+
+    // FastAPI FixedSlot과 필드명을 맞춤(snake_case) — 사전 고정 슬롯(콘서트 앵커/공유 루트
+    // 가져오기 공통 기반). duration_minutes는 createFixedSlots가 이미 DB에 저장한 값을
+    // 그대로 실어 보내 _assign_start_times가 체류시간을 0분으로 계산하는 걸 방지한다.
+    private record FixedSlotDto(
+            String place_id, int day_number, double lat, double lng, Integer duration_minutes
     ) {}
 
     private record SlotAlternativesReq(
@@ -187,23 +198,28 @@ public class AiServiceClient {
             LocalDate start_date,
             String density,
             List<AccommodationAnchorDto> accommodations,
-            String language
+            String language,
+            List<FixedSlotDto> fixed_slots
     ) {}
 
     /**
      * 가상 스레드 안에서 blocking 호출 — 스트림이 끝날 때까지 블록됨.
+     * fixedSlots는 RouteSlotService.createFixedSlots()가 이미 DB에 저장해둔 사전 고정
+     * 슬롯 목록 — FastAPI가 그 자리를 피해서 생성하고 TSP/이동시간 계산에 포함시키도록 전달.
      */
     public void streamRoute(
             RouteGenRequest req,
+            List<RouteSlot> fixedSlots,
             Consumer<String> onLine,
             Runnable onComplete,
             Consumer<Throwable> onError
     ) {
         try {
-            // 숙소가 있으면 결과(앵커, 이동시간)가 캐시 키에 안 잡히므로 캐시를 완전히
+            // 숙소나 고정 슬롯이 있으면 결과(앵커, 이동시간)가 캐시 키에 안 잡히므로 캐시를 완전히
             // 우회한다(날씨 민감 요청과 동일한 이유) — 안 그러면 그 값이 없던 옛 캐시가 그대로 나간다.
             boolean hasAccommodations = !req.accommodationsOrEmpty().isEmpty();
-            if (!hasAccommodations) {
+            boolean hasFixedSlots = fixedSlots != null && !fixedSlots.isEmpty();
+            if (!hasAccommodations && !hasFixedSlots) {
                 try {
                     String cached = redisTemplate.opsForValue().get(cacheKey(req));
                     if (cached != null && !cached.isBlank()) {
@@ -223,6 +239,18 @@ public class AiServiceClient {
                     .map(a -> new AccommodationAnchorDto(a.lat(), a.lng(), a.checkInDate(), a.checkOutDate()))
                     .toList();
 
+            // 좌표는 RouteSlot에 없어 place를 다시 조회한다 — 목록이 하루 몇 건 수준이라
+            // recalculateNeighborTransport 등 기존 코드와 동일하게 재조회 방식으로 단순하게 간다.
+            List<FixedSlotDto> fixedSlotDtos = hasFixedSlots ? fixedSlots.stream()
+                    .map(s -> {
+                        PlaceProjection p = placeRepository.findPlaceDetailById(s.getPlaceId())
+                                .orElseThrow(() -> new BusinessException(ErrorCode.PLACE_NOT_FOUND));
+                        return new FixedSlotDto(
+                                s.getPlaceId().toString(), s.getDayNumber(), p.getLat(), p.getLng(),
+                                s.getDurationMinutes());
+                    })
+                    .toList() : List.of();
+
             FastApiRequest fastApiReq = new FastApiRequest(
                     req.destination(),
                     req.nights(),
@@ -233,7 +261,8 @@ public class AiServiceClient {
                     req.startDate(),
                     req.density() != null ? req.density().toLowerCase() : "normal",
                     accommodations,
-                    req.language()
+                    req.language(),
+                    fixedSlotDtos
             );
 
             String body = objectMapper.writeValueAsString(fastApiReq);

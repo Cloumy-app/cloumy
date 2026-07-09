@@ -13,6 +13,7 @@ import { devLogin } from '@/lib/api/auth';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useRouteStore } from '@/stores/useRouteStore';
 import { useAccommodationPinStore } from '@/stores/useAccommodationPinStore';
+import { useImportedSlotsStore } from '@/stores/useImportedSlotsStore';
 import { useLanguageStore } from '@/stores/useLanguageStore';
 import type { GroupType, BudgetLevel, Density, RouteSlot, AccommodationInput } from '@/types';
 
@@ -210,6 +211,10 @@ export default function RouteCreateStep4() {
         accommodations,
         totalBudget: params.totalBudget ? Number(params.totalBudget) : undefined,
         language: useLanguageStore.getState().language,
+        fixedSlots: useImportedSlotsStore.getState().items.map((i) => ({
+          placeId: i.placeId, dayNumber: i.dayNumber,
+        })),
+        sourceRouteIds: [...new Set(useImportedSlotsStore.getState().items.map((i) => i.sourceRouteId))],
       },
       (slot: RouteSlot) => {
         if (!isMountedRef.current) return;
@@ -227,6 +232,7 @@ export default function RouteCreateStep4() {
         if (!isMountedRef.current) return;
         const id = routeIdRef.current;
         finalizeRoute(id, params.destination ?? '서울', startDate, endDate);
+        useImportedSlotsStore.getState().clear();
         queryClient.invalidateQueries({ queryKey: ['routes'] });
         setProgress(100);
         setTimeout(() => {

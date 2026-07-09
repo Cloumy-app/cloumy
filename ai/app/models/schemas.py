@@ -11,6 +11,17 @@ class AccommodationAnchor(BaseModel):
     check_out_date: date
 
 
+class FixedSlot(BaseModel):
+    """사전 고정 슬롯(콘서트 앵커/공유 루트 가져오기 공통 기반) — Spring이 AI 생성 시작 전에
+    이미 is_pinned=true로 저장해둔 슬롯. duration_minutes는 _assign_start_times가 그대로
+    쓰므로 필수(없으면 체류시간이 0분으로 계산돼 뒷 슬롯들의 시작 시각이 전부 당겨짐)."""
+    place_id: str
+    day_number: int
+    lat: float
+    lng: float
+    duration_minutes: int = 0
+
+
 class RouteGenRequest(BaseModel):
     city: str
     nights: int
@@ -22,6 +33,7 @@ class RouteGenRequest(BaseModel):
     density: Literal["relaxed", "normal", "packed"] = "normal"
     accommodations: list[AccommodationAnchor] = Field(default_factory=list)
     language: str | None = None  # ko/en/ja/zh — 앱 설정 언어(tip/day_summary 생성 언어, place_name은 원본 유지)
+    fixed_slots: list[FixedSlot] = Field(default_factory=list)
 
     @field_validator("nights")
     @classmethod
