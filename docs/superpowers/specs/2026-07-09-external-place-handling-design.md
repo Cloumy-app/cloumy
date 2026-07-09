@@ -4,7 +4,7 @@
 
 "사전 고정(pinned) 슬롯 기반"(`fixedSlots`)은 `placeId`로 기존 `places` row를 참조하는 것을 전제로 설계됐다. 그런데 "공유 루트 가져오기"에 이어질 다음 기능들 — 콘서트·이벤트 앵커, 유저가 직접 아는 장소를 고정하는 기능 — 은 `places`에 없는 장소를 다뤄야 한다. 콘서트 검색(Serper+KOPIS)은 API 키가 아직 발급되지 않아 이번 스코프에서 제외하지만, "`places`에 없는 장소를 어떻게 확정 슬롯으로 편입시킬지"에 대한 공통 기반은 지금 마련해둔다.
 
-기존 `places.source`(`tourapi`/`kakao`/`hidden_gem`)는 출처와 무관하게 전부 배치로 태그·임베딩·`avg_duration_minutes`까지 채워진 뒤 들어간 데이터이고, AI 추천 리트리버(`PostgisTagRetriever`/`PgvectorRetriever`)는 `source`를 구분하지 않고 전부 후보로 조회한다. 반면 지금 숙소 검색이 쓰는 라이브 카카오 검색은 `places`에 아예 저장되지 않는다. 이번 설계는 이 둘 사이의 세 번째 경로 — **"`places`와 동일한 형태로 저장되지만, AI 추천 후보에는 절대 포함되지 않는" 최소 정보 장소**를 만든다.
+기존 `places.source`(`tourapi`/`kakao`/`naver`/`hidden_gem`)는 출처와 무관하게 전부 배치로 태그·임베딩·`avg_duration_minutes`까지 채워진 뒤 들어간 데이터이고, AI 추천 리트리버(`PostgisTagRetriever`/`PgvectorRetriever`)는 `source`를 구분하지 않고 전부 후보로 조회한다. 반면 지금 숙소 검색이 쓰는 라이브 카카오 검색은 `places`에 아예 저장되지 않는다. 이번 설계는 이 둘 사이의 세 번째 경로 — **"`places`와 동일한 형태로 저장되지만, AI 추천 후보에는 절대 포함되지 않는" 최소 정보 장소**를 만든다.
 
 ## 범위
 
@@ -52,7 +52,7 @@
 
 ### DB (`backend/src/main/resources/db/migration/`)
 
-- **신규 마이그레이션**: `places.is_curated BOOLEAN NOT NULL DEFAULT true` 추가(기존 row는 전부 `true`). `places.source` CHECK 제약에 `'manual'`, `'event'` 추가(`'tourapi', 'kakao', 'hidden_gem'` → `'tourapi', 'kakao', 'hidden_gem', 'manual', 'event'`).
+- **신규 마이그레이션**: `places.is_curated BOOLEAN NOT NULL DEFAULT true` 추가(기존 row는 전부 `true`). `places.source` CHECK 제약에 `'manual'`, `'event'` 추가(`'tourapi', 'kakao', 'naver', 'hidden_gem'` → `'tourapi', 'kakao', 'naver', 'hidden_gem', 'manual', 'event'`).
 
 ### Spring (`backend/`)
 
@@ -79,9 +79,9 @@
 
 | 상황 | 처리 |
 |---|---|
-| `name` 빈 문자열 | 400 (`@NotBlank`) |
-| `source`가 `manual`/`kakao`/`event` 외 값 | 400 (`@Pattern`) |
-| `lat`/`lng` 누락 | 400 (`@NotNull`) |
+| `name` 빈 문자열 | 422 (`@NotBlank`) |
+| `source`가 `manual`/`kakao`/`event` 외 값 | 422 (`@Pattern`) |
+| `lat`/`lng` 누락 | 422 (`@NotNull`) |
 | 반경 50m 내 이름 일치 장소 없음 | 정상 흐름 — 신규 insert |
 | 동시 요청으로 인한 드문 중복 insert | 수용(핵심 변경 절 참고) — 에러 아님 |
 
