@@ -3,9 +3,12 @@ package com.cloumy.trip.controller;
 import com.cloumy.auth.security.CloudmyUserDetails;
 import com.cloumy.common.response.ApiResponse;
 import com.cloumy.trip.dto.DaySummaryResponse;
+import com.cloumy.trip.dto.PublicRouteResponse;
 import com.cloumy.trip.dto.ReorderRoutesRequest;
 import com.cloumy.trip.dto.RouteGenRequest;
 import com.cloumy.trip.dto.RouteListResponse;
+import com.cloumy.trip.dto.SlotResponse;
+import com.cloumy.trip.dto.UpdateVisibilityRequest;
 import com.cloumy.trip.entity.Route;
 import com.cloumy.trip.service.AiServiceClient;
 import com.cloumy.trip.service.FallbackRouteService;
@@ -29,6 +32,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -98,6 +102,35 @@ public class RouteController {
         return ApiResponse.ok(routeService.reorderRoutes(userId, req.routeIds()));
     }
 
+    @PatchMapping("/routes/{routeId}/visibility")
+    public ApiResponse<Void> updateVisibility(
+            @PathVariable UUID routeId,
+            @RequestBody @Valid UpdateVisibilityRequest req,
+            @AuthenticationPrincipal CloudmyUserDetails user
+    ) {
+        UUID userId = UUID.fromString(user.userId());
+        routeService.updateVisibility(routeId, userId, req.isPublic());
+        return ApiResponse.ok(null);
+    }
+
+    // 공유 루트 가져오기 — 목적지 일치 + 공개 + 요청자 본인 제외, save_count DESC 정렬
+    @GetMapping("/routes/public")
+    public ApiResponse<Page<PublicRouteResponse>> getPublicRoutes(
+            @RequestParam String destination,
+            @AuthenticationPrincipal CloudmyUserDetails user,
+            @PageableDefault(size = 10, sort = "saveCount", direction = Sort.Direction.DESC) Pageable pageable
+    ) {
+        UUID userId = UUID.fromString(user.userId());
+        return ApiResponse.ok(routeService.getPublicRoutes(destination, userId, pageable));
+    }
+
+    // 공유 루트 가져오기 — 그 루트가 공개일 때만 슬롯 목록 반환. RouteSlotController(/slots 하위)와
+    // 별도로 여기 둔 이유: /routes/{routeId}/public-slots 경로가 /slots에 중첩되지 않게 하기 위함
+    @GetMapping("/routes/{routeId}/public-slots")
+    public ApiResponse<List<SlotResponse>> getPublicSlots(@PathVariable UUID routeId) {
+        return ApiResponse.ok(routeSlotService.getPublicSlots(routeId));
+    }
+
     @PostMapping(value = "/routes/generate", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter generate(
             @RequestBody @Valid RouteGenRequest req,
@@ -108,6 +141,16 @@ public class RouteController {
         // 패스 검증 + Route 엔티티 저장 (스트리밍 전 — 실패 시 SSE 대신 HTTP 에러 반환)
         Route route = routeService.createRoute(req, userId);
 
+        // 사전 고정 슬롯 기반 — AI 스트리밍 시작 전 확정 장소를 pinned=true로 즉시 저장
+        // (역시 스트리밍 전이라 검증 실패 시 SSE 대신 HTTP 에러로 반환됨)
+        List<RouteSlotService.FixedSlotResult> fixedSlots =
+                routeSlotService.createFixedSlots(route.getId(), req.nights(), req.fixedSlotsOrEmpty());
+
+        // 공유 루트 가져오기 — 새 루트 생성 성공 직후 원본 루트들의 save_count 증가.
+        // fixedSlots 저장과 같은 타이밍(스트리밍 전) — 실제 AI 생성 성공 여부와 무관하게
+        // "이 루트가 그 원본을 참고해 만들어졌다"는 사실 자체를 카운트한다.
+        routeService.incrementSaveCounts(req.sourceRouteIdsOrEmpty());
+
         SseEmitter emitter = new SseEmitter(120_000L);
 
         executor.execute(() -> {
@@ -117,6 +160,7 @@ public class RouteController {
 
                 aiServiceClient.streamRoute(
                         req,
+                        fixedSlots,
                         line -> {
                             try {
                                 emitter.send(SseEmitter.event().data(line));

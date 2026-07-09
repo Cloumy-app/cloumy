@@ -69,7 +69,7 @@ export default function RouteCreateStep2() {
           <ChevronLeft size={24} color="#475569" />
         </TouchableOpacity>
         <View className="flex-1">
-          <Text className="text-xs text-sky-500 font-bold mb-0.5">STEP 2 / 4</Text>
+          <Text className="text-xs text-sky-500 font-bold mb-0.5">STEP 3 / 5</Text>
           <Text className="text-xl font-bold text-slate-800">{t('routeCreateStep2.headerTitle')}</Text>
         </View>
       </View>

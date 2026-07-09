@@ -129,7 +129,20 @@
     "editButton": "Edit",
     "doneEditButton": "Done",
     "reorderFailedTitle": "Reorder failed",
-    "reorderFailedBody": "Couldn't save the new order. Please try again."
+    "reorderFailedBody": "Couldn't save the new order. Please try again.",
+    "shareToggleFailedTitle": "Couldn't change sharing setting",
+    "shareToggleFailedBody": "Please try again in a moment."
+  },
+  "routeCreateImport": {
+    "headerTitle": "Import from shared routes",
+    "hint": "Pick places from routes other travelers shared, and add them to your itinerary in advance",
+    "noPublicRoutes": "No shared routes for this destination yet",
+    "nightsLabel": "{{nights}} nights",
+    "selectAll": "Select all",
+    "originalDay": "Original Day {{day}}",
+    "dayChip": "Day {{day}}",
+    "nextWithCount": "Import {{count}} places",
+    "skip": "Skip"
   },
   "slotCard": {
     "transportModes": { "walk": "Walk", "taxi": "Car", "transit": "Transit", "default": "Travel" },

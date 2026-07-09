@@ -1,6 +1,6 @@
 import EventSource from 'react-native-sse';
 import { API_BASE, getAuthHeaders, apiFetch } from './client';
-import type { PlaceDetail, RouteDaySummary, RouteGenRequest, RouteListItem, RouteSlot, SlotAlternative, SlotWithCoords } from '@/types';
+import type { PlaceDetail, PublicRouteListItem, RouteDaySummary, RouteGenRequest, RouteListItem, RouteSlot, SlotAlternative, SlotWithCoords } from '@/types';
 
 interface SpringPage<T> {
   content: T[];
@@ -88,6 +88,29 @@ export async function getPlaceDetail(placeId: string): Promise<PlaceDetail> {
 export async function deleteRoute(routeId: string): Promise<void> {
   const res = await apiFetch(`/v1/routes/${routeId}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`${res.status}`);
+}
+
+export async function updateRouteVisibility(routeId: string, isPublic: boolean): Promise<void> {
+  const res = await apiFetch(`/v1/routes/${routeId}/visibility`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ isPublic }),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+}
+
+export async function getPublicRoutes(destination: string): Promise<PublicRouteListItem[]> {
+  const res = await apiFetch(`/v1/routes/public?destination=${encodeURIComponent(destination)}`);
+  if (!res.ok) throw new Error(`${res.status}`);
+  const body: { data: SpringPage<PublicRouteListItem> } = await res.json();
+  return body.data.content;
+}
+
+export async function getPublicRouteSlots(routeId: string): Promise<SlotWithCoords[]> {
+  const res = await apiFetch(`/v1/routes/${routeId}/public-slots`);
+  if (!res.ok) throw new Error(`${res.status}`);
+  const body: { data: SlotWithCoords[] } = await res.json();
+  return body.data;
 }
 
 export async function reorderRoutes(routeIds: string[]): Promise<RouteListItem[]> {

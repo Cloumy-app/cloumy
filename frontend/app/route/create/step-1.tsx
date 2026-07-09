@@ -83,7 +83,7 @@ export default function RouteCreateStep1() {
 
   const onNext = (data: Step1Form) => {
     router.push({
-      pathname: '/route/create/step-2',
+      pathname: '/route/create/import-slots',
       params: { ...data, startDate: toDateStr(startDate), endDate: toDateStr(endDate), nights },
     });
   };
@@ -96,7 +96,7 @@ export default function RouteCreateStep1() {
           <ChevronLeft size={24} color="#475569" />
         </TouchableOpacity>
         <View className="flex-1">
-          <Text className="text-xs text-sky-500 font-bold mb-0.5">STEP 1 / 4</Text>
+          <Text className="text-xs text-sky-500 font-bold mb-0.5">STEP 1 / 5</Text>
           <Text className="text-xl font-bold text-slate-800">{t('routeCreateStep1.headerTitle')}</Text>
         </View>
       </View>

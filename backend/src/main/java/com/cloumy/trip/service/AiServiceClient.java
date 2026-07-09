@@ -64,6 +64,11 @@ public class AiServiceClient {
             double lat, double lng, LocalDate check_in_date, LocalDate check_out_date
     ) {}
 
+    // FastAPI FixedSlot과 필드명을 맞춤(snake_case) — 사전 고정 슬롯 기반
+    private record FixedSlotDto(
+            String place_id, int day_number, double lat, double lng, Integer duration_minutes
+    ) {}
+
     private record SlotAlternativesReq(
             String slot_id,
             String place_name,
@@ -187,7 +192,8 @@ public class AiServiceClient {
             LocalDate start_date,
             String density,
             List<AccommodationAnchorDto> accommodations,
-            String language
+            String language,
+            List<FixedSlotDto> fixed_slots
     ) {}
 
     /**
@@ -195,15 +201,18 @@ public class AiServiceClient {
      */
     public void streamRoute(
             RouteGenRequest req,
+            List<RouteSlotService.FixedSlotResult> fixedSlots,
             Consumer<String> onLine,
             Runnable onComplete,
             Consumer<Throwable> onError
     ) {
         try {
-            // 숙소가 있으면 결과(앵커, 이동시간)가 캐시 키에 안 잡히므로 캐시를 완전히
-            // 우회한다(날씨 민감 요청과 동일한 이유) — 안 그러면 그 값이 없던 옛 캐시가 그대로 나간다.
+            // 숙소·고정 슬롯이 있으면 결과(앵커, 확정 장소, 이동시간)가 캐시 키에 안 잡히므로
+            // 캐시를 완전히 우회한다(날씨 민감 요청과 동일한 이유) — 안 그러면 확정 장소가 빠진
+            // 옛 캐시가 그대로 나간다.
             boolean hasAccommodations = !req.accommodationsOrEmpty().isEmpty();
-            if (!hasAccommodations) {
+            boolean hasFixedSlots = !fixedSlots.isEmpty();
+            if (!hasAccommodations && !hasFixedSlots) {
                 try {
                     String cached = redisTemplate.opsForValue().get(cacheKey(req));
                     if (cached != null && !cached.isBlank()) {
@@ -223,6 +232,11 @@ public class AiServiceClient {
                     .map(a -> new AccommodationAnchorDto(a.lat(), a.lng(), a.checkInDate(), a.checkOutDate()))
                     .toList();
 
+            List<FixedSlotDto> fixedSlotDtos = fixedSlots.stream()
+                    .map(fs -> new FixedSlotDto(
+                            fs.placeId().toString(), fs.dayNumber(), fs.lat(), fs.lng(), fs.durationMinutes()))
+                    .toList();
+
             FastApiRequest fastApiReq = new FastApiRequest(
                     req.destination(),
                     req.nights(),
@@ -233,7 +247,8 @@ public class AiServiceClient {
                     req.startDate(),
                     req.density() != null ? req.density().toLowerCase() : "normal",
                     accommodations,
-                    req.language()
+                    req.language(),
+                    fixedSlotDtos
             );
 
             String body = objectMapper.writeValueAsString(fastApiReq);

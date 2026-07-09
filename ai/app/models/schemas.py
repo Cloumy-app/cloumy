@@ -11,6 +11,17 @@ class AccommodationAnchor(BaseModel):
     check_out_date: date
 
 
+class FixedSlot(BaseModel):
+    """생성 시작 전 이미 확정된 장소 — 사전 고정 슬롯 기반.
+    장소명 등은 이미 place_id로 DB에 있으니 불필요하나, duration_minutes는
+    _assign_start_times가 그대로 쓰므로 필수(재조회 없이 Spring이 넘겨준 값을 그대로 사용)."""
+    place_id: str
+    day_number: int
+    lat: float
+    lng: float
+    duration_minutes: int
+
+
 class RouteGenRequest(BaseModel):
     city: str
     nights: int
@@ -22,6 +33,7 @@ class RouteGenRequest(BaseModel):
     density: Literal["relaxed", "normal", "packed"] = "normal"
     accommodations: list[AccommodationAnchor] = Field(default_factory=list)
     language: str | None = None  # ko/en/ja/zh — 앱 설정 언어(tip/day_summary 생성 언어, place_name은 원본 유지)
+    fixed_slots: list[FixedSlot] = Field(default_factory=list)
 
     @field_validator("nights")
     @classmethod

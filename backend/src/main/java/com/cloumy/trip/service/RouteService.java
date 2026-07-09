@@ -4,6 +4,7 @@ import com.cloumy.common.exception.BusinessException;
 import com.cloumy.common.response.ErrorCode;
 import com.cloumy.payment.service.PassValidationService;
 import com.cloumy.trip.dto.AccommodationCreateRequest;
+import com.cloumy.trip.dto.PublicRouteResponse;
 import com.cloumy.trip.dto.RouteGenRequest;
 import com.cloumy.trip.dto.RouteListResponse;
 import com.cloumy.trip.entity.Route;
@@ -33,7 +34,7 @@ public class RouteService {
                 .map(r -> new RouteListResponse(
                         r.getId(), r.getTitle(), r.getDestination(),
                         r.getStartDate(), r.getEndDate(), r.getNights(),
-                        r.getCreatedAt()
+                        r.getCreatedAt(), r.isPublic()
                 ));
     }
 
@@ -46,7 +47,7 @@ public class RouteService {
         return new RouteListResponse(
                 route.getId(), route.getTitle(), route.getDestination(),
                 route.getStartDate(), route.getEndDate(), route.getNights(),
-                route.getCreatedAt()
+                route.getCreatedAt(), route.isPublic()
         );
     }
 
@@ -94,6 +95,37 @@ public class RouteService {
         return saved;
     }
 
+    // 공유 루트 가져오기 — 공개 토글은 소유자만 가능(deleteRoute와 동일한 인라인 소유자 체크 패턴)
+    @Transactional
+    public void updateVisibility(UUID routeId, UUID userId, boolean isPublic) {
+        Route route = routeRepository.findById(routeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
+        if (!route.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.ROUTE_ACCESS_DENIED);
+        }
+        route.updateVisibility(isPublic);
+    }
+
+    // 공유 루트 가져오기 — 목적지 일치 공개 루트 브라우징. 소유자 검증 없음(공개 열람이므로),
+    // 요청자 본인 루트는 제외
+    public Page<PublicRouteResponse> getPublicRoutes(String destination, UUID requesterId, Pageable pageable) {
+        return routeRepository.findByDestinationAndIsPublicTrueAndUserIdNot(destination, requesterId, pageable)
+                .map(r -> new PublicRouteResponse(
+                        r.getId(), r.getTitle(), r.getDestination(), r.getNights(), r.getTags(), r.getSaveCount()
+                ));
+    }
+
+    // 공유 루트 가져오기 — 새 루트 생성 성공 후 가져온 원본 루트들의 save_count 증가.
+    // 존재하지 않는(이미 삭제된) routeId는 findAllById가 조용히 걸러내 스킵된다 —
+    // 카운트 실패가 루트 생성 자체를 막을 이유는 없음.
+    @Transactional
+    public void incrementSaveCounts(List<UUID> routeIds) {
+        if (routeIds.isEmpty()) {
+            return;
+        }
+        routeRepository.findAllById(routeIds).forEach(Route::incrementSaveCount);
+    }
+
     @Transactional
     public void deleteRoute(UUID routeId, UUID userId) {
         Route route = routeRepository.findById(routeId)
@@ -131,7 +163,7 @@ public class RouteService {
                 .map(r -> new RouteListResponse(
                         r.getId(), r.getTitle(), r.getDestination(),
                         r.getStartDate(), r.getEndDate(), r.getNights(),
-                        r.getCreatedAt()
+                        r.getCreatedAt(), r.isPublic()
                 ))
                 .toList();
     }

@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, Alert, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useNavigation, router } from 'expo-router';
-import { ChevronLeft, Sparkles, Wallet } from 'lucide-react-native';
+import { ChevronLeft, Sparkles, Wallet, Share2 } from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useTranslation } from 'react-i18next';
-import { getRoute, getRouteSlots, getRouteDaySummaries, toggleSlotPin as apiToggleSlotPin, deleteRouteSlot, deleteRoute, replaceRouteSlot, reorderRouteSlots } from '@/lib/api/routes';
+import { getRoute, getRouteSlots, getRouteDaySummaries, toggleSlotPin as apiToggleSlotPin, deleteRouteSlot, deleteRoute, replaceRouteSlot, reorderRouteSlots, updateRouteVisibility } from '@/lib/api/routes';
 import { getRouteAccommodations } from '@/lib/api/accommodations';
 import { fetchForecast } from '@/lib/api/weather';
 import { getBudgetSummary } from '@/lib/api/budget';
@@ -54,6 +54,7 @@ export default function RouteResultScreen() {
   const exitConfirmedRef = useRef(false);
 
   const isNewRoute = mode === 'new';
+  const [isPublic, setIsPublic] = useState(false);
 
   // 스냅 포인트
   const SNAP_TOP = insets.top + 60;
@@ -117,8 +118,21 @@ export default function RouteResultScreen() {
         createdAt: routeMeta.createdAt,
       });
     }
+    if (routeMeta) setIsPublic(routeMeta.isPublic);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeMeta]);
+
+  const onToggleVisibility = async () => {
+    if (!routeId) return;
+    const next = !isPublic;
+    setIsPublic(next); // 낙관적 업데이트 — 실패 시 롤백
+    try {
+      await updateRouteVisibility(routeId, next);
+    } catch {
+      setIsPublic(!next);
+      Alert.alert(t('routeResult.shareToggleFailedTitle'), t('routeResult.shareToggleFailedBody'));
+    }
+  };
 
   const destination = currentRoute?.destination ?? '';
   const routeStartDate = currentRoute?.startDate ?? '';
@@ -413,23 +427,45 @@ export default function RouteResultScreen() {
           )}
         </View>
 
-        <TouchableOpacity
-          onPress={() => router.push({ pathname: '/route/[routeId]/budget', params: { routeId } })}
-          style={{
-            width: 40,
-            height: 40,
-            backgroundColor: 'rgba(255,255,255,0.92)',
-            borderRadius: 20,
-            alignItems: 'center',
-            justifyContent: 'center',
-            shadowColor: '#000',
-            shadowOpacity: 0.12,
-            shadowRadius: 8,
-            elevation: 4,
-          }}
-        >
-          <Wallet size={20} color="#334155" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {!isNewRoute && (
+            <TouchableOpacity
+              onPress={onToggleVisibility}
+              style={{
+                width: 40,
+                height: 40,
+                backgroundColor: 'rgba(255,255,255,0.92)',
+                borderRadius: 20,
+                alignItems: 'center',
+                justifyContent: 'center',
+                shadowColor: '#000',
+                shadowOpacity: 0.12,
+                shadowRadius: 8,
+                elevation: 4,
+              }}
+            >
+              <Share2 size={20} color={isPublic ? '#0ea5e9' : '#334155'} />
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            onPress={() => router.push({ pathname: '/route/[routeId]/budget', params: { routeId } })}
+            style={{
+              width: 40,
+              height: 40,
+              backgroundColor: 'rgba(255,255,255,0.92)',
+              borderRadius: 20,
+              alignItems: 'center',
+              justifyContent: 'center',
+              shadowColor: '#000',
+              shadowOpacity: 0.12,
+              shadowRadius: 8,
+              elevation: 4,
+            }}
+          >
+            <Wallet size={20} color="#334155" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Reanimated 드래그 바텀시트 */}

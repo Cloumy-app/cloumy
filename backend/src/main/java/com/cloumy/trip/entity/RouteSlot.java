@@ -82,6 +82,21 @@ public class RouteSlot {
         this.pinned = false;
     }
 
+    // 사전 고정 슬롯 기반 — 생성 시작 전 이미 확정된 장소를 pinned=true로 즉시 저장.
+    // togglePin()을 재사용하지 않는 이유: "토글"이 아니라 "이미 pinned 상태로 생성"이라 의미가 다름.
+    public static RouteSlot createFixed(UUID routeId, UUID placeId, int dayNumber, int orderIndex,
+                                         Integer durationMinutes) {
+        RouteSlot slot = RouteSlot.builder()
+                .routeId(routeId)
+                .placeId(placeId)
+                .dayNumber(dayNumber)
+                .orderIndex(orderIndex)
+                .durationMinutes(durationMinutes)
+                .build();
+        slot.pinned = true;
+        return slot;
+    }
+
     public void togglePin() {
         this.pinned = !this.pinned;
     }
