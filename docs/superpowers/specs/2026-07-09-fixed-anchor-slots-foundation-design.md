@@ -35,8 +35,11 @@
    → routeService.createRoute(req, userId)로 Route 생성 (기존과 동일)
    → routeSlotService.createFixedSlots(route.id, req.fixedSlots())  ← 신규
       day_number, place_id로 route_slots를 is_pinned=true로 즉시 저장
-      (order_index는 임시로 day별 매우 큰 값 — AI가 그 날의 나머지 슬롯을
-       스트리밍 저장한 뒤, day 완료 시점 TSP 재정렬에서 최종 order_index로 확정됨)
+      (order_index는 임시값 — FastAPI가 그 day를 마무리하는 시점에 고정+AI
+       슬롯을 함께 TSP로 재정렬한 결과가 스트리밍으로 내려오면, 그때 라인별로
+       applyFixedSlotResult()가 최종 order_index로 덮어씀. 이 임시 저장~최종
+       확정 사이에 사용자가 이 route_slots를 조회할 일은 없음 — 스트리밍이
+       끝나야 결과 화면에 진입하므로)
    → AI 스트리밍 시작 (기존과 동일), 이때 fixedSlots도 함께 FastAPI에 전달
 
 4. FastAPI stream_route()
@@ -77,20 +80,20 @@
 - **`dto/FixedSlotRequest.java`** (신규): `record FixedSlotRequest(@NotNull UUID placeId, @NotNull @Min(1) Integer dayNumber)`.
 - **`entity/RouteSlot.java`**: 고정 슬롯 생성 경로만 별도로 `pinned=true`를 세팅할 수 있는 정적 팩토리 `RouteSlot.createFixed(...)` 추가(기존 `builder()`는 스트리밍 저장용으로 그대로 둠, 신규 팩토리로 관심사 분리. 기존 생성자는 항상 `pinned=false`로 시작해 이 팩토리가 없으면 고정 슬롯을 만들 수 없음).
 - **`service/RouteSlotService.java`**:
-  - `createFixedSlots(UUID routeId, List<FixedSlotRequest> fixedSlots)` 신규 — `placeId` 존재 검증(`PlaceRepository`) 후 `RouteSlot.createFixed(...)` 형태로 저장(order_index는 day별로 겹치지 않는 큰 임시값 — 실제 값은 곧 `applyFixedSlotResult()`가 덮어씀). `dayNumber`가 여행 박수(`req.nights()+1`) 범위를 벗어나면 `BusinessException(ErrorCode.INVALID_SLOT_ORDER)`(기존 코드 재사용 — 상세보기 재정렬 때 추가한 것과 같은 검증 성격).
+  - `createFixedSlots(UUID routeId, List<FixedSlotRequest> fixedSlots)` 신규 — `placeId` 존재 검증(`PlaceRepository`) 후 `RouteSlot.createFixed(...)` 형태로 저장(order_index는 day별로 겹치지 않는 큰 임시값 — 실제 값은 곧 `applyFixedSlotResult()`가 덮어씀. `duration_minutes`는 `place.getAvgDurationMinutes()`로 채움 — `insertSlotAfter()`가 챗봇 삽입 슬롯에 쓰는 것과 동일 패턴. 이 값이 없으면 `_assign_start_times()`가 고정 슬롯의 체류시간을 0분으로 계산해 버려 뒷 슬롯들의 시작 시각이 전부 당겨지는 문제가 생김). `dayNumber`가 여행 박수(`req.nights()+1`) 범위를 벗어나면 `BusinessException(ErrorCode.INVALID_SLOT_ORDER)`(기존 코드 재사용 — 상세보기 재정렬 때 추가한 것과 같은 검증 성격).
   - `saveStreamingLine(UUID routeId, String jsonLine)` 수정 — `"is_fixed": true`인 라인이면 `applyFixedSlotResult(routeId, node)`로 분기, 아니면 기존 `saveStreamingSlot()` 그대로.
   - `applyFixedSlotResult(UUID routeId, JsonNode node)` 신규 — `route_id + day_number + place_id`로 기존 pinned `RouteSlot` 조회 후 `order_index`/`start_time`/`updateTransport(...)` 갱신(INSERT 아님, 기존 `RouteSlot.updateTransport()`/`updateStartTime()`/`updateOrderIndex()` 재사용 — "상세보기 슬롯 재정렬"에서 이미 추가한 메서드들).
 - **`controller/RouteController.java`**: `generate()`에서 `routeSlotService.createFixedSlots(route.getId(), req.fixedSlotsOrEmpty())`를 `createRoute()` 직후·스트리밍 시작 전에 호출. 그 외 스트리밍 라인 처리 흐름은 그대로(분기는 `RouteSlotService.saveStreamingLine()` 내부에서 처리).
-- **`service/AiServiceClient.java`**: `FastApiRequest`에 고정 슬롯 정보 추가 — 숙소 앵커(`AccommodationAnchorDto`)와 동일하게 day_number + place의 lat/lng을 FastAPI가 바로 쓸 수 있는 형태로 변환해서 전달(place 좌표 조회는 `PlaceRepository` 재사용).
+- **`service/AiServiceClient.java`**: `FastApiRequest`에 고정 슬롯 정보 추가 — 숙소 앵커(`AccommodationAnchorDto`)와 동일하게 day_number + place의 lat/lng + `durationMinutes`(방금 `createFixedSlots`가 저장한 값과 동일한 것을 그대로 전달, 재조회 없이 `createFixedSlots`가 반환한 `RouteSlot` 리스트에서 꺼내 씀)를 FastAPI가 바로 쓸 수 있는 형태로 변환해서 전달.
 
 ### FastAPI (`ai/`)
 
-- **`app/models/schemas.py`**: `RouteGenRequest`에 `fixed_slots: list[FixedSlot] = []` 필드 추가. `FixedSlot(place_id, day_number, lat, lng)` 신규 모델(장소명 등은 이미 place_id로 DB에 있으니 좌표만 필요).
+- **`app/models/schemas.py`**: `RouteGenRequest`에 `fixed_slots: list[FixedSlot] = []` 필드 추가. `FixedSlot(place_id, day_number, lat, lng, duration_minutes)` 신규 모델(장소명 등은 이미 place_id로 DB에 있으니 불필요 — 단, `duration_minutes`는 `_assign_start_times`가 그대로 쓰므로 필수).
 - **`app/services/route_service.py`**:
-  - `_build_fixed_slots_by_day(fixed_slots)` 신규 헬퍼 — day_number → 그 날 고정된 place_id 집합 + 좌표 리스트로 매핑(`_build_accommodation_anchors`와 같은 형태의 순수 함수).
+  - `_build_fixed_slots_by_day(fixed_slots)` 신규 헬퍼 — day_number → 그 날 고정된 슬롯 라인(`{"place_id", "day", "duration_minutes", "is_fixed": true}`) 리스트로 매핑(`_build_accommodation_anchors`와 같은 형태의 순수 함수, 좌표는 `coord_lookup`에도 합쳐 넣어야 TSP/enrich가 찾을 수 있음).
   - day별 프롬프트 생성 구간(`day_candidate_lookup` 빌드하는 부분, L250 근처): 그 day에 이미 고정된 place_id를 후보에서 제외.
   - `slot_cap` 계산 구간(L322 근처): 그 day의 고정 슬롯 개수만큼 차감(`slot_cap - len(fixed_for_day)`, 최소 0).
-  - `_finalize_day()`(L324): `reorder_slots()` 호출 전에 그 day의 고정 슬롯을 최소 라인(`{"place_id": ..., "day": N, "is_fixed": true}`)으로 만들어 `day_lines`에 합류. `reorder_slots()`→`enrich_transport()`→`_assign_start_times()`까지 기존 파이프라인을 그대로 통과(고정 슬롯이 없는 day는 기존과 100% 동일 동작). 최종 출력 라인마다 원래 `is_fixed` 플래그를 유지해서 내보냄(AI 슬롯은 필드 자체가 없거나 `false`).
+  - `_finalize_day()`(L324): `reorder_slots()` 호출 전에 그 day의 고정 슬롯 라인을 `day_lines`에 합류. `reorder_slots()`→`enrich_transport()`→`_assign_start_times()`까지 기존 파이프라인을 그대로 통과(고정 슬롯이 없는 day는 기존과 100% 동일 동작 — `duration_minutes`가 이미 채워져 있어 `_assign_start_times`도 별도 처리 불필요). 최종 출력 라인마다 원래 `is_fixed` 플래그를 유지해서 내보냄(AI 슬롯은 필드 자체가 없거나 `false`).
 - **`tests/test_route_service.py`**: `_build_fixed_slots_by_day` 순수 함수 단위 테스트 추가(day 매핑, 빈 리스트 케이스). day별 슬롯 생성 로직에 고정 슬롯이 있을 때 후보 제외/개수 차감이 되는지는 통합 테스트 성격이라 기존 테스트 인프라 확인 후 스코프 결정.
 
 ## 에러 처리
