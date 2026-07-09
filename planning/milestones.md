@@ -221,6 +221,15 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 - [x] 날씨 예보 범위(5일) 밖 안내 문구 + 과거/여행종료 처리 — 2026-07-04
 - [x] 이동수단 칩 UI 오버플로우 수정 + 로딩 화면 아이콘 순환 애니메이션 + 진행률 8% 시작 — 2026-07-04
 
+### 2026-07-09: 상세보기 슬롯 드래그 재정렬 ✅
+
+**[Spring]**
+- [x] `PATCH /v1/routes/{routeId}/slots/reorder` — day 내부 슬롯 순서 일괄 변경 + 이동정보 재계산 — 2026-07-09
+
+**[Frontend]**
+- [x] `SlotCard.tsx` `DraggableSlotRow` — 카드 실측 높이 기반 드래그 재정렬 — 2026-07-09
+- [x] 재정렬 후속 버그 수정 — Reanimated 워클릿 에러(`resolveTargetIndex` non-worklet 호출) + 이동수단 칩 오버플로(TouchableOpacity flexShrink 누락) — 2026-07-09
+
 ---
 
 ## Phase 2: AI 챗봇 + 예산 관리 (~2026-07-25 ~)
