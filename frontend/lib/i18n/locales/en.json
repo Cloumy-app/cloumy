@@ -127,7 +127,9 @@
     "saveButton": "Save",
     "exitButton": "Exit",
     "editButton": "Edit",
-    "doneEditButton": "Done"
+    "doneEditButton": "Done",
+    "reorderFailedTitle": "Reorder failed",
+    "reorderFailedBody": "Couldn't save the new order. Please try again."
   },
   "slotCard": {
     "transportModes": { "walk": "Walk", "taxi": "Car", "transit": "Transit", "default": "Travel" },

@@ -101,6 +101,21 @@ export async function reorderRoutes(routeIds: string[]): Promise<RouteListItem[]
   return body.data;
 }
 
+export async function reorderRouteSlots(
+  routeId: string,
+  dayNumber: number,
+  slotIds: string[],
+): Promise<SlotWithCoords[]> {
+  const res = await apiFetch(`/v1/routes/${routeId}/slots/reorder`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dayNumber, slotIds }),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+  const body: { data: SlotWithCoords[] } = await res.json();
+  return body.data;
+}
+
 export async function getSlotAlternatives(
   routeId: string,
   slotId: string,

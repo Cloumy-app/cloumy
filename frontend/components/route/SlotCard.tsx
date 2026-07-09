@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Star, RefreshCw, X, Check, Navigation, Wallet, MapPin, Sparkles, CloudRain, Footprints, Car, Bus, ChevronDown, ChevronUp } from 'lucide-react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, runOnJS } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Star, RefreshCw, X, Check, Navigation, Wallet, MapPin, Sparkles, CloudRain, Footprints, Car, Bus, ChevronDown, ChevronUp, GripVertical } from 'lucide-react-native';
 import type { BudgetLevel, RouteSlot, SlotAlternative, SlotWithCoords, TransitHop } from '@/types';
 import { getBudgetStatus } from '@/types';
 import { getSlotAlternatives } from '@/lib/api/routes';
@@ -109,6 +111,7 @@ interface SlotCardProps {
   budgetLevel?: BudgetLevel;
   viewMode?: 'edit' | 'detail';
   showActions?: boolean;
+  showTransport?: boolean;
   isFocused?: boolean;
   isRainy?: boolean;
   // 다음 슬롯 좌표 — walk/transit 내비 목적지로 사용(apiSlot 기반 렌더링일 때만 전달됨)
@@ -133,6 +136,7 @@ export function SlotCard({
   budgetLevel,
   viewMode = 'edit',
   showActions = true,
+  showTransport = true,
   isFocused = false,
   isRainy = false,
   nextPlace = null,
@@ -296,7 +300,7 @@ export function SlotCard({
           </View>
         </TouchableOpacity>
 
-        {!isLast && (transportMinutes != null || transportToNext) && (
+        {showTransport && !isLast && (transportMinutes != null || transportToNext) && (
           <TransportChip
             mode={transportToNext}
             minutes={transportMinutes}
@@ -503,7 +507,7 @@ export function SlotCard({
         </View>
       </TouchableOpacity>
 
-      {!isLast && (transportMinutes != null || transportToNext) && (
+      {showTransport && !isLast && (transportMinutes != null || transportToNext) && (
         <TransportChip
           mode={transportToNext}
           minutes={transportMinutes}
@@ -514,5 +518,78 @@ export function SlotCard({
         />
       )}
     </View>
+  );
+}
+
+// 이동 거리(dy)를 카드별 실측 높이 누적과 비교해 몇 칸 이동했는지 계산한다.
+// SlotCard는 팁 펼침·이동수단 chip 유무에 따라 높이가 제각각이라(ReorderableRouteList의
+// 고정 ROW_HEIGHT 나눗셈과 달리) 각 카드 높이의 절반을 임계값으로 넘었는지로 판정한다.
+function resolveTargetIndex(from: number, dy: number, heights: number[]): number {
+  let acc = 0;
+  if (dy > 0) {
+    let i = from;
+    while (i < heights.length - 1 && dy > acc + heights[i + 1] / 2) {
+      acc += heights[i + 1];
+      i++;
+    }
+    return i;
+  }
+  let i = from;
+  while (i > 0 && -dy > acc + heights[i - 1] / 2) {
+    acc += heights[i - 1];
+    i--;
+  }
+  return i;
+}
+
+// 상세보기 편집모드에서 슬롯 한 장을 감싸 드래그 재정렬 핸들을 붙인다.
+// GripVertical 핸들에만 Pan 제스처를 걸어, 카드 본문의 기존 탭(핀/리롤/삭제/지도이동)은
+// 그대로 동작한다(ReorderableRouteList의 DraggableRow와 동일 원칙).
+export function DraggableSlotRow({
+  index,
+  heights,
+  onMove,
+  children,
+}: {
+  index: number;
+  heights: number[];
+  onMove: (from: number, to: number) => void;
+  children: React.ReactNode;
+}) {
+  const translateY = useSharedValue(0);
+  const isDragging = useSharedValue(false);
+
+  const panGesture = Gesture.Pan()
+    .onStart(() => {
+      isDragging.value = true;
+    })
+    .onUpdate((e) => {
+      translateY.value = e.translationY;
+    })
+    .onEnd(() => {
+      const targetIndex = resolveTargetIndex(index, translateY.value, heights);
+      translateY.value = withTiming(0, { duration: 150 });
+      isDragging.value = false;
+      if (targetIndex !== index) {
+        runOnJS(onMove)(index, targetIndex);
+      }
+    });
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+    zIndex: isDragging.value ? 10 : 0,
+  }));
+
+  return (
+    <Animated.View style={animatedStyle}>
+      <View className="flex-row items-start">
+        <GestureDetector gesture={panGesture}>
+          <View className="pt-4 pr-1" hitSlop={8}>
+            <GripVertical size={18} color="#94a3b8" />
+          </View>
+        </GestureDetector>
+        <View className="flex-1">{children}</View>
+      </View>
+    </Animated.View>
   );
 }

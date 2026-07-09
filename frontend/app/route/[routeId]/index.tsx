@@ -7,14 +7,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useTranslation } from 'react-i18next';
-import { getRoute, getRouteSlots, getRouteDaySummaries, toggleSlotPin as apiToggleSlotPin, deleteRouteSlot, deleteRoute, replaceRouteSlot } from '@/lib/api/routes';
+import { getRoute, getRouteSlots, getRouteDaySummaries, toggleSlotPin as apiToggleSlotPin, deleteRouteSlot, deleteRoute, replaceRouteSlot, reorderRouteSlots } from '@/lib/api/routes';
 import { getRouteAccommodations } from '@/lib/api/accommodations';
 import { fetchForecast } from '@/lib/api/weather';
 import { getBudgetSummary } from '@/lib/api/budget';
 import { useRouteStore } from '@/stores/useRouteStore';
 import { TripMap } from '@/components/map/TripMap';
 import { DayTabs } from '@/components/route/DayTabs';
-import { SlotCard } from '@/components/route/SlotCard';
+import { SlotCard, DraggableSlotRow } from '@/components/route/SlotCard';
 import { BudgetBanner } from '@/components/route/BudgetBanner';
 import type { BudgetLevel, RouteDaySummary, SlotAlternative, SlotWithCoords } from '@/types';
 import type { DayWeather, RainBlock } from '@/lib/api/weather';
@@ -47,8 +47,10 @@ export default function RouteResultScreen() {
   const navigation = useNavigation();
   const [focusedSlotId, setFocusedSlotId] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [dragOrder, setDragOrder] = useState<string[] | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const slotPositions = useRef<Record<string, number>>({});
+  const slotHeights = useRef<Record<string, number>>({});
   const exitConfirmedRef = useRef(false);
 
   const isNewRoute = mode === 'new';
@@ -186,11 +188,31 @@ export default function RouteResultScreen() {
 
   const dayBudget = currentDayApiSlots.reduce((sum, s) => sum + (s.estimatedCost ?? 0), 0);
 
+  // 드래그 중인 순서(dragOrder)가 있으면 그 순서로, 없으면 서버 순서 그대로 렌더링
+  const orderedDaySlots: SlotWithCoords[] = dragOrder
+    ? dragOrder
+        .map((id) => currentDayApiSlots.find((s) => s.id === id))
+        .filter((s): s is SlotWithCoords => !!s)
+    : currentDayApiSlots;
+
   useEffect(() => {
     if (hasApiSlots) {
       sheetY.value = withTiming(SNAP_MIDDLE, { duration: 280, easing: Easing.out(Easing.cubic) });
     }
   }, [hasApiSlots]);
+
+  // 다른 날짜 탭으로 이동하면 이전 날짜에서 드래그하던 순서가 새는 걸 방지
+  useEffect(() => {
+    setDragOrder(null);
+  }, [selectedDay]);
+
+  const handleSlotMove = (from: number, to: number) => {
+    const base = dragOrder ?? currentDayApiSlots.map((s) => s.id);
+    const next = [...base];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setDragOrder(next);
+  };
 
   const handleMapSlotPress = (slotId: string) => {
     setFocusedSlotId(slotId);
@@ -289,7 +311,28 @@ export default function RouteResultScreen() {
     // 서버 원본으로 복구
     queryClient.invalidateQueries({ queryKey: ['route-slots', routeId] });
     setIsEditMode(false);
+    setDragOrder(null);
     setFocusedSlotId(null);
+  };
+
+  // "변경완료" — 드래그로 순서가 바뀌었으면 저장하고, 이동수단을 새 순서 기준으로 다시 계산해 보여준다.
+  const handleDoneEdit = async () => {
+    if (dragOrder && routeId) {
+      const original = currentDayApiSlots.map((s) => s.id);
+      const changed = dragOrder.some((id, i) => id !== original[i]);
+      if (changed) {
+        try {
+          await reorderRouteSlots(routeId, selectedDay, dragOrder);
+          queryClient.invalidateQueries({ queryKey: ['route-slots', routeId] });
+          queryClient.invalidateQueries({ queryKey: ['day-summaries', routeId] });
+        } catch {
+          Alert.alert(t('routeResult.reorderFailedTitle'), t('routeResult.reorderFailedBody'));
+          queryClient.invalidateQueries({ queryKey: ['route-slots', routeId] });
+        }
+      }
+    }
+    setDragOrder(null);
+    setIsEditMode(false);
   };
 
   const displaySlots: SlotWithCoords[] = hasApiSlots ? apiSlots! : [];
@@ -526,43 +569,58 @@ export default function RouteResultScreen() {
         >
           {budgetSummary && <BudgetBanner routeId={routeId!} summary={budgetSummary} />}
           {hasApiSlots
-            ? currentDayApiSlots.map((apiSlot, i) => (
-                <View
-                  key={apiSlot.id}
-                  onLayout={(e) => {
-                    slotPositions.current[apiSlot.id] = e.nativeEvent.layout.y;
-                  }}
-                >
-                  <SlotCard
-                    slot={null}
-                    apiSlot={apiSlot}
-                    index={i}
-                    isLast={i === currentDayApiSlots.length - 1}
-                    routeId={routeId}
-                    budgetLevel={(budgetLevel ?? 'mid') as BudgetLevel}
-                    viewMode="edit"
-                    showActions={showEditControls}
-                    isFocused={apiSlot.id === focusedSlotId}
-                    isRainy={isSlotInRainyBlock(currentDayWeather, i)}
-                    nextPlace={
-                      currentDayApiSlots[i + 1]
-                        ? {
-                            lat: currentDayApiSlots[i + 1].lat,
-                            lng: currentDayApiSlots[i + 1].lng,
-                            name: currentDayApiSlots[i + 1].placeName,
-                          }
-                        : null
-                    }
-                    onPin={() => handlePin(apiSlot.id)}
-                    onRemove={() => handleDeleteSlot(apiSlot.id)}
-                    onReplaceWithAlternative={(alt) => handleReplaceWithAlternative(apiSlot.id, alt)}
-                    onTap={() => {
-                      setFocusedSlotId(apiSlot.id);
-                      sheetY.value = withTiming(SNAP_MIDDLE, { duration: 280, easing: Easing.out(Easing.cubic) });
+            ? orderedDaySlots.map((apiSlot, i) => {
+                const slotCard = (
+                  <View
+                    onLayout={(e) => {
+                      slotPositions.current[apiSlot.id] = e.nativeEvent.layout.y;
+                      slotHeights.current[apiSlot.id] = e.nativeEvent.layout.height;
                     }}
-                  />
-                </View>
-              ))
+                  >
+                    <SlotCard
+                      slot={null}
+                      apiSlot={apiSlot}
+                      index={i}
+                      isLast={i === orderedDaySlots.length - 1}
+                      routeId={routeId}
+                      budgetLevel={(budgetLevel ?? 'mid') as BudgetLevel}
+                      viewMode="edit"
+                      showActions={showEditControls}
+                      showTransport={!isEditMode}
+                      isFocused={apiSlot.id === focusedSlotId}
+                      isRainy={isSlotInRainyBlock(currentDayWeather, i)}
+                      nextPlace={
+                        orderedDaySlots[i + 1]
+                          ? {
+                              lat: orderedDaySlots[i + 1].lat,
+                              lng: orderedDaySlots[i + 1].lng,
+                              name: orderedDaySlots[i + 1].placeName,
+                            }
+                          : null
+                      }
+                      onPin={() => handlePin(apiSlot.id)}
+                      onRemove={() => handleDeleteSlot(apiSlot.id)}
+                      onReplaceWithAlternative={(alt) => handleReplaceWithAlternative(apiSlot.id, alt)}
+                      onTap={() => {
+                        setFocusedSlotId(apiSlot.id);
+                        sheetY.value = withTiming(SNAP_MIDDLE, { duration: 280, easing: Easing.out(Easing.cubic) });
+                      }}
+                    />
+                  </View>
+                );
+
+                if (isEditMode && orderedDaySlots.length > 1) {
+                  const heights = orderedDaySlots.map(
+                    (s) => slotHeights.current[s.id] ?? slotHeights.current[apiSlot.id] ?? 140,
+                  );
+                  return (
+                    <DraggableSlotRow key={apiSlot.id} index={i} heights={heights} onMove={handleSlotMove}>
+                      {slotCard}
+                    </DraggableSlotRow>
+                  );
+                }
+                return <View key={apiSlot.id}>{slotCard}</View>;
+              })
             : currentDayStreamSlots.map((slot, i) => (
                 <SlotCard
                   key={`${slot.day}-${slot.order}-${i}`}
@@ -668,7 +726,7 @@ export default function RouteResultScreen() {
             {!isNewRoute && isEditMode && (
               <>
                 <TouchableOpacity
-                  onPress={() => setIsEditMode(false)}
+                  onPress={handleDoneEdit}
                   style={{
                     flex: 1,
                     backgroundColor: '#0ea5e9',

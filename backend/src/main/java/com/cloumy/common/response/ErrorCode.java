@@ -29,6 +29,7 @@ public enum ErrorCode {
     // 슬롯
     SLOT_NOT_FOUND(HttpStatus.NOT_FOUND, "SLOT_NOT_FOUND", "슬롯을 찾을 수 없습니다"),
     SLOT_PINNED(HttpStatus.BAD_REQUEST, "SLOT_PINNED", "고정된 슬롯은 삭제할 수 없습니다"),
+    INVALID_SLOT_ORDER(HttpStatus.BAD_REQUEST, "INVALID_SLOT_ORDER", "슬롯 순서 요청이 올바르지 않습니다"),
 
     // 결제/패스
     PASS_REQUIRED(HttpStatus.PAYMENT_REQUIRED, "PASS_REQUIRED", "트립 패스가 필요한 기능입니다"),

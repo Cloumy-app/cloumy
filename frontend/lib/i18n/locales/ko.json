@@ -127,7 +127,9 @@
     "saveButton": "저장하기",
     "exitButton": "나가기",
     "editButton": "수정하기",
-    "doneEditButton": "변경완료"
+    "doneEditButton": "변경완료",
+    "reorderFailedTitle": "순서 변경 실패",
+    "reorderFailedBody": "일정 순서를 저장하지 못했어요. 다시 시도해주세요."
   },
   "slotCard": {
     "transportModes": { "walk": "도보", "taxi": "자동차", "transit": "대중교통", "default": "이동" },

@@ -91,6 +91,11 @@ public class RouteSlot {
         this.orderIndex += delta;
     }
 
+    // 드래그 재정렬 — 임의 순열이라 상대값(delta)이 아닌 절대값 지정이 필요
+    public void updateOrderIndex(int orderIndex) {
+        this.orderIndex = orderIndex;
+    }
+
     // duration_minutes/transport_minutes 누적으로 역산한 시작 시각 반영(recomputeStartTimesForDay)
     public void updateStartTime(LocalTime startTime) {
         this.startTime = startTime;
