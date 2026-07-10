@@ -20,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -70,7 +71,10 @@ public class AuthService {
                 refreshToken,
                 "Bearer",
                 expiresIn,
-                new SocialLoginResponse.UserInfo(userId, user.getNickname(), user.getProfileImageUrl())
+                new SocialLoginResponse.UserInfo(
+                        userId, user.getNickname(), user.getProfileImageUrl(),
+                        List.of(user.getPersonaTags()), user.getOnboardingCompletedAt() != null
+                )
         );
     }
 

@@ -44,4 +44,13 @@ public interface RouteRepository extends JpaRepository<Route, UUID> {
             @Param("destination") String destination,
             @Param("nights") int nights,
             @Param("tagsCsv") String tagsCsv);
+
+    // 페르소나 자동추가 — 특정 테마들과 겹치는 유저의 루트 개수
+    // (findSimilarRoutes와 동일 이유로 native query + string_to_array 캐스팅 필요)
+    @Query(value = """
+            SELECT COUNT(*) FROM routes
+            WHERE user_id = :userId
+              AND tags && string_to_array(:themesCsv, ',')
+            """, nativeQuery = true)
+    long countByUserIdAndThemesOverlap(@Param("userId") UUID userId, @Param("themesCsv") String themesCsv);
 }

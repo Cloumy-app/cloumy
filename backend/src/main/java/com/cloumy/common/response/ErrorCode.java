@@ -21,6 +21,8 @@ public enum ErrorCode {
 
     // 사용자
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "사용자를 찾을 수 없습니다"),
+    INVALID_PERSONA_TAG(HttpStatus.BAD_REQUEST, "INVALID_PERSONA_TAG", "유효하지 않은 취향 태그입니다"),
+    ONBOARDING_ALREADY_COMPLETED(HttpStatus.CONFLICT, "ONBOARDING_ALREADY_COMPLETED", "온보딩은 이미 완료되었습니다"),
 
     // 여행 루트
     ROUTE_NOT_FOUND(HttpStatus.NOT_FOUND, "ROUTE_NOT_FOUND", "루트를 찾을 수 없습니다"),

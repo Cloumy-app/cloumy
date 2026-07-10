@@ -293,10 +293,42 @@
     "subtitle": "Cloumy旅行者",
     "myRoutesSection": "マイルート",
     "myRoutesLink": "マイルートを見る",
+    "personaTagsSection": "私の旅の称号",
+    "noPersonaTags": "まだ獲得した称号がありません",
     "languageSection": "言語",
     "languageSettings": "言語設定",
     "accountSection": "アカウント",
     "logout": "ログアウト"
+  },
+  "onboarding": {
+    "headerTitle": "あなたの旅行スタイルを教えてください",
+    "progress": "{{current}} / {{total}}",
+    "skipButton": "スキップ",
+    "swipeHint": "好きなら右へ、そうでなければ左へスワイプしてください",
+    "likeLabel": "いいね",
+    "passLabel": "パス",
+    "cards": {
+      "kpopConcert": "K-popコンサート観覧",
+      "dramaFilmingSite": "ドラマ撮影地ツアー",
+      "streetFood": "老舗グルメ巡り",
+      "beautyStreet": "ビューティーストリートショッピング",
+      "palaceHanbok": "古宮韓服体験",
+      "natureTrail": "自然トレッキング",
+      "shoppingDistrict": "ショッピング & 映え写真",
+      "nightCafeView": "夜景 & おしゃれカフェ"
+    }
+  },
+  "personaTags": {
+    "K_POP_PILGRIM": "K-pop Pilgrim",
+    "K_DRAMA_FAN": "K-drama Fan",
+    "K_FOOD_LOVER": "K-food Lover",
+    "K_BEAUTY_ADDICT": "K-beauty Addict",
+    "CULTURE_EXPLORER": "Culture Explorer",
+    "NATURE_SEEKER": "Nature Seeker",
+    "SHOPPING_MAVEN": "Shopping Maven",
+    "CONTENT_CREATOR": "Content Creator",
+    "NIGHT_OWL": "Night Owl",
+    "CAFE_HOPPER": "Cafe Hopper"
   },
   "budget": {
     "headerTitle": "予算管理",

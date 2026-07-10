@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 // dev 프로필에서만 활성화 — prod 배포 시 이 빈은 생성되지 않음
 @Profile("dev")
 @RestController
@@ -57,7 +59,10 @@ public class DevAuthController {
                 refreshToken,
                 "Bearer",
                 expiresIn,
-                new SocialLoginResponse.UserInfo(userId, user.getNickname(), user.getProfileImageUrl())
+                new SocialLoginResponse.UserInfo(
+                        userId, user.getNickname(), user.getProfileImageUrl(),
+                        List.of(user.getPersonaTags()), user.getOnboardingCompletedAt() != null
+                )
         ));
     }
 }

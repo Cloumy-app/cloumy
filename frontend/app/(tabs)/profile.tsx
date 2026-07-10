@@ -21,6 +21,8 @@ export default function ProfileScreen() {
   const setLanguage = useLanguageStore((s) => s.setLanguage);
 
   const initial = user?.nickname?.charAt(0).toUpperCase() ?? 'C';
+  // 페르소나 태그는 "칭호" — 온보딩·자동추가로만 부여되고 여기서 직접 편집할 수 없음
+  const personaTags = user?.personaTags ?? [];
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50">
@@ -53,6 +55,30 @@ export default function ProfileScreen() {
               <Text className="flex-1 font-semibold text-slate-700">{t('profile.myRoutesLink')}</Text>
               <ChevronRight size={18} color="#94a3b8" />
             </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* 내 여행 칭호 섹션 — 온보딩·자동추가로만 부여되는 읽기 전용 표시 */}
+        <View className="mx-6 mt-4">
+          <Text className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">
+            {t('profile.personaTagsSection')}
+          </Text>
+          <View className="bg-white rounded-2xl border border-slate-100 overflow-hidden px-5 py-4">
+            <View className="flex-row flex-wrap gap-2">
+              {personaTags.map((tag) => (
+                <View
+                  key={tag}
+                  className="flex-row items-center gap-1.5 bg-sky-50 border border-sky-200 rounded-2xl px-3 py-2"
+                >
+                  <Text className="text-sky-700 font-semibold text-xs">
+                    {t(`personaTags.${tag}`)}
+                  </Text>
+                </View>
+              ))}
+              {personaTags.length === 0 && (
+                <Text className="text-xs text-slate-400">{t('profile.noPersonaTags')}</Text>
+              )}
+            </View>
           </View>
         </View>
 
