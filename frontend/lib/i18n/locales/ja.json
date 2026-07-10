@@ -288,11 +288,23 @@
     "emptySubtitle": "AIで自分だけの旅行ルートを作ってみましょう",
     "createButton": "AIルートを作成する"
   },
+  "explore": {
+    "headerTitle": "探索",
+    "tabAll": "すべて",
+    "tabBookmarks": "マイブックマーク",
+    "selectCityPrompt": "都市を選択してください",
+    "emptyState": "条件に合う場所がありません"
+  },
+  "bookmarks": {
+    "headerTitle": "マイブックマーク",
+    "emptyState": "まだブックマークした場所がありません"
+  },
   "profile": {
     "travelerFallback": "旅行者",
     "subtitle": "Cloumy旅行者",
     "myRoutesSection": "マイルート",
     "myRoutesLink": "マイルートを見る",
+    "myBookmarksLink": "マイブックマークを見る",
     "personaTagsSection": "私の旅の称号",
     "noPersonaTags": "まだ獲得した称号がありません",
     "languageSection": "言語",

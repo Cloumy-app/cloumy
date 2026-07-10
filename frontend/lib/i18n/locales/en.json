@@ -288,11 +288,23 @@
     "emptySubtitle": "Let AI build your own travel route",
     "createButton": "Create an AI route"
   },
+  "explore": {
+    "headerTitle": "Explore",
+    "tabAll": "All",
+    "tabBookmarks": "My bookmarks",
+    "selectCityPrompt": "Select a city",
+    "emptyState": "No places match your filters"
+  },
+  "bookmarks": {
+    "headerTitle": "My bookmarks",
+    "emptyState": "No bookmarked places yet"
+  },
   "profile": {
     "travelerFallback": "Traveler",
     "subtitle": "Cloumy traveler",
     "myRoutesSection": "My routes",
     "myRoutesLink": "View my routes",
+    "myBookmarksLink": "View my bookmarks",
     "personaTagsSection": "My travel titles",
     "noPersonaTags": "No titles earned yet",
     "languageSection": "Language",

@@ -94,6 +94,15 @@ export interface PlaceDetail {
   isHiddenGem: boolean;
 }
 
+export interface PlaceBrowseItem {
+  id: string;
+  name: string;
+  address: string | null;
+  categoryTags: string[];
+  isHiddenGem: boolean;
+  isBookmarked: boolean;
+}
+
 // 외부/수동 장소 find-or-create — 콘서트 검색/카카오 라이브 검색/유저 직접 입력이 공통으로 사용
 export interface ExternalPlaceRequest {
   name: string;

@@ -2,7 +2,7 @@ import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
-import { MapPin, LogOut, ChevronRight, Globe } from 'lucide-react-native';
+import { MapPin, LogOut, ChevronRight, Globe, Heart } from 'lucide-react-native';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useLanguageStore, type SupportedLanguage } from '@/stores/useLanguageStore';
 
@@ -53,6 +53,18 @@ export default function ProfileScreen() {
                 <MapPin size={18} color="#0ea5e9" />
               </View>
               <Text className="flex-1 font-semibold text-slate-700">{t('profile.myRoutesLink')}</Text>
+              <ChevronRight size={18} color="#94a3b8" />
+            </TouchableOpacity>
+            <View className="h-px bg-slate-50" />
+            <TouchableOpacity
+              className="flex-row items-center px-5 py-4 gap-3"
+              onPress={() => router.push('/bookmarks' as never)}
+              activeOpacity={0.7}
+            >
+              <View className="w-9 h-9 rounded-xl bg-rose-50 items-center justify-center">
+                <Heart size={18} color="#f43f5e" />
+              </View>
+              <Text className="flex-1 font-semibold text-slate-700">{t('profile.myBookmarksLink')}</Text>
               <ChevronRight size={18} color="#94a3b8" />
             </TouchableOpacity>
           </View>

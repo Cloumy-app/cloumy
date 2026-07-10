@@ -288,11 +288,23 @@
     "emptySubtitle": "AI로 나만의 여행 루트를 만들어보세요",
     "createButton": "AI 루트 만들기"
   },
+  "explore": {
+    "headerTitle": "탐색",
+    "tabAll": "전체",
+    "tabBookmarks": "내 북마크",
+    "selectCityPrompt": "도시를 선택해주세요",
+    "emptyState": "조건에 맞는 장소가 없어요"
+  },
+  "bookmarks": {
+    "headerTitle": "내 북마크",
+    "emptyState": "아직 북마크한 장소가 없어요"
+  },
   "profile": {
     "travelerFallback": "여행자",
     "subtitle": "Cloumy 여행자",
     "myRoutesSection": "내 루트",
     "myRoutesLink": "내 루트 보기",
+    "myBookmarksLink": "내 북마크 보기",
     "personaTagsSection": "내 여행 칭호",
     "noPersonaTags": "아직 획득한 칭호가 없어요",
     "languageSection": "언어",
