@@ -92,12 +92,15 @@ export interface PlaceDetail {
   lng: number;
   avgDurationMinutes: number | null;
   isHiddenGem: boolean;
+  categoryTags: string[];
 }
 
 export interface PlaceBrowseItem {
   id: string;
   name: string;
   address: string | null;
+  lat: number;
+  lng: number;
   categoryTags: string[];
   isHiddenGem: boolean;
   isBookmarked: boolean;

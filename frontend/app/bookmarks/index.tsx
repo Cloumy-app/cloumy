@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { View, Text, TouchableOpacity, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -7,7 +6,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft } from 'lucide-react-native';
 import { getMyBookmarks, removeBookmark } from '@/lib/api/explore';
 import { PlaceBrowseCard } from '@/components/explore/PlaceBrowseCard';
-import { PlaceDetailSheet } from '@/components/route/PlaceDetailSheet';
 import type { PlaceBrowseItem } from '@/types';
 
 const QUERY_KEY = ['bookmarks'];
@@ -15,7 +13,6 @@ const QUERY_KEY = ['bookmarks'];
 export default function BookmarksScreen() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: QUERY_KEY,
@@ -58,14 +55,11 @@ export default function BookmarksScreen() {
           renderItem={({ item }) => (
             <PlaceBrowseCard
               place={item}
-              onPress={() => setSelectedPlaceId(item.id)}
               onToggleBookmark={() => handleToggleBookmark(item)}
             />
           )}
         />
       )}
-
-      <PlaceDetailSheet placeId={selectedPlaceId} onClose={() => setSelectedPlaceId(null)} />
     </SafeAreaView>
   );
 }

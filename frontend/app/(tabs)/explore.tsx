@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Compass } from 'lucide-react-native';
 import { browsePlaces, getMyBookmarks, addBookmark, removeBookmark } from '@/lib/api/explore';
 import { PlaceBrowseCard } from '@/components/explore/PlaceBrowseCard';
-import { PlaceDetailSheet } from '@/components/route/PlaceDetailSheet';
+import { ExploreMap } from '@/components/explore/ExploreMap';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { EXPLORE_CATEGORY_TAGS, PERSONA_EXPLORE_TAG_MAP, type PersonaTag } from '@/lib/constants/personaTags';
 import type { PlaceBrowseItem } from '@/types';
@@ -30,7 +30,7 @@ export default function ExploreScreen() {
   const [city, setCity] = useState<string | null>(null);
   const [tags, setTags] = useState<string[]>(preselectedTags);
   const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
-  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
+  const [focusedPlaceId, setFocusedPlaceId] = useState<string | null>(null);
 
   const queryKey = ['explore', city, tags, showBookmarksOnly];
   const { data, isLoading } = useQuery({
@@ -71,7 +71,19 @@ export default function ExploreScreen() {
               <TouchableOpacity
                 key={mode}
                 onPress={() => setShowBookmarksOnly(mode === 'bookmarks')}
-                className={`flex-1 py-2 rounded-xl items-center ${selected ? 'bg-white shadow-sm' : ''}`}
+                className="flex-1 py-2 rounded-xl items-center"
+                style={
+                  selected
+                    ? {
+                        backgroundColor: '#ffffff',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 1 },
+                        shadowOpacity: 0.08,
+                        shadowRadius: 2,
+                        elevation: 1,
+                      }
+                    : undefined
+                }
               >
                 <Text className={`text-sm font-bold ${selected ? 'text-sky-600' : 'text-slate-400'}`}>
                   {t(mode === 'all' ? 'explore.tabAll' : 'explore.tabBookmarks')}
@@ -125,21 +137,24 @@ export default function ExploreScreen() {
           <Text className="text-slate-400 font-medium">{t('explore.emptyState')}</Text>
         </View>
       ) : (
-        <FlatList
-          data={places}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 24 }}
-          renderItem={({ item }) => (
-            <PlaceBrowseCard
-              place={item}
-              onPress={() => setSelectedPlaceId(item.id)}
-              onToggleBookmark={() => handleToggleBookmark(item)}
-            />
-          )}
-        />
+        <>
+          <ExploreMap places={places} focusedPlaceId={focusedPlaceId} onMarkerPress={setFocusedPlaceId} />
+          <FlatList
+            data={places}
+            keyExtractor={(item) => item.id}
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 24 }}
+            renderItem={({ item }) => (
+              <PlaceBrowseCard
+                place={item}
+                isFocused={item.id === focusedPlaceId}
+                onFocusMap={() => setFocusedPlaceId(item.id)}
+                onToggleBookmark={() => handleToggleBookmark(item)}
+              />
+            )}
+          />
+        </>
       )}
-
-      <PlaceDetailSheet placeId={selectedPlaceId} onClose={() => setSelectedPlaceId(null)} />
     </SafeAreaView>
   );
 }
