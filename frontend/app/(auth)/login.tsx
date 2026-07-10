@@ -19,7 +19,7 @@ export default function LoginScreen() {
       const data = await devLogin();
       setTokens(data.accessToken, data.refreshToken);
       setUser(data.user);
-      router.replace('/(tabs)');
+      router.replace(data.user.onboardingCompleted ? '/(tabs)' : '/(auth)/onboarding');
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       if (message.startsWith('404')) {

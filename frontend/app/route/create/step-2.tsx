@@ -8,6 +8,8 @@ import { ChevronLeft } from 'lucide-react-native';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { BudgetLevel } from '@/types';
+import { useAuthStore } from '@/stores/useAuthStore';
+import { PERSONA_THEME_MAP, type PersonaTag } from '@/lib/constants/personaTags';
 
 const THEMES = ['맛집', '카페', '관광', '자연', '쇼핑', '문화', '액티비티', '힐링', '야경'];
 
@@ -44,10 +46,20 @@ export default function RouteCreateStep2() {
   const nightsNum = Number(params.nights);
   const days = Number.isNaN(nightsNum) ? null : Math.max(nightsNum + 1, 1);
 
+  const user = useAuthStore((s) => s.user);
+  // 페르소나 태그는 route 생성 시 기본값 제안일 뿐 — 유저는 아래에서 언제든 자유롭게 변경 가능
+  const preselectedThemes = useMemo(() => {
+    const themes = new Set<string>();
+    for (const persona of user?.personaTags ?? []) {
+      (PERSONA_THEME_MAP[persona as PersonaTag] ?? []).forEach((theme) => themes.add(theme));
+    }
+    return Array.from(themes);
+  }, [user?.personaTags]);
+
   const step2Schema = useMemo(() => buildStep2Schema(t), [t]);
   const { control, handleSubmit, formState: { errors } } = useForm<Step2Form>({
     resolver: zodResolver(step2Schema),
-    defaultValues: { tags: [], budgetLevel: 'mid' },
+    defaultValues: { tags: preselectedThemes, budgetLevel: 'mid' },
   });
 
   const onNext = (data: Step2Form) => {

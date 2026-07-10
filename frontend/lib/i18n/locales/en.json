@@ -293,10 +293,42 @@
     "subtitle": "Cloumy traveler",
     "myRoutesSection": "My routes",
     "myRoutesLink": "View my routes",
+    "personaTagsSection": "My travel titles",
+    "noPersonaTags": "No titles earned yet",
     "languageSection": "Language",
     "languageSettings": "Language settings",
     "accountSection": "Account",
     "logout": "Log out"
+  },
+  "onboarding": {
+    "headerTitle": "Tell us your travel style",
+    "progress": "{{current}} / {{total}}",
+    "skipButton": "Skip",
+    "swipeHint": "Swipe right if you like it, left if not",
+    "likeLabel": "LIKE",
+    "passLabel": "PASS",
+    "cards": {
+      "kpopConcert": "K-pop concert",
+      "dramaFilmingSite": "K-drama filming site tour",
+      "streetFood": "Old-school local eats",
+      "beautyStreet": "Beauty street shopping",
+      "palaceHanbok": "Palace hanbok experience",
+      "natureTrail": "Nature trekking",
+      "shoppingDistrict": "Shopping & photo spots",
+      "nightCafeView": "Night view & cozy cafes"
+    }
+  },
+  "personaTags": {
+    "K_POP_PILGRIM": "K-pop Pilgrim",
+    "K_DRAMA_FAN": "K-drama Fan",
+    "K_FOOD_LOVER": "K-food Lover",
+    "K_BEAUTY_ADDICT": "K-beauty Addict",
+    "CULTURE_EXPLORER": "Culture Explorer",
+    "NATURE_SEEKER": "Nature Seeker",
+    "SHOPPING_MAVEN": "Shopping Maven",
+    "CONTENT_CREATOR": "Content Creator",
+    "NIGHT_OWL": "Night Owl",
+    "CAFE_HOPPER": "Cafe Hopper"
   },
   "budget": {
     "headerTitle": "Budget",
