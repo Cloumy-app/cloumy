@@ -142,7 +142,13 @@
     "originalDay": "元の{{day}}日目",
     "dayChip": "{{day}}日目",
     "nextWithCount": "{{count}}件を取り込む",
-    "skip": "スキップ"
+    "skip": "スキップ",
+    "importTab": "共有ルートから",
+    "searchTab": "直接検索",
+    "searchPlaceholder": "場所の名前で検索",
+    "pickDayLabel": "何日目に入れますか？",
+    "searchAddFailedTitle": "場所の追加に失敗しました",
+    "searchAddFailedBody": "しばらくしてからもう一度お試しください。"
   },
   "slotCard": {
     "transportModes": { "walk": "徒歩", "taxi": "車", "transit": "公共交通機関", "default": "移動" },

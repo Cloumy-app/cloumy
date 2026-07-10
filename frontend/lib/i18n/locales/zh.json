@@ -142,7 +142,13 @@
     "originalDay": "原第{{day}}天",
     "dayChip": "第{{day}}天",
     "nextWithCount": "导入{{count}}个地点",
-    "skip": "跳过"
+    "skip": "跳过",
+    "importTab": "从共享路线",
+    "searchTab": "直接搜索",
+    "searchPlaceholder": "按地点名称搜索",
+    "pickDayLabel": "要加入第几天？",
+    "searchAddFailedTitle": "添加地点失败",
+    "searchAddFailedBody": "请稍后重试。"
   },
   "slotCard": {
     "transportModes": { "walk": "步行", "taxi": "自驾", "transit": "公共交通", "default": "移动" },

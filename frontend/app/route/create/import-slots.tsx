@@ -6,6 +6,7 @@ import { ChevronLeft, Check, Users, Bookmark } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { getPublicRoutes, getPublicRouteSlots } from '@/lib/api/routes';
 import { useImportedSlotsStore } from '@/stores/useImportedSlotsStore';
+import { SearchPlaceTab } from '@/components/route/SearchPlaceTab';
 import type { PublicRouteListItem, SlotWithCoords } from '@/types';
 
 export default function RouteCreateImportSlots() {
@@ -20,6 +21,8 @@ export default function RouteCreateImportSlots() {
 
   const nightsNum = Number(params.nights ?? 1);
   const dayCount = Math.max(nightsNum + 1, 1);
+
+  const [activeTab, setActiveTab] = useState<'import' | 'search'>('import');
 
   const [loading, setLoading] = useState(true);
   const [publicRoutes, setPublicRoutes] = useState<PublicRouteListItem[]>([]);
@@ -127,7 +130,9 @@ export default function RouteCreateImportSlots() {
         <View className="flex-1">
           <Text className="text-xs text-sky-500 font-bold mb-0.5">STEP 2 / 5</Text>
           <Text className="text-xl font-bold text-slate-800">
-            {openRoute ? openRoute.title : t('routeCreateImport.headerTitle')}
+            {activeTab === 'search'
+              ? t('routeCreateImport.searchTab')
+              : openRoute ? openRoute.title : t('routeCreateImport.headerTitle')}
           </Text>
         </View>
         {imported.length > 0 && (
@@ -137,7 +142,34 @@ export default function RouteCreateImportSlots() {
         )}
       </View>
 
-      {!openRoute ? (
+      {!openRoute && (
+        <View className="flex-row px-6 mb-4 gap-2">
+          <TouchableOpacity
+            onPress={() => setActiveTab('import')}
+            className={`flex-1 py-2.5 rounded-xl items-center border-2 ${
+              activeTab === 'import' ? 'border-sky-500 bg-sky-50' : 'border-slate-200'
+            }`}
+          >
+            <Text className={`text-sm font-bold ${activeTab === 'import' ? 'text-sky-600' : 'text-slate-500'}`}>
+              {t('routeCreateImport.importTab')}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setActiveTab('search')}
+            className={`flex-1 py-2.5 rounded-xl items-center border-2 ${
+              activeTab === 'search' ? 'border-sky-500 bg-sky-50' : 'border-slate-200'
+            }`}
+          >
+            <Text className={`text-sm font-bold ${activeTab === 'search' ? 'text-sky-600' : 'text-slate-500'}`}>
+              {t('routeCreateImport.searchTab')}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {activeTab === 'search' ? (
+        <SearchPlaceTab dayCount={dayCount} />
+      ) : !openRoute ? (
         <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false}>
           <Text className="text-xs text-slate-400 mb-4">{t('routeCreateImport.hint')}</Text>
 
