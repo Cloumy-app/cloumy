@@ -101,13 +101,14 @@ export async function updateRouteVisibility(routeId: string, isPublic: boolean):
 }
 
 // 루트/커뮤니티 탭 신설 — destination 생략 시 목적지 무관 전체 공개 루트 피드(커뮤니티 탭용).
-// 기존 import-slots.tsx는 destination을 넘겨 목적지 일치 목록만 받는 기존 동작 그대로 유지.
+// 공유 루트 가져오기 화면 북마크 개편 — bookmarkedOnly로 "북마크한 루트만" 토글.
 export async function getPublicRoutes(
   destination?: string,
+  bookmarkedOnly = false,
   page = 0,
   size = 10,
 ): Promise<SpringPage<PublicRouteListItem>> {
-  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  const params = new URLSearchParams({ page: String(page), size: String(size), bookmarkedOnly: String(bookmarkedOnly) });
   if (destination) params.set('destination', destination);
   const res = await apiFetch(`/v1/routes/public?${params}`);
   if (!res.ok) throw new Error(`${res.status}`);
@@ -141,6 +142,16 @@ export async function createManualRoute(payload: {
   if (!res.ok) throw new Error(`${res.status}`);
   const body: { data: RouteListItem } = await res.json();
   return body.data;
+}
+
+export async function addRouteBookmark(routeId: string): Promise<void> {
+  const res = await apiFetch(`/v1/routes/${routeId}/bookmark`, { method: 'POST' });
+  if (!res.ok) throw new Error(`${res.status}`);
+}
+
+export async function removeRouteBookmark(routeId: string): Promise<void> {
+  const res = await apiFetch(`/v1/routes/${routeId}/bookmark`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`${res.status}`);
 }
 
 export async function getPublicRouteSlots(routeId: string): Promise<SlotWithCoords[]> {

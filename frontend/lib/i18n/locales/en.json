@@ -144,13 +144,18 @@
     "nextWithCount": "Import {{count}} places",
     "skip": "Skip",
     "importTab": "From shared routes",
+    "bookmarkedPlacesTab": "Bookmarked places",
     "searchTab": "Search",
     "searchPlaceholder": "Search by place name",
     "pickDayLabel": "Which day should this go on?",
     "searchAddFailedTitle": "Couldn't add place",
     "searchAddFailedBody": "Please try again in a moment.",
     "sourceRouteUnavailableTitle": "Can't load this route",
-    "sourceRouteUnavailableBody": "This route was made private or deleted. Try another shared route."
+    "sourceRouteUnavailableBody": "This route was made private or deleted. Try another shared route.",
+    "routesTabAll": "All",
+    "routesTabBookmarked": "My bookmarks",
+    "noBookmarkedRoutes": "No bookmarked shared routes yet",
+    "noBookmarkedPlaces": "No bookmarked places in this area"
   },
   "community": {
     "headerTitle": "Community",

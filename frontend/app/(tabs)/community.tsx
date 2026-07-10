@@ -78,7 +78,7 @@ export default function CommunityScreen() {
     isFetchingNextPage,
   } = useInfiniteQuery({
     queryKey: ['community', 'feed'],
-    queryFn: ({ pageParam }) => getPublicRoutes(undefined, pageParam, PAGE_SIZE),
+    queryFn: ({ pageParam }) => getPublicRoutes(undefined, false, pageParam, PAGE_SIZE),
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => (lastPage.last ? undefined : allPages.length),
     staleTime: 1000 * 60 * 2,

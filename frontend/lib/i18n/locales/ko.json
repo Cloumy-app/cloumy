@@ -144,13 +144,18 @@
     "nextWithCount": "{{count}}곳 가져오기",
     "skip": "건너뛰기",
     "importTab": "공유 루트에서",
+    "bookmarkedPlacesTab": "북마크한 장소",
     "searchTab": "직접 검색",
     "searchPlaceholder": "장소 이름으로 검색",
     "pickDayLabel": "며칠차에 넣을까요?",
     "searchAddFailedTitle": "장소 추가 실패",
     "searchAddFailedBody": "잠시 후 다시 시도해주세요.",
     "sourceRouteUnavailableTitle": "루트를 불러올 수 없어요",
-    "sourceRouteUnavailableBody": "비공개로 전환됐거나 삭제된 루트예요. 다른 공유 루트를 찾아보세요."
+    "sourceRouteUnavailableBody": "비공개로 전환됐거나 삭제된 루트예요. 다른 공유 루트를 찾아보세요.",
+    "routesTabAll": "전체",
+    "routesTabBookmarked": "내 북마크",
+    "noBookmarkedRoutes": "아직 북마크한 공유 루트가 없어요",
+    "noBookmarkedPlaces": "이 지역에 북마크한 장소가 없어요"
   },
   "community": {
     "headerTitle": "커뮤니티",

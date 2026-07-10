@@ -144,13 +144,18 @@
     "nextWithCount": "导入{{count}}个地点",
     "skip": "跳过",
     "importTab": "从共享路线",
+    "bookmarkedPlacesTab": "收藏的地点",
     "searchTab": "直接搜索",
     "searchPlaceholder": "按地点名称搜索",
     "pickDayLabel": "要加入第几天？",
     "searchAddFailedTitle": "添加地点失败",
     "searchAddFailedBody": "请稍后重试。",
     "sourceRouteUnavailableTitle": "无法加载该路线",
-    "sourceRouteUnavailableBody": "该路线已被设为非公开或已删除，请尝试其他共享路线。"
+    "sourceRouteUnavailableBody": "该路线已被设为非公开或已删除，请尝试其他共享路线。",
+    "routesTabAll": "全部",
+    "routesTabBookmarked": "我的收藏",
+    "noBookmarkedRoutes": "还没有收藏的共享路线",
+    "noBookmarkedPlaces": "该地区没有收藏的地点"
   },
   "community": {
     "headerTitle": "社区",
