@@ -65,4 +65,14 @@ public class ExploreController {
     ) {
         return ApiResponse.ok(exploreService.getMyBookmarks(UUID.fromString(user.userId()), pageable));
     }
+
+    // 공유 루트 가져오기 — "북마크한 장소" 탭 전용(목적지 도시로 필터링)
+    @GetMapping("/bookmarks/by-city")
+    public ApiResponse<Page<PlaceBrowseResponse>> myBookmarksByCity(
+            @RequestParam String city,
+            @AuthenticationPrincipal CloudmyUserDetails user,
+            @PageableDefault(size = 50) Pageable pageable
+    ) {
+        return ApiResponse.ok(exploreService.getBookmarksByCity(UUID.fromString(user.userId()), city, pageable));
+    }
 }
