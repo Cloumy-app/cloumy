@@ -1,7 +1,10 @@
 package com.cloumy.trip.repository;
 
+import com.cloumy.trip.dto.PlaceBrowseProjection;
 import com.cloumy.trip.dto.PlaceProjection;
 import com.cloumy.trip.entity.Place;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -23,7 +26,8 @@ public interface PlaceRepository extends JpaRepository<Place, UUID> {
                    p.avg_duration_minutes    AS avgDurationMinutes,
                    p.is_hidden_gem           AS isHiddenGem,
                    p.is_curated              AS isCurated,
-                   p.name_en                 AS nameEn
+                   p.name_en                 AS nameEn,
+                   p.category_tags           AS categoryTags
             FROM places p
             WHERE p.id = :placeId
             """, nativeQuery = true)
@@ -89,4 +93,31 @@ public interface PlaceRepository extends JpaRepository<Place, UUID> {
             @Param("lng") double lng,
             @Param("lat") double lat,
             @Param("source") String source);
+
+    // 탐색 탭 — 도시 반경 30km + 테마 태그 오버랩(태그 없으면 전체) + 유저별 북마크 여부.
+    // text[] 오버랩은 findSimilarRoutes와 동일 이유로 string_to_array 캐스팅 필요.
+    @Query(value = """
+            SELECT p.id::text AS id, p.name AS name, p.address AS address,
+                   ST_Y(p.location::geometry) AS lat, ST_X(p.location::geometry) AS lng,
+                   p.category_tags AS categoryTags, p.is_hidden_gem AS isHiddenGem,
+                   EXISTS(SELECT 1 FROM bookmarks b WHERE b.place_id = p.id AND b.user_id = :userId) AS isBookmarked
+            FROM places p
+            WHERE ST_DWithin(p.location, ST_MakePoint(:lng, :lat)::geography, 30000)
+              AND (:tagsCsv = '' OR p.category_tags && string_to_array(:tagsCsv, ','))
+              AND p.is_active = true
+            ORDER BY p.review_count DESC NULLS LAST
+            """,
+            countQuery = """
+            SELECT COUNT(*) FROM places p
+            WHERE ST_DWithin(p.location, ST_MakePoint(:lng, :lat)::geography, 30000)
+              AND (:tagsCsv = '' OR p.category_tags && string_to_array(:tagsCsv, ','))
+              AND p.is_active = true
+            """,
+            nativeQuery = true)
+    Page<PlaceBrowseProjection> browsePlaces(
+            @Param("lng") double lng,
+            @Param("lat") double lat,
+            @Param("tagsCsv") String tagsCsv,
+            @Param("userId") UUID userId,
+            Pageable pageable);
 }

@@ -39,6 +39,7 @@ public enum ErrorCode {
 
     // 장소
     PLACE_NOT_FOUND(HttpStatus.NOT_FOUND, "PLACE_NOT_FOUND", "장소를 찾을 수 없습니다"),
+    INVALID_CITY(HttpStatus.BAD_REQUEST, "INVALID_CITY", "지원하지 않는 도시입니다"),
     GPS_VERIFICATION_FAILED(HttpStatus.BAD_REQUEST, "GPS_VERIFICATION_FAILED",
             "GPS 인증에 실패했습니다. 100m 이내에 위치해야 합니다"),
 
