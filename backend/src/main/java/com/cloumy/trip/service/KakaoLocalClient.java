@@ -42,10 +42,22 @@ public class KakaoLocalClient {
             .build();
 
     public List<KakaoPlaceDto> searchAccommodation(String keyword) {
+        return search(keyword, LODGING_CATEGORY);
+    }
+
+    // "직접 장소 추가"(맛집·카페 등) — 카테고리 필터 없이 전체 카테고리에서 검색.
+    // searchAccommodation()과 파싱 로직이 완전히 동일해 공통 search()로 통합, 카테고리 유무만 다르다.
+    public List<KakaoPlaceDto> searchPlace(String keyword) {
+        return search(keyword, null);
+    }
+
+    private List<KakaoPlaceDto> search(String keyword, String categoryGroupCode) {
         String encoded = URLEncoder.encode(keyword, StandardCharsets.UTF_8);
-        URI uri = URI.create(BASE_URL + "/search/keyword.json?query=" + encoded
-                + "&category_group_code=" + LODGING_CATEGORY);
-        JsonNode root = get(uri);
+        String url = BASE_URL + "/search/keyword.json?query=" + encoded;
+        if (categoryGroupCode != null) {
+            url += "&category_group_code=" + categoryGroupCode;
+        }
+        JsonNode root = get(URI.create(url));
 
         List<KakaoPlaceDto> results = new ArrayList<>();
         for (JsonNode doc : root.path("documents")) {
