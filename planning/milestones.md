@@ -240,6 +240,7 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 
 **[공통]**
 - [x] places.is_curated 플래그 + POST /v1/places/external find-or-create — 콘서트 앵커/유저 직접 장소 추가가 공통으로 쓸 기반, AI 추천 후보에서 완전 분리 — 2026-07-10
+- [x] 직접 장소 추가(카카오 검색) — 카테고리 필터 없는 일반 검색 + 위저드 import-slots에 검색 탭 통합, 선택 즉시 find-or-create로 확정 — 2026-07-10
 
 ---
 
