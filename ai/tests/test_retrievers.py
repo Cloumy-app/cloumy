@@ -2,7 +2,7 @@ import asyncpg
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from app.services.retrievers import PostgisTagRetriever
+from app.services.retrievers import PostgisTagRetriever, PgvectorRetriever
 
 
 def _db_mock() -> MagicMock:
@@ -64,3 +64,75 @@ async def test_tags_without_hash_prefix_are_normalized():
     first_call_args = db.fetch.call_args_list[0]
     passed_tags = first_call_args.args[-1]
     assert passed_tags == ["#맛집", "#야경"]
+
+
+@pytest.mark.asyncio
+async def test_postgis_tag_retriever_filters_uncurated_places_with_tags():
+    db = _db_mock()
+    db.fetch = AsyncMock(return_value=[_row(False)])
+    retriever = PostgisTagRetriever(db=db, city_coords=(127.0, 37.0), tags=["#맛집"])
+
+    await retriever._aget_relevant_documents("")
+
+    query = db.fetch.call_args[0][0]
+    assert "is_curated = true" in query
+
+
+@pytest.mark.asyncio
+async def test_postgis_tag_retriever_filters_uncurated_places_without_tags():
+    db = _db_mock()
+    db.fetch = AsyncMock(return_value=[_row(False)])
+    retriever = PostgisTagRetriever(db=db, city_coords=(127.0, 37.0), tags=[])
+
+    await retriever._aget_relevant_documents("")
+
+    query = db.fetch.call_args[0][0]
+    assert "is_curated = true" in query
+
+
+class _AsyncCM:
+    """asyncpg의 async with 체인(acquire/transaction)을 흉내내는 최소 컨텍스트 매니저."""
+
+    def __init__(self, value):
+        self._value = value
+
+    async def __aenter__(self):
+        return self._value
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+def _pgvector_db_mock(fetch_return: list[dict]) -> MagicMock:
+    conn = MagicMock()
+    conn.execute = AsyncMock()
+    conn.fetch = AsyncMock(return_value=fetch_return)
+    conn.transaction = MagicMock(return_value=_AsyncCM(None))
+
+    db = MagicMock(spec=asyncpg.Pool)
+    db.acquire = MagicMock(return_value=_AsyncCM(conn))
+    return db, conn
+
+
+def _openai_mock() -> MagicMock:
+    openai_client = MagicMock()
+    embeddings_mock = MagicMock()
+    embedding_resp = MagicMock()
+    embedding_resp.data = [MagicMock(embedding=[0.1] * 1536)]
+    embeddings_mock.create = AsyncMock(return_value=embedding_resp)
+    openai_client.embeddings = embeddings_mock
+    return openai_client
+
+
+@pytest.mark.asyncio
+async def test_pgvector_retriever_filters_uncurated_places():
+    db, conn = _pgvector_db_mock([_row(False)])
+    openai_client = _openai_mock()
+    retriever = PgvectorRetriever.model_construct(
+        db=db, openai_client=openai_client, city_coords=(127.0, 37.0)
+    )
+
+    await retriever._aget_relevant_documents("카페")
+
+    query = conn.fetch.call_args[0][0]
+    assert "is_curated = true" in query
