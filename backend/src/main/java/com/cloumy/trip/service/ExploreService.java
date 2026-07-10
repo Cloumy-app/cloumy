@@ -71,4 +71,15 @@ public class ExploreService {
                     );
                 });
     }
+
+    // 공유 루트 가져오기 — "북마크한 장소" 탭. 목적지 도시로 필터링(getMyBookmarks의 전체보기와는
+    // 별개 용도라 기존 메서드는 건드리지 않고 신설).
+    public Page<PlaceBrowseResponse> getBookmarksByCity(UUID userId, String city, Pageable pageable) {
+        double[] coords = CityCenters.COORDS.get(city);
+        if (coords == null) {
+            throw new BusinessException(ErrorCode.INVALID_CITY);
+        }
+        return bookmarkRepository.findBookmarksByCity(userId, coords[0], coords[1], pageable)
+                .map(PlaceBrowseResponse::from);
+    }
 }

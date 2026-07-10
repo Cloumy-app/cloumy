@@ -113,15 +113,36 @@ public class RouteController {
         return ApiResponse.ok(null);
     }
 
-    // 공유 루트 가져오기 — 목적지 일치 + 공개 + 요청자 본인 제외, save_count DESC 정렬
+    // 공유 루트 가져오기 — 목적지 일치 + 공개 + 요청자 본인 제외, 정렬은 네이티브 쿼리의
+    // ORDER BY(save_count DESC)가 유일한 기준(browsePlaces와 동일 이유) — Pageable의 sort는
+    // 페이지 번호·사이즈에만 쓰인다.
     @GetMapping("/routes/public")
     public ApiResponse<Page<PublicRouteResponse>> getPublicRoutes(
             @RequestParam String destination,
+            @RequestParam(defaultValue = "false") boolean bookmarkedOnly,
             @AuthenticationPrincipal CloudmyUserDetails user,
-            @PageableDefault(size = 10, sort = "saveCount", direction = Sort.Direction.DESC) Pageable pageable
+            @PageableDefault(size = 10) Pageable pageable
     ) {
         UUID userId = UUID.fromString(user.userId());
-        return ApiResponse.ok(routeService.getPublicRoutes(destination, userId, pageable));
+        return ApiResponse.ok(routeService.getPublicRoutes(destination, bookmarkedOnly, userId, pageable));
+    }
+
+    @PostMapping("/routes/{routeId}/bookmark")
+    public ApiResponse<Void> addRouteBookmark(
+            @PathVariable UUID routeId,
+            @AuthenticationPrincipal CloudmyUserDetails user
+    ) {
+        routeService.addRouteBookmark(UUID.fromString(user.userId()), routeId);
+        return ApiResponse.ok();
+    }
+
+    @DeleteMapping("/routes/{routeId}/bookmark")
+    public ApiResponse<Void> removeRouteBookmark(
+            @PathVariable UUID routeId,
+            @AuthenticationPrincipal CloudmyUserDetails user
+    ) {
+        routeService.removeRouteBookmark(UUID.fromString(user.userId()), routeId);
+        return ApiResponse.ok();
     }
 
     // 공유 루트 가져오기 — 그 루트가 공개일 때만 슬롯 목록 반환. RouteSlotController(/slots 하위)와
