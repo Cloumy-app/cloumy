@@ -52,6 +52,7 @@ export interface PublicRouteListItem {
   nights: number;
   tags: string[];
   saveCount: number;
+  isBookmarked: boolean;
 }
 
 export interface SlotWithCoords {
