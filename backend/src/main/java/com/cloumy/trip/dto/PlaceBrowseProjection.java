@@ -5,6 +5,8 @@ public interface PlaceBrowseProjection {
     String getId();
     String getName();
     String getAddress();
+    Double getLat();
+    Double getLng();
     String[] getCategoryTags();
     Boolean getIsHiddenGem();
     Boolean getIsBookmarked();

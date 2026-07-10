@@ -63,6 +63,8 @@ public class ExploreService {
                             UUID.fromString(p.getId()),
                             p.getName(),
                             p.getAddress(),
+                            p.getLat() != null ? p.getLat() : 0,
+                            p.getLng() != null ? p.getLng() : 0,
                             p.getCategoryTags() != null ? List.of(p.getCategoryTags()) : List.of(),
                             Boolean.TRUE.equals(p.getIsHiddenGem()),
                             true

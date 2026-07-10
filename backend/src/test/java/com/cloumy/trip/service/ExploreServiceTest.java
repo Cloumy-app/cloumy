@@ -59,6 +59,16 @@ class ExploreServiceTest {
             }
 
             @Override
+            public Double getLat() {
+                return 37.5665;
+            }
+
+            @Override
+            public Double getLng() {
+                return 126.9780;
+            }
+
+            @Override
             public String[] getCategoryTags() {
                 return new String[]{"#맛집"};
             }

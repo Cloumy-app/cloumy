@@ -98,6 +98,7 @@ public interface PlaceRepository extends JpaRepository<Place, UUID> {
     // text[] 오버랩은 findSimilarRoutes와 동일 이유로 string_to_array 캐스팅 필요.
     @Query(value = """
             SELECT p.id::text AS id, p.name AS name, p.address AS address,
+                   ST_Y(p.location::geometry) AS lat, ST_X(p.location::geometry) AS lng,
                    p.category_tags AS categoryTags, p.is_hidden_gem AS isHiddenGem,
                    EXISTS(SELECT 1 FROM bookmarks b WHERE b.place_id = p.id AND b.user_id = :userId) AS isBookmarked
             FROM places p
