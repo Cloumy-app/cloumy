@@ -9,4 +9,6 @@ public interface PlaceProjection {
     Double getLng();
     Integer getAvgDurationMinutes();
     Boolean getIsHiddenGem();
+    Boolean getIsCurated();
+    String getNameEn();
 }
