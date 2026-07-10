@@ -142,7 +142,13 @@
     "originalDay": "Original Day {{day}}",
     "dayChip": "Day {{day}}",
     "nextWithCount": "Import {{count}} places",
-    "skip": "Skip"
+    "skip": "Skip",
+    "importTab": "From shared routes",
+    "searchTab": "Search",
+    "searchPlaceholder": "Search by place name",
+    "pickDayLabel": "Which day should this go on?",
+    "searchAddFailedTitle": "Couldn't add place",
+    "searchAddFailedBody": "Please try again in a moment."
   },
   "slotCard": {
     "transportModes": { "walk": "Walk", "taxi": "Car", "transit": "Transit", "default": "Travel" },

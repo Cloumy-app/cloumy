@@ -217,7 +217,7 @@ export default function RouteCreateStep4() {
           ? importedSlots.map((s) => ({ placeId: s.placeId, dayNumber: s.dayNumber }))
           : undefined,
         sourceRouteIds: importedSlots.length > 0
-          ? [...new Set(importedSlots.map((s) => s.sourceRouteId))]
+          ? [...new Set(importedSlots.map((s) => s.sourceRouteId).filter((id): id is string => !!id))]
           : undefined,
       },
       (slot: RouteSlot) => {

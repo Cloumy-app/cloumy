@@ -7,7 +7,7 @@ export interface ImportedSlot {
   placeId: string;
   placeName: string;
   dayNumber: number;
-  sourceRouteId: string;
+  sourceRouteId?: string; // 직접 검색으로 추가된 항목은 원본 루트가 없어 옵셔널
 }
 
 interface ImportedSlotsStore {
