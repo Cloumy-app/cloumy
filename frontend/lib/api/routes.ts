@@ -99,11 +99,22 @@ export async function updateRouteVisibility(routeId: string, isPublic: boolean):
   if (!res.ok) throw new Error(`${res.status}`);
 }
 
-export async function getPublicRoutes(destination: string): Promise<PublicRouteListItem[]> {
-  const res = await apiFetch(`/v1/routes/public?destination=${encodeURIComponent(destination)}`);
+export async function getPublicRoutes(destination: string, bookmarkedOnly = false): Promise<PublicRouteListItem[]> {
+  const params = new URLSearchParams({ destination, bookmarkedOnly: String(bookmarkedOnly) });
+  const res = await apiFetch(`/v1/routes/public?${params.toString()}`);
   if (!res.ok) throw new Error(`${res.status}`);
   const body: { data: SpringPage<PublicRouteListItem> } = await res.json();
   return body.data.content;
+}
+
+export async function addRouteBookmark(routeId: string): Promise<void> {
+  const res = await apiFetch(`/v1/routes/${routeId}/bookmark`, { method: 'POST' });
+  if (!res.ok) throw new Error(`${res.status}`);
+}
+
+export async function removeRouteBookmark(routeId: string): Promise<void> {
+  const res = await apiFetch(`/v1/routes/${routeId}/bookmark`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`${res.status}`);
 }
 
 export async function getPublicRouteSlots(routeId: string): Promise<SlotWithCoords[]> {

@@ -144,11 +144,16 @@
     "nextWithCount": "{{count}}件を取り込む",
     "skip": "スキップ",
     "importTab": "共有ルートから",
+    "bookmarkedPlacesTab": "ブックマークした場所",
     "searchTab": "直接検索",
     "searchPlaceholder": "場所の名前で検索",
     "pickDayLabel": "何日目に入れますか？",
     "searchAddFailedTitle": "場所の追加に失敗しました",
-    "searchAddFailedBody": "しばらくしてからもう一度お試しください。"
+    "searchAddFailedBody": "しばらくしてからもう一度お試しください。",
+    "routesTabAll": "すべて",
+    "routesTabBookmarked": "ブックマーク",
+    "noBookmarkedRoutes": "まだブックマークした共有ルートがありません",
+    "noBookmarkedPlaces": "この地域にブックマークした場所がありません"
   },
   "slotCard": {
     "transportModes": { "walk": "徒歩", "taxi": "車", "transit": "公共交通機関", "default": "移動" },

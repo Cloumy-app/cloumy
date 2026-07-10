@@ -144,11 +144,16 @@
     "nextWithCount": "导入{{count}}个地点",
     "skip": "跳过",
     "importTab": "从共享路线",
+    "bookmarkedPlacesTab": "收藏的地点",
     "searchTab": "直接搜索",
     "searchPlaceholder": "按地点名称搜索",
     "pickDayLabel": "要加入第几天？",
     "searchAddFailedTitle": "添加地点失败",
-    "searchAddFailedBody": "请稍后重试。"
+    "searchAddFailedBody": "请稍后重试。",
+    "routesTabAll": "全部",
+    "routesTabBookmarked": "我的收藏",
+    "noBookmarkedRoutes": "还没有收藏的共享路线",
+    "noBookmarkedPlaces": "该地区没有收藏的地点"
   },
   "slotCard": {
     "transportModes": { "walk": "步行", "taxi": "自驾", "transit": "公共交通", "default": "移动" },

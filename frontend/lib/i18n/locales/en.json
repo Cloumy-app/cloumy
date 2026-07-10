@@ -144,11 +144,16 @@
     "nextWithCount": "Import {{count}} places",
     "skip": "Skip",
     "importTab": "From shared routes",
+    "bookmarkedPlacesTab": "Bookmarked places",
     "searchTab": "Search",
     "searchPlaceholder": "Search by place name",
     "pickDayLabel": "Which day should this go on?",
     "searchAddFailedTitle": "Couldn't add place",
-    "searchAddFailedBody": "Please try again in a moment."
+    "searchAddFailedBody": "Please try again in a moment.",
+    "routesTabAll": "All",
+    "routesTabBookmarked": "My bookmarks",
+    "noBookmarkedRoutes": "No bookmarked shared routes yet",
+    "noBookmarkedPlaces": "No bookmarked places in this area"
   },
   "slotCard": {
     "transportModes": { "walk": "Walk", "taxi": "Car", "transit": "Transit", "default": "Travel" },
