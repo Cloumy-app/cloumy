@@ -109,6 +109,38 @@ public class AiServiceClient {
         }
     }
 
+    public record TranslatePlaceResult(
+            String name_en, String name_ja, String name_zh_hans, String name_zh_hant,
+            String address_en, String address_ja, String address_zh_hans, String address_zh_hant) {}
+
+    private record TranslatePlaceReq(String name, String address) {}
+
+    // 신규(카카오 검색 직접 추가) 장소의 첫 조회 시 실시간 번역 — PlaceService에서 fire-and-forget으로
+    // 호출되므로 실패해도 예외를 던지지 않고 전부 null인 결과를 반환한다.
+    public TranslatePlaceResult translatePlace(String name, String address) {
+        try {
+            String body = objectMapper.writeValueAsString(new TranslatePlaceReq(name, address));
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(fastapiUrl + "/ai/places/translate"))
+                    .header("Content-Type", "application/json")
+                    .header("X-Internal-Key", internalApiKey)
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .timeout(Duration.ofSeconds(15))
+                    .build();
+
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 400) {
+                log.warn("FastAPI 장소 번역 오류: status={}", response.statusCode());
+                return new TranslatePlaceResult(null, null, null, null, null, null, null, null);
+            }
+            return objectMapper.readValue(response.body(), TranslatePlaceResult.class);
+        } catch (Exception e) {
+            log.error("장소 번역 요청 실패: {}", e.getMessage());
+            return new TranslatePlaceResult(null, null, null, null, null, null, null, null);
+        }
+    }
+
     public record TransportSlotDto(String place_id, double lat, double lng) {}
 
     // transit_detail은 백엔드가 구조를 알 필요 없이 그대로 저장/응답에 흘려보내기만 하므로

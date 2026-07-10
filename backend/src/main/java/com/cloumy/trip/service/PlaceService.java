@@ -5,15 +5,20 @@ import com.cloumy.common.response.ErrorCode;
 import com.cloumy.trip.dto.ExternalPlaceRequest;
 import com.cloumy.trip.dto.KakaoPlaceDto;
 import com.cloumy.trip.dto.PlaceDetailResponse;
+import com.cloumy.trip.dto.PlaceProjection;
 import com.cloumy.trip.repository.PlaceRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
+@Slf4j
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
@@ -24,11 +29,34 @@ public class PlaceService {
 
     private final PlaceRepository placeRepository;
     private final KakaoLocalClient kakaoLocalClient;
+    private final AiServiceClient aiServiceClient;
+
+    private final ExecutorService translationExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     public PlaceDetailResponse getPlaceDetail(UUID placeId) {
-        return placeRepository.findPlaceDetailById(placeId)
-                .map(PlaceDetailResponse::from)
+        PlaceProjection projection = placeRepository.findPlaceDetailById(placeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PLACE_NOT_FOUND));
+
+        // 신규(카카오 검색 직접 추가) 장소를 첫 조회할 때 실시간 번역 후 캐시 — 응답 지연 없이
+        // fire-and-forget으로 트리거만 하고, 이 요청의 응답에는 번역 결과를 포함하지 않는다.
+        if (!Boolean.TRUE.equals(projection.getIsCurated()) && projection.getNameEn() == null) {
+            translationExecutor.execute(() ->
+                    translateAndCache(placeId, projection.getName(), projection.getAddress()));
+        }
+
+        return PlaceDetailResponse.from(projection);
+    }
+
+    private void translateAndCache(UUID placeId, String name, String address) {
+        try {
+            AiServiceClient.TranslatePlaceResult result = aiServiceClient.translatePlace(name, address);
+            placeRepository.updateTranslations(
+                    placeId,
+                    result.name_en(), result.name_ja(), result.name_zh_hans(), result.name_zh_hant(),
+                    result.address_en(), result.address_ja(), result.address_zh_hans(), result.address_zh_hant());
+        } catch (Exception e) {
+            log.warn("장소 실시간 번역 캐시 실패 placeId={}: {}", placeId, e.getMessage());
+        }
     }
 
     // "직접 장소 추가" — 카테고리 필터 없는 일반 카카오 검색(AccommodationService와 동일한

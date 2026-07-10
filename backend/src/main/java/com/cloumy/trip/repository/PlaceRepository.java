@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -20,11 +21,38 @@ public interface PlaceRepository extends JpaRepository<Place, UUID> {
                    ST_Y(p.location::geometry) AS lat,
                    ST_X(p.location::geometry) AS lng,
                    p.avg_duration_minutes    AS avgDurationMinutes,
-                   p.is_hidden_gem           AS isHiddenGem
+                   p.is_hidden_gem           AS isHiddenGem,
+                   p.is_curated              AS isCurated,
+                   p.name_en                 AS nameEn
             FROM places p
             WHERE p.id = :placeId
             """, nativeQuery = true)
     Optional<PlaceProjection> findPlaceDetailById(@Param("placeId") UUID placeId);
+
+    // 신규(카카오 검색 직접 추가) 장소의 첫 조회 시 실시간 번역 결과를 write-through 캐시.
+    // 큐레이션 배치 번역(translate_places.py)과 동일한 8개 컬럼을 갱신한다.
+    // PlaceService에서 별도 virtual thread(self-invocation)로 호출되어 호출부의 @Transactional을
+    // 물려받지 못하므로, 리포지토리 메서드 자체에 @Transactional을 걸어 프록시가 트랜잭션을 열게 한다.
+    @Transactional
+    @Modifying
+    @Query(value = """
+            UPDATE places SET
+                name_en = :nameEn, name_ja = :nameJa,
+                name_zh_hans = :nameZhHans, name_zh_hant = :nameZhHant,
+                address_en = :addressEn, address_ja = :addressJa,
+                address_zh_hans = :addressZhHans, address_zh_hant = :addressZhHant
+            WHERE id = :id
+            """, nativeQuery = true)
+    void updateTranslations(
+            @Param("id") UUID id,
+            @Param("nameEn") String nameEn,
+            @Param("nameJa") String nameJa,
+            @Param("nameZhHans") String nameZhHans,
+            @Param("nameZhHant") String nameZhHant,
+            @Param("addressEn") String addressEn,
+            @Param("addressJa") String addressJa,
+            @Param("addressZhHans") String addressZhHans,
+            @Param("addressZhHant") String addressZhHant);
 
     // 외부/수동 장소 find-or-create — 반경 내 + 이름 일치(정규화된 문자열 비교)하는 기존 row 재사용.
     // is_curated 여부와 무관하게 찾는다 — 이미 배치로 들어간 큐레이션 장소와 같은 곳이면 그걸
