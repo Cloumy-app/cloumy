@@ -28,6 +28,7 @@ public class RouteService {
     private final RouteRepository routeRepository;
     private final AccommodationRepository accommodationRepository;
     private final BudgetSettingsService budgetSettingsService;
+    private final PersonaTagAutoAssignService personaTagAutoAssignService;
 
     public Page<RouteListResponse> getMyRoutes(UUID userId, Pageable pageable) {
         return routeRepository.findByUserIdOrderByDisplayOrderAsc(userId, pageable)
@@ -74,6 +75,7 @@ public class RouteService {
                 .build();
 
         Route saved = routeRepository.save(route);
+        personaTagAutoAssignService.checkAndAssign(userId);
 
         // totalBudget 선택 사항 — 숙소와 동일하게 없으면 예산 기능 자체를 건너뜀
         if (req.totalBudget() != null) {

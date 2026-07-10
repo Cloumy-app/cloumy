@@ -12,8 +12,11 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.UUID;
 
 @Getter
@@ -53,6 +56,13 @@ public class User extends BaseEntity {
     @Column(name = "is_beta_tester", nullable = false)
     private boolean betaTester = false;
 
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(name = "persona_tags", columnDefinition = "text[]")
+    private String[] personaTags = {};
+
+    @Column(name = "onboarding_completed_at")
+    private LocalDateTime onboardingCompletedAt;
+
     @Builder
     private User(String oauthProvider, String oauthId, String nickname, String profileImageUrl) {
         this.oauthProvider = oauthProvider;
@@ -78,5 +88,21 @@ public class User extends BaseEntity {
     public void updatePass(String passType, LocalDateTime expiresAt) {
         this.passType = passType;
         this.passExpiresAt = expiresAt;
+    }
+
+    public void replacePersonaTags(String[] tags) {
+        this.personaTags = tags;
+        if (this.onboardingCompletedAt == null) {
+            this.onboardingCompletedAt = LocalDateTime.now();
+        }
+    }
+
+    public void addPersonaTagIfAbsent(String tag) {
+        if (Arrays.asList(this.personaTags).contains(tag)) {
+            return;
+        }
+        String[] next = Arrays.copyOf(this.personaTags, this.personaTags.length + 1);
+        next[next.length - 1] = tag;
+        this.personaTags = next;
     }
 }
