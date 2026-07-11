@@ -6,7 +6,7 @@ import type { BudgetSummary } from '@/types';
 
 export function BudgetBanner({ routeId, summary }: { routeId: string; summary: BudgetSummary }) {
   const { t } = useTranslation();
-  if (summary.totalBudget === null) {
+  if (summary.totalBudget == null) {
     return (
       <TouchableOpacity
         onPress={() => router.push({ pathname: '/route/[routeId]/budget', params: { routeId } })}

@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft, Plus, Trash2 } from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { deleteExpense, getBudgetSummary, getExpenses, updateBudgetRatios } from '@/lib/api/budget';
+import { createBudget, deleteExpense, getBudgetSummary, getExpenses, updateBudgetRatios } from '@/lib/api/budget';
 import { getRoute } from '@/lib/api/routes';
 import { CategoryRatioSliders } from '@/components/route/CategoryRatioSliders';
 
@@ -14,6 +14,8 @@ export default function BudgetScreen() {
   const { routeId } = useLocalSearchParams<{ routeId: string }>();
   const queryClient = useQueryClient();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [totalBudgetInput, setTotalBudgetInput] = useState('');
+  const [creatingBudget, setCreatingBudget] = useState(false);
 
   const { data: summary, isLoading: loadingSummary } = useQuery({
     queryKey: ['budget', routeId],
@@ -44,6 +46,30 @@ export default function BudgetScreen() {
     } catch (e) {
       console.error('[budget] updateBudgetRatios 실패:', e);
       Alert.alert(t('budget.saveFailedTitle'), t('budget.saveFailedBody'));
+    }
+  };
+
+  const handleCreateBudget = async () => {
+    const totalBudget = Number(totalBudgetInput);
+    if (!totalBudgetInput || Number.isNaN(totalBudget) || totalBudget <= 0) {
+      Alert.alert(t('budget.amountRequiredTitle'), t('budget.amountRequiredBody'));
+      return;
+    }
+
+    setCreatingBudget(true);
+    try {
+      await createBudget(routeId, totalBudget);
+      setTotalBudgetInput('');
+      queryClient.invalidateQueries({ queryKey: ['budget', routeId] });
+    } catch (e) {
+      if (e instanceof Error && e.message === '409') {
+        queryClient.invalidateQueries({ queryKey: ['budget', routeId] });
+      } else {
+        console.error('[budget] createBudget 실패:', e);
+        Alert.alert(t('budget.createFailedTitle'), t('budget.createFailedBody'));
+      }
+    } finally {
+      setCreatingBudget(false);
     }
   };
 
@@ -81,14 +107,37 @@ export default function BudgetScreen() {
       <FlatList
         data={expenses ?? []}
         keyExtractor={(item) => item.id}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
         ListHeaderComponent={
           <View className="mb-5">
-            {!summary || summary.totalBudget === null ? (
+            {!summary || summary.totalBudget == null ? (
               <View className="bg-slate-50 rounded-2xl p-4 mb-5">
-                <Text className="text-sm text-slate-500 text-center">
+                <Text className="text-sm text-slate-500 mb-3">
                   {t('budget.noBudgetSet')}
                 </Text>
+                <View className="flex-row items-center bg-white border-2 border-slate-200 rounded-2xl px-4 mb-3">
+                  <TextInput
+                    value={totalBudgetInput}
+                    onChangeText={(text) => setTotalBudgetInput(text.replace(/[^0-9]/g, ''))}
+                    placeholder={t('budget.setBudgetPlaceholder')}
+                    keyboardType="number-pad"
+                    className="flex-1 py-3 px-2 text-sm text-slate-700"
+                  />
+                  <Text className="text-slate-400 text-sm">{t('routeCreateStep3.currencyWon')}</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={handleCreateBudget}
+                  disabled={creatingBudget}
+                  className="bg-sky-500 py-3 rounded-2xl items-center"
+                  activeOpacity={0.9}
+                >
+                  {creatingBudget ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text className="text-white font-bold text-sm">{t('budget.setBudgetButton')}</Text>
+                  )}
+                </TouchableOpacity>
               </View>
             ) : (
               <>

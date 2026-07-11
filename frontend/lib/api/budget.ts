@@ -8,6 +8,17 @@ export async function getBudgetSummary(routeId: string): Promise<BudgetSummary> 
   return body.data;
 }
 
+export async function createBudget(routeId: string, totalBudget: number): Promise<BudgetSummary> {
+  const res = await apiFetch(`/v1/routes/${routeId}/budget-settings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ totalBudget }),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+  const body: { data: BudgetSummary } = await res.json();
+  return body.data;
+}
+
 export async function updateBudgetRatios(
   routeId: string,
   ratios: { foodRatio: number; transportRatio: number; activityRatio: number; etcRatio: number },
