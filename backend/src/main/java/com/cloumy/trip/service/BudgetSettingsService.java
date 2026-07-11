@@ -3,6 +3,7 @@ package com.cloumy.trip.service;
 import com.cloumy.common.exception.BusinessException;
 import com.cloumy.common.response.ErrorCode;
 import com.cloumy.trip.dto.BudgetSummaryResponse;
+import com.cloumy.trip.dto.CreateBudgetRequest;
 import com.cloumy.trip.dto.UpdateRatiosRequest;
 import com.cloumy.trip.entity.BudgetSettings;
 import com.cloumy.trip.entity.Route;
@@ -11,6 +12,7 @@ import com.cloumy.trip.repository.ExpenseRepository;
 import com.cloumy.trip.repository.RouteRepository;
 import com.cloumy.trip.repository.RouteSlotRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -59,8 +61,31 @@ public class BudgetSettingsService {
 
     @Transactional
     public void createDefault(UUID routeId, int totalBudget, List<String> tags) {
+        budgetSettingsRepository.save(buildSettings(routeId, totalBudget, tags));
+    }
+
+    // 예산 관리 화면에서 최초 1회 예산 설정 (루트 생성 시 totalBudget 미입력했던 경우 전용)
+    @Transactional
+    public BudgetSummaryResponse createInitial(UUID routeId, UUID userId, CreateBudgetRequest req) {
+        Route route = verifyOwner(routeId, userId);
+        if (budgetSettingsRepository.findByRouteId(routeId).isPresent()) {
+            throw new BusinessException(ErrorCode.BUDGET_ALREADY_SET);
+        }
+
+        List<String> tags = route.getTags() == null ? List.of() : List.of(route.getTags());
+        try {
+            // save()만 쓰면 unique(route_id) 위반이 트랜잭션 커밋 시점에 터져서 이 메서드의
+            // catch로 안 잡힘 — saveAndFlush로 즉시 반영해 동시 더블탭 요청의 마지막 안전망으로 삼는다.
+            budgetSettingsRepository.saveAndFlush(buildSettings(routeId, req.totalBudget(), tags));
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException(ErrorCode.BUDGET_ALREADY_SET);
+        }
+        return getSummary(routeId, userId);
+    }
+
+    private BudgetSettings buildSettings(UUID routeId, int totalBudget, List<String> tags) {
         RatioSet ratios = computeDefaultRatios(tags == null ? List.of() : tags);
-        BudgetSettings settings = BudgetSettings.builder()
+        return BudgetSettings.builder()
                 .routeId(routeId)
                 .totalBudget(totalBudget)
                 .foodRatio(ratios.food())
@@ -68,7 +93,6 @@ public class BudgetSettingsService {
                 .activityRatio(ratios.activity())
                 .etcRatio(ratios.etc())
                 .build();
-        budgetSettingsRepository.save(settings);
     }
 
     public BudgetSummaryResponse getSummary(UUID routeId, UUID userId) {
@@ -194,11 +218,12 @@ public class BudgetSettingsService {
         return new RatioSet(values[0], values[1], values[2], values[3]);
     }
 
-    private void verifyOwner(UUID routeId, UUID userId) {
+    private Route verifyOwner(UUID routeId, UUID userId) {
         Route route = routeRepository.findById(routeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
         if (!route.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCode.ROUTE_ACCESS_DENIED);
         }
+        return route;
     }
 }
