@@ -2,14 +2,15 @@ import { useState } from 'react';
 import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import Slider from '@react-native-community/slider';
+import { BUDGET_COLORS, RATIO_CATEGORY_COLORS, RECEIPT_LABEL } from '@/lib/constants/budgetTheme';
 
 type Ratios = { food: number; transport: number; activity: number; etc: number };
 
 const CATEGORY_KEYS: { key: keyof Ratios; color: string }[] = [
-  { key: 'food', color: '#0ea5e9' },
-  { key: 'transport', color: '#22c55e' },
-  { key: 'activity', color: '#f59e0b' },
-  { key: 'etc', color: '#a855f7' },
+  { key: 'food', color: RATIO_CATEGORY_COLORS.food },
+  { key: 'transport', color: RATIO_CATEGORY_COLORS.transport },
+  { key: 'activity', color: RATIO_CATEGORY_COLORS.activity },
+  { key: 'etc', color: RATIO_CATEGORY_COLORS.etc },
 ];
 
 // 슬라이더 하나를 옮기면 나머지 3개를 기존 비중대로 비례 재분배해 합이 항상 100 유지
@@ -59,11 +60,26 @@ export function CategoryRatioSliders({
   };
 
   return (
-    <View className="bg-white border border-slate-100 rounded-2xl p-4">
+    <View
+      className="rounded-2xl p-4 border"
+      style={{ backgroundColor: BUDGET_COLORS.paper, borderColor: BUDGET_COLORS.perforation }}
+    >
+      {/* 현재 비율을 한눈에 보여주는 세그먼트 바 — 슬라이더를 옮기는 즉시 실시간 반영 */}
+      <View className="flex-row h-2.5 rounded-full overflow-hidden mb-5" style={{ backgroundColor: BUDGET_COLORS.perforation }}>
+        {CATEGORY_KEYS.map(({ key, color }) => (
+          <View key={key} style={{ width: `${ratios[key]}%`, backgroundColor: color }} />
+        ))}
+      </View>
+
       {CATEGORY_KEYS.map(({ key, color }) => (
         <View key={key} className="mb-4 last:mb-0">
           <View className="flex-row justify-between mb-1">
-            <Text className="text-sm font-bold text-slate-700">{t(`budget.categoryLabels.${key}`)}</Text>
+            <Text
+              className="text-xs font-bold"
+              style={{ color: BUDGET_COLORS.ink, ...RECEIPT_LABEL }}
+            >
+              {t(`budget.categoryLabels.${key}`)}
+            </Text>
             <Text className="text-sm font-bold" style={{ color }}>
               {Math.round(ratios[key])}%
             </Text>
@@ -74,7 +90,8 @@ export function CategoryRatioSliders({
             maximumValue={100}
             step={1}
             minimumTrackTintColor={color}
-            maximumTrackTintColor="#e2e8f0"
+            maximumTrackTintColor={BUDGET_COLORS.perforation}
+            thumbTintColor={color}
             onValueChange={(v) => setRatios((prev) => rebalance(prev, key, v))}
           />
         </View>
@@ -83,7 +100,8 @@ export function CategoryRatioSliders({
       <TouchableOpacity
         onPress={handleSave}
         disabled={saving}
-        className="bg-sky-500 py-3 rounded-2xl items-center mt-2"
+        className="py-3 rounded-2xl items-center mt-2"
+        style={{ backgroundColor: BUDGET_COLORS.ledgerGreen }}
         activeOpacity={0.9}
       >
         {saving ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-bold text-sm">{t('budget.saveButton')}</Text>}

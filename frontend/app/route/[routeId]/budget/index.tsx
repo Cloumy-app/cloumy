@@ -8,6 +8,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createBudget, deleteExpense, getBudgetSummary, getExpenses, updateBudgetRatios } from '@/lib/api/budget';
 import { getRoute } from '@/lib/api/routes';
 import { CategoryRatioSliders } from '@/components/route/CategoryRatioSliders';
+import { ReceiptEdge } from '@/components/route/ReceiptEdge';
+import { BUDGET_COLORS, EXPENSE_CATEGORY_COLORS, RECEIPT_LABEL, TABULAR_NUMS } from '@/lib/constants/budgetTheme';
 
 export default function BudgetScreen() {
   const { t } = useTranslation();
@@ -89,19 +91,25 @@ export default function BudgetScreen() {
 
   if (loadingSummary) {
     return (
-      <SafeAreaView className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator color="#0ea5e9" />
+      <SafeAreaView
+        className="flex-1 items-center justify-center"
+        style={{ backgroundColor: BUDGET_COLORS.screenBg }}
+      >
+        <ActivityIndicator color={BUDGET_COLORS.ledgerGreen} />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-white" edges={['top']}>
-      <View className="flex-row items-center px-5 py-3 border-b border-slate-100">
+    <SafeAreaView className="flex-1" edges={['top']} style={{ backgroundColor: BUDGET_COLORS.screenBg }}>
+      <View
+        className="flex-row items-center px-5 py-3 border-b"
+        style={{ backgroundColor: BUDGET_COLORS.paper, borderColor: BUDGET_COLORS.perforation }}
+      >
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
-          <ChevronLeft size={24} color="#475569" />
+          <ChevronLeft size={24} color={BUDGET_COLORS.ink} />
         </TouchableOpacity>
-        <Text className="text-lg font-bold text-slate-800">{t('budget.headerTitle')}</Text>
+        <Text className="text-lg font-bold" style={{ color: BUDGET_COLORS.ink }}>{t('budget.headerTitle')}</Text>
       </View>
 
       <FlatList
@@ -112,73 +120,134 @@ export default function BudgetScreen() {
         ListHeaderComponent={
           <View className="mb-5">
             {!summary || summary.totalBudget == null ? (
-              <View className="bg-slate-50 rounded-2xl p-4 mb-5">
-                <Text className="text-sm text-slate-500 mb-3">
-                  {t('budget.noBudgetSet')}
-                </Text>
-                <View className="flex-row items-center bg-white border-2 border-slate-200 rounded-2xl px-4 mb-3">
-                  <TextInput
-                    value={totalBudgetInput}
-                    onChangeText={(text) => setTotalBudgetInput(text.replace(/[^0-9]/g, ''))}
-                    placeholder={t('budget.setBudgetPlaceholder')}
-                    keyboardType="number-pad"
-                    className="flex-1 py-3 px-2 text-sm text-slate-700"
-                  />
-                  <Text className="text-slate-400 text-sm">{t('routeCreateStep3.currencyWon')}</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={handleCreateBudget}
-                  disabled={creatingBudget}
-                  className="bg-sky-500 py-3 rounded-2xl items-center"
-                  activeOpacity={0.9}
+              <View>
+                <View
+                  className="rounded-t-2xl p-4"
+                  style={{ backgroundColor: BUDGET_COLORS.paper }}
                 >
-                  {creatingBudget ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text className="text-white font-bold text-sm">{t('budget.setBudgetButton')}</Text>
-                  )}
-                </TouchableOpacity>
+                  <Text className="text-xs mb-3" style={{ color: BUDGET_COLORS.ink }}>
+                    {t('budget.noBudgetSet')}
+                  </Text>
+                  <View
+                    className="flex-row items-center rounded-2xl px-4 mb-3 border"
+                    style={{ borderColor: BUDGET_COLORS.perforation, backgroundColor: '#fff' }}
+                  >
+                    <Text className="text-base font-bold mr-1" style={{ color: BUDGET_COLORS.ledgerGreen }}>₩</Text>
+                    <TextInput
+                      value={totalBudgetInput}
+                      onChangeText={(text) => setTotalBudgetInput(text.replace(/[^0-9]/g, ''))}
+                      placeholder={t('budget.setBudgetPlaceholder')}
+                      keyboardType="number-pad"
+                      className="flex-1 py-3 px-2 text-base font-bold"
+                      style={{ color: BUDGET_COLORS.ink, ...TABULAR_NUMS }}
+                      placeholderTextColor="#B5AA92"
+                    />
+                    <Text className="text-sm" style={{ color: BUDGET_COLORS.ink }}>{t('routeCreateStep3.currencyWon')}</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={handleCreateBudget}
+                    disabled={creatingBudget}
+                    className="py-3 rounded-2xl items-center"
+                    style={{ backgroundColor: BUDGET_COLORS.ledgerGreen }}
+                    activeOpacity={0.9}
+                  >
+                    {creatingBudget ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text className="text-white font-bold text-sm">{t('budget.setBudgetButton')}</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+                <ReceiptEdge notchColor={BUDGET_COLORS.screenBg} />
               </View>
             ) : (
               <>
-                <View className="bg-white border border-slate-100 rounded-2xl p-4 mb-4">
-                  <Text className="text-xs font-bold text-slate-500 mb-2">{t('budget.totalBudget')}</Text>
-                  <Text className="text-2xl font-black text-slate-800 mb-3">
-                    {t('routeResult.budgetExact', { amount: summary.totalBudget.toLocaleString() })}
-                  </Text>
-                  <View className="flex-row justify-between">
-                    <View>
-                      <Text className="text-xs text-slate-400">{t('budget.plannedExpense')}</Text>
-                      <Text className="text-sm font-bold text-slate-700">
-                        {t('routeResult.budgetExact', { amount: summary.plannedTotal.toLocaleString() })}
-                      </Text>
+                <View>
+                  <View className="rounded-t-2xl p-5" style={{ backgroundColor: BUDGET_COLORS.paper }}>
+                    <Text className="text-[11px] font-bold mb-1" style={{ color: BUDGET_COLORS.ink, ...RECEIPT_LABEL }}>
+                      {t('budget.totalBudget')}
+                    </Text>
+                    <Text
+                      className="text-3xl font-black mb-4"
+                      style={{ color: BUDGET_COLORS.ink, ...TABULAR_NUMS }}
+                    >
+                      {t('routeResult.budgetExact', { amount: summary.totalBudget.toLocaleString() })}
+                    </Text>
+
+                    <View
+                      className="border-t border-dashed mb-4"
+                      style={{ borderColor: BUDGET_COLORS.perforation }}
+                    />
+
+                    <View className="flex-row justify-between mb-4">
+                      <View>
+                        <Text className="text-[10px] font-bold mb-1" style={{ color: '#9C8F73', ...RECEIPT_LABEL }}>
+                          {t('budget.plannedExpense')}
+                        </Text>
+                        <Text className="text-sm font-bold" style={{ color: BUDGET_COLORS.ink, ...TABULAR_NUMS }}>
+                          {t('routeResult.budgetExact', { amount: summary.plannedTotal.toLocaleString() })}
+                        </Text>
+                      </View>
+                      <View>
+                        <Text className="text-[10px] font-bold mb-1" style={{ color: '#9C8F73', ...RECEIPT_LABEL }}>
+                          {t('budget.unplannedExpense')}
+                        </Text>
+                        <Text className="text-sm font-bold" style={{ color: BUDGET_COLORS.ink, ...TABULAR_NUMS }}>
+                          {t('routeResult.budgetExact', { amount: summary.unplannedTotal.toLocaleString() })}
+                        </Text>
+                      </View>
+                      <View>
+                        <Text className="text-[10px] font-bold mb-1" style={{ color: '#9C8F73', ...RECEIPT_LABEL }}>
+                          {t('budget.remaining')}
+                        </Text>
+                        <Text
+                          className="text-sm font-bold"
+                          style={{
+                            color: (summary.remaining ?? 0) < 0 ? BUDGET_COLORS.rust : BUDGET_COLORS.ledgerGreen,
+                            ...TABULAR_NUMS,
+                          }}
+                        >
+                          {t('routeResult.budgetExact', { amount: (summary.remaining ?? 0).toLocaleString() })}
+                        </Text>
+                      </View>
                     </View>
-                    <View>
-                      <Text className="text-xs text-slate-400">{t('budget.unplannedExpense')}</Text>
-                      <Text className="text-sm font-bold text-slate-700">
-                        {t('routeResult.budgetExact', { amount: summary.unplannedTotal.toLocaleString() })}
-                      </Text>
-                    </View>
-                    <View>
-                      <Text className="text-xs text-slate-400">{t('budget.remaining')}</Text>
-                      <Text className={`text-sm font-bold ${(summary.remaining ?? 0) < 0 ? 'text-rose-500' : 'text-sky-600'}`}>
-                        {t('routeResult.budgetExact', { amount: (summary.remaining ?? 0).toLocaleString() })}
-                      </Text>
+
+                    <View
+                      className="border-t border-dashed mb-3"
+                      style={{ borderColor: BUDGET_COLORS.perforation }}
+                    />
+
+                    {/* 잔여 예산 게이지 — 초록에서 러스트로, 소진될수록 경고색에 가까워짐 */}
+                    <View className="h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: BUDGET_COLORS.perforation }}>
+                      <View
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${Math.min(100, Math.round(((summary.plannedTotal + summary.unplannedTotal) / Math.max(summary.totalBudget, 1)) * 100))}%`,
+                          backgroundColor: (summary.remaining ?? 0) < 0 ? BUDGET_COLORS.rust : BUDGET_COLORS.ledgerGreen,
+                        }}
+                      />
                     </View>
                   </View>
+                  <ReceiptEdge notchColor={BUDGET_COLORS.screenBg} />
                 </View>
 
                 {isTripOver && (
                   <TouchableOpacity
                     onPress={() => router.push({ pathname: '/route/[routeId]/budget/report', params: { routeId } })}
-                    className="bg-sky-50 rounded-2xl p-4 mb-4 items-center"
+                    className="rounded-2xl p-4 mt-4 mb-4 items-center border"
+                    style={{ backgroundColor: BUDGET_COLORS.paper, borderColor: BUDGET_COLORS.perforation }}
                     activeOpacity={0.8}
                   >
-                    <Text className="text-sky-600 font-bold text-sm">{t('budget.viewReport')}</Text>
+                    <Text className="font-bold text-sm" style={{ color: BUDGET_COLORS.ledgerGreen }}>{t('budget.viewReport')}</Text>
                   </TouchableOpacity>
                 )}
 
-                <Text className="font-bold text-slate-700 mb-3">{t('budget.categoryRatio')}</Text>
+                <Text
+                  className="text-xs font-bold mb-3 mt-6"
+                  style={{ color: BUDGET_COLORS.ink, ...RECEIPT_LABEL }}
+                >
+                  {t('budget.categoryRatio')}
+                </Text>
                 <CategoryRatioSliders
                   initial={{
                     food: summary.foodRatio ?? 0,
@@ -192,10 +261,13 @@ export default function BudgetScreen() {
             )}
 
             <View className="flex-row justify-between items-center mt-6 mb-2">
-              <Text className="font-bold text-slate-700">{t('budget.unplannedExpense')}</Text>
+              <Text className="text-xs font-bold" style={{ color: BUDGET_COLORS.ink, ...RECEIPT_LABEL }}>
+                {t('budget.unplannedExpense')}
+              </Text>
               <TouchableOpacity
                 onPress={() => router.push({ pathname: '/route/[routeId]/budget/add-expense', params: { routeId } })}
-                className="flex-row items-center gap-1 bg-sky-500 px-3 py-1.5 rounded-full"
+                className="flex-row items-center gap-1 px-3 py-1.5 rounded-full"
+                style={{ backgroundColor: BUDGET_COLORS.ledgerGreen }}
                 activeOpacity={0.85}
               >
                 <Plus size={14} color="#fff" />
@@ -205,24 +277,30 @@ export default function BudgetScreen() {
           </View>
         }
         ListEmptyComponent={
-          <Text className="text-slate-300 text-sm text-center mt-4">{t('budget.noExpensesYet')}</Text>
+          <Text className="text-sm text-center mt-4" style={{ color: '#B5AA92' }}>{t('budget.noExpensesYet')}</Text>
         }
         renderItem={({ item }) => (
-          <View className="flex-row items-center justify-between bg-white border border-slate-100 rounded-xl px-4 py-3 mb-2">
+          <View
+            className="flex-row items-center justify-between px-4 py-3 mb-0 border-b border-dashed"
+            style={{ backgroundColor: BUDGET_COLORS.paper, borderColor: BUDGET_COLORS.perforation }}
+          >
             <View className="flex-1">
-              <Text className="text-xs font-bold text-sky-600">
+              <Text
+                className="text-[10px] font-bold mb-1"
+                style={{ color: EXPENSE_CATEGORY_COLORS[item.category], ...RECEIPT_LABEL }}
+              >
                 {t(`budgetAddExpense.categories.${item.category.toLowerCase()}`)}
               </Text>
-              <Text className="text-sm font-bold text-slate-800">
+              <Text className="text-sm font-bold" style={{ color: BUDGET_COLORS.ink, ...TABULAR_NUMS }}>
                 {t('routeResult.budgetExact', { amount: item.actualAmount.toLocaleString() })}
               </Text>
-              {item.memo && <Text className="text-xs text-slate-400 mt-0.5">{item.memo}</Text>}
+              {item.memo && <Text className="text-xs mt-0.5" style={{ color: '#9C8F73' }}>{item.memo}</Text>}
             </View>
             <TouchableOpacity onPress={() => handleDelete(item.id)} disabled={deletingId === item.id} hitSlop={8}>
               {deletingId === item.id ? (
-                <ActivityIndicator size="small" color="#f43f5e" />
+                <ActivityIndicator size="small" color={BUDGET_COLORS.rust} />
               ) : (
-                <Trash2 size={16} color="#f43f5e" />
+                <Trash2 size={16} color={BUDGET_COLORS.rust} />
               )}
             </TouchableOpacity>
           </View>
