@@ -21,7 +21,8 @@ public interface RouteRepository extends JpaRepository<Route, UUID> {
     @Query(value = """
             SELECT r.id::text AS id, r.title AS title, r.destination AS destination,
                    r.nights AS nights, r.tags AS tags, r.save_count AS saveCount,
-                   EXISTS(SELECT 1 FROM route_bookmarks rb WHERE rb.route_id = r.id AND rb.user_id = :userId) AS isBookmarked
+                   EXISTS(SELECT 1 FROM route_bookmarks rb
+                          WHERE rb.route_id = r.id AND rb.user_id = :userId) AS isBookmarked
             FROM routes r
             WHERE (:destination IS NULL OR r.destination = :destination)
               AND r.is_public = true AND r.user_id != :userId

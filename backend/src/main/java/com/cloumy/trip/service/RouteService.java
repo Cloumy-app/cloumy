@@ -118,7 +118,8 @@ public class RouteService {
     // 공유 루트 가져오기 — 목적지 일치 공개 루트 브라우징. 소유자 검증 없음(공개 열람이므로),
     // 요청자 본인 루트는 제외
     // 루트/커뮤니티 탭 신설 — destination이 없으면 목적지 무관 전체 공개 루트 피드로 분기
-    public Page<PublicRouteResponse> getPublicRoutes(String destination, boolean bookmarkedOnly, UUID requesterId, Pageable pageable) {
+    public Page<PublicRouteResponse> getPublicRoutes(
+            String destination, boolean bookmarkedOnly, UUID requesterId, Pageable pageable) {
         return routeRepository.findPublicRoutes(destination, requesterId, bookmarkedOnly, pageable)
                 .map(PublicRouteResponse::from);
     }
