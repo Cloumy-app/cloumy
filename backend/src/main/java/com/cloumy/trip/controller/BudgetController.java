@@ -5,6 +5,7 @@ import com.cloumy.common.response.ApiResponse;
 import com.cloumy.trip.dto.AddExpenseRequest;
 import com.cloumy.trip.dto.BudgetReportResponse;
 import com.cloumy.trip.dto.BudgetSummaryResponse;
+import com.cloumy.trip.dto.CreateBudgetRequest;
 import com.cloumy.trip.dto.ExpenseResponse;
 import com.cloumy.trip.dto.UpdateRatiosRequest;
 import com.cloumy.trip.service.BudgetSettingsService;
@@ -40,6 +41,15 @@ public class BudgetController {
             @AuthenticationPrincipal CloudmyUserDetails user
     ) {
         return ApiResponse.ok(budgetSettingsService.getSummary(routeId, UUID.fromString(user.userId())));
+    }
+
+    @PostMapping("/budget-settings")
+    public ApiResponse<BudgetSummaryResponse> createBudget(
+            @PathVariable UUID routeId,
+            @RequestBody @Valid CreateBudgetRequest req,
+            @AuthenticationPrincipal CloudmyUserDetails user
+    ) {
+        return ApiResponse.ok(budgetSettingsService.createInitial(routeId, UUID.fromString(user.userId()), req));
     }
 
     @PatchMapping("/budget-settings/ratios")

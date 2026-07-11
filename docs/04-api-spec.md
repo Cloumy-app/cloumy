@@ -263,6 +263,14 @@ GET /routes?page=0&size=20
 #### PATCH /routes/{routeId}/slots/{slotId}/expenses/{expenseId}
 계획 지출 완료 체크 / 금액 수정
 
+#### POST /v1/routes/{routeId}/budget-settings
+루트 생성 시 총예산을 입력하지 않아 예산 설정이 없는 경우, 예산 관리 화면에서 최초 1회 설정. 이미 설정돼 있으면 409(BUDGET_ALREADY_SET).
+
+```json
+// 요청
+{ "totalBudget": 500000 }
+```
+
 ---
 
 ### Hidden Gems (Community)

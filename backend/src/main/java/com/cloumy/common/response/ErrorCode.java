@@ -53,6 +53,7 @@ public enum ErrorCode {
 
     // 예산
     BUDGET_SETTINGS_NOT_FOUND(HttpStatus.NOT_FOUND, "BUDGET_SETTINGS_NOT_FOUND", "예산 설정을 찾을 수 없습니다"),
+    BUDGET_ALREADY_SET(HttpStatus.CONFLICT, "BUDGET_ALREADY_SET", "이미 예산이 설정되어 있습니다"),
     INVALID_BUDGET_RATIO(HttpStatus.BAD_REQUEST, "INVALID_BUDGET_RATIO", "카테고리 비율의 합은 1.0이어야 합니다"),
     EXPENSE_NOT_FOUND(HttpStatus.NOT_FOUND, "EXPENSE_NOT_FOUND", "지출 내역을 찾을 수 없습니다"),
 
