@@ -261,7 +261,7 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 
 - 노션 "공유 루트 가져오기 화면 북마크 개편"(2026-07-10, 완료 표시됨)이 실제로는 `main`에 반영된 적 없음 — PR #135가 `feat/132-explore-tab-bookmarks`(이미 #133으로 별도 병합된 브랜치) 위로 머지돼 고아 상태로 방치됨(GitHub 이슈 #134는 실제로 열려있는 상태로 정확했음)
 - 가져오기 화면 북마크 탭을 이번에 별도로 최소 구현했다가, 기존에 이미 더 완전한 버전(route_bookmarks 테이블 + 루트 자체 북마크 토글 포함)이 있었음을 뒤늦게 발견 — 새로 만든 버전은 폐기하고, `feat/132-explore-tab-bookmarks`의 추가 커밋 3개(471f4e6/9056572/2455e3c)를 main 기준 새 브랜치로 이관해 정식 PR로 마무리 예정
-- [ ] `feat/132-explore-tab-bookmarks` 추가 커밋을 main 기준 새 브랜치로 cherry-pick + PR (#134 close)
+- [x] `feat/132-explore-tab-bookmarks` 추가 커밋을 main 기준 새 브랜치(`feat/134-route-import-bookmarks-main`)로 cherry-pick + 커뮤니티 탭과의 충돌 수동 병합 + PR [#142](https://github.com/Cloumy-app/cloumy/pull/142) (#134 close) — 2026-07-11
 
 ---
 
