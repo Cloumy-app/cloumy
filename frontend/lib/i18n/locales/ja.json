@@ -148,7 +148,40 @@
     "searchPlaceholder": "場所の名前で検索",
     "pickDayLabel": "何日目に入れますか？",
     "searchAddFailedTitle": "場所の追加に失敗しました",
-    "searchAddFailedBody": "しばらくしてからもう一度お試しください。"
+    "searchAddFailedBody": "しばらくしてからもう一度お試しください。",
+    "sourceRouteUnavailableTitle": "ルートを読み込めません",
+    "sourceRouteUnavailableBody": "非公開になったか削除されたルートです。他の共有ルートをお試しください。"
+  },
+  "community": {
+    "headerTitle": "コミュニティ",
+    "createButton": "ルートを投稿",
+    "emptyTitle": "まだ共有されたルートがありません",
+    "emptySubtitle": "最初の旅行ルートを共有してみましょう",
+    "loadError": "ルートを読み込めませんでした",
+    "retryButton": "再試行",
+    "nightsLabel": "{{nights}}泊"
+  },
+  "communityPreview": {
+    "notAvailableTitle": "このルートは表示できません",
+    "notAvailableBody": "非公開になったか削除されたルートです。",
+    "importAllButton": "すべて取り込む",
+    "importSelectedButton": "選んで取り込む",
+    "cloneModalTitle": "出発日を選択してください",
+    "cloneModalNightsHint": "{{nights}}泊の日程はそのまま、終了日は自動計算されます",
+    "cloneConfirmButton": "取り込む",
+    "cloneFailedTitle": "取り込みに失敗しました",
+    "cloneFailedBody": "しばらくしてからもう一度お試しください。"
+  },
+  "communityCreate": {
+    "headerTitle": "ルートを投稿",
+    "titleLabel": "ルートのタイトル",
+    "titlePlaceholder": "例：東京3泊4日の私だけの旅",
+    "destinationLabel": "目的地",
+    "dateRangeLabel": "旅行日程",
+    "addPlaceLabel": "場所を追加",
+    "publishButton": "公開して投稿",
+    "publishFailedTitle": "登録に失敗しました",
+    "publishFailedBody": "しばらくしてからもう一度お試しください。"
   },
   "slotCard": {
     "transportModes": { "walk": "徒歩", "taxi": "車", "transit": "公共交通機関", "default": "移動" },

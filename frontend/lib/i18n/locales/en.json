@@ -148,7 +148,40 @@
     "searchPlaceholder": "Search by place name",
     "pickDayLabel": "Which day should this go on?",
     "searchAddFailedTitle": "Couldn't add place",
-    "searchAddFailedBody": "Please try again in a moment."
+    "searchAddFailedBody": "Please try again in a moment.",
+    "sourceRouteUnavailableTitle": "Can't load this route",
+    "sourceRouteUnavailableBody": "This route was made private or deleted. Try another shared route."
+  },
+  "community": {
+    "headerTitle": "Community",
+    "createButton": "Post a route",
+    "emptyTitle": "No shared routes yet",
+    "emptySubtitle": "Be the first to share a travel route",
+    "loadError": "Couldn't load routes",
+    "retryButton": "Retry",
+    "nightsLabel": "{{nights}} nights"
+  },
+  "communityPreview": {
+    "notAvailableTitle": "Can't view this route",
+    "notAvailableBody": "This route was made private or deleted.",
+    "importAllButton": "Import all",
+    "importSelectedButton": "Import selected",
+    "cloneModalTitle": "Choose a start date",
+    "cloneModalNightsHint": "Same {{nights}}-night itinerary — end date is calculated automatically",
+    "cloneConfirmButton": "Import",
+    "cloneFailedTitle": "Import failed",
+    "cloneFailedBody": "Please try again in a moment."
+  },
+  "communityCreate": {
+    "headerTitle": "Post a route",
+    "titleLabel": "Route title",
+    "titlePlaceholder": "e.g. My 3-night Tokyo trip",
+    "destinationLabel": "Destination",
+    "dateRangeLabel": "Travel dates",
+    "addPlaceLabel": "Add places",
+    "publishButton": "Publish",
+    "publishFailedTitle": "Couldn't publish",
+    "publishFailedBody": "Please try again in a moment."
   },
   "slotCard": {
     "transportModes": { "walk": "Walk", "taxi": "Car", "transit": "Transit", "default": "Travel" },

@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, MapPin, Calendar, Sparkles, Trash2 } from 'lucide-react-native';
+import { MapPin, Calendar, Sparkles, Trash2 } from 'lucide-react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { getMyRoutes, deleteRoute, reorderRoutes } from '@/lib/api/routes';
 import { getTripStatusLabel, isTripCompleted } from '@/lib/date';
@@ -209,11 +209,8 @@ export default function RoutesScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50">
-      {/* 헤더 */}
+      {/* 헤더 — 탭 루트 화면이라 뒤로가기 없음 */}
       <View className="flex-row items-center px-6 py-4 bg-white border-b border-slate-100">
-        <TouchableOpacity onPress={() => router.back()} className="mr-4">
-          <ChevronLeft size={24} color="#475569" />
-        </TouchableOpacity>
         <Text className="text-xl font-bold text-slate-800 flex-1">{t('routesList.headerTitle')}</Text>
         {isEditMode ? (
           <View className="flex-row gap-2">

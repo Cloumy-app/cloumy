@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Home, Compass, MessageCircle, User } from 'lucide-react-native';
+import { Home, Compass, Map, MessageCircle, Users, User } from 'lucide-react-native';
 
 export default function TabsLayout() {
   return (
@@ -35,10 +35,24 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="routes"
+        options={{
+          title: '루트',
+          tabBarIcon: ({ color, size }) => <Map color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
         name="chat"
         options={{
           title: 'AI 챗봇',
           tabBarIcon: ({ color, size }) => <MessageCircle color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="community"
+        options={{
+          title: '커뮤니티',
+          tabBarIcon: ({ color, size }) => <Users color={color} size={size} />,
         }}
       />
       <Tabs.Screen

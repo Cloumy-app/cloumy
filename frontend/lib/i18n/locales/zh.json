@@ -148,7 +148,40 @@
     "searchPlaceholder": "按地点名称搜索",
     "pickDayLabel": "要加入第几天？",
     "searchAddFailedTitle": "添加地点失败",
-    "searchAddFailedBody": "请稍后重试。"
+    "searchAddFailedBody": "请稍后重试。",
+    "sourceRouteUnavailableTitle": "无法加载该路线",
+    "sourceRouteUnavailableBody": "该路线已被设为非公开或已删除，请尝试其他共享路线。"
+  },
+  "community": {
+    "headerTitle": "社区",
+    "createButton": "发布路线",
+    "emptyTitle": "还没有共享的路线",
+    "emptySubtitle": "成为第一个分享旅行路线的人吧",
+    "loadError": "无法加载路线",
+    "retryButton": "重试",
+    "nightsLabel": "{{nights}}晚"
+  },
+  "communityPreview": {
+    "notAvailableTitle": "无法查看该路线",
+    "notAvailableBody": "该路线已被设为非公开或已删除。",
+    "importAllButton": "全部导入",
+    "importSelectedButton": "选择导入",
+    "cloneModalTitle": "请选择出发日期",
+    "cloneModalNightsHint": "保持{{nights}}晚行程不变，结束日期将自动计算",
+    "cloneConfirmButton": "导入",
+    "cloneFailedTitle": "导入失败",
+    "cloneFailedBody": "请稍后重试。"
+  },
+  "communityCreate": {
+    "headerTitle": "发布路线",
+    "titleLabel": "路线标题",
+    "titlePlaceholder": "例：我的东京3晚4日之旅",
+    "destinationLabel": "目的地",
+    "dateRangeLabel": "旅行日期",
+    "addPlaceLabel": "添加地点",
+    "publishButton": "公开发布",
+    "publishFailedTitle": "发布失败",
+    "publishFailedBody": "请稍后重试。"
   },
   "slotCard": {
     "transportModes": { "walk": "步行", "taxi": "自驾", "transit": "公共交通", "default": "移动" },
