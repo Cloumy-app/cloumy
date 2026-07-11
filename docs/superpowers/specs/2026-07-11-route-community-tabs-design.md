@@ -69,7 +69,7 @@ app/routes/index.tsx → app/(tabs)/routes.tsx
 ```
 app/community/create.tsx (신규)
 - 제목: 텍스트 입력
-- 목적지: 텍스트 입력(route/create/step-1과 동일 패턴, 자유 텍스트)
+- 목적지: `route/create/step-1.tsx`의 `CITIES`(서울·부산·제주 등 10개 도시) 칩 선택 UI 그대로 재사용(자유 텍스트 아님 — 확인 결과 기존 위저드도 프리셋 칩이었음)
 - 날짜 범위: DateTimePicker(step-1과 동일 컴포넌트) → nights 자동 계산
 - 장소 추가: 기존 SearchPlaceTab 컴포넌트 재사용
   (카카오 검색 → resolveExternalPlace로 placeId 확정 → Day칩으로 day 지정
