@@ -3,6 +3,7 @@ package com.cloumy.trip.service;
 import com.cloumy.common.exception.BusinessException;
 import com.cloumy.common.response.ErrorCode;
 import com.cloumy.trip.dto.FixedSlotRequest;
+import com.cloumy.trip.dto.ManualSlotRequest;
 import com.cloumy.trip.dto.PlaceProjection;
 import com.cloumy.trip.dto.ReplaceSlotRequest;
 import com.cloumy.trip.dto.SlotAlternativeResponse;
@@ -213,6 +214,46 @@ public class RouteSlotService {
                 .stream()
                 .map(SlotResponse::from)
                 .toList();
+    }
+
+    // 루트/커뮤니티 탭 신설 — 전체 가져오기(clone). 시간 재계산 없이 스냅샷 그대로 복사한다
+    // (원본과 동일한 일정 구조를 보존하는 게 목적 — 새 여행 날짜가 달라도 day_number/order_index
+    // 기준 상대적 일정은 그대로 유지됨)
+    @Transactional
+    public void cloneSlots(UUID sourceRouteId, UUID targetRouteId) {
+        List<RouteSlot> originals = routeSlotRepository.findByRouteIdOrderByDayNumberAscOrderIndexAsc(sourceRouteId);
+        for (RouteSlot s : originals) {
+            routeSlotRepository.save(RouteSlot.builder()
+                    .routeId(targetRouteId)
+                    .placeId(s.getPlaceId())
+                    .dayNumber(s.getDayNumber())
+                    .orderIndex(s.getOrderIndex())
+                    .startTime(s.getStartTime())
+                    .durationMinutes(s.getDurationMinutes())
+                    .estimatedCost(s.getEstimatedCost())
+                    .tips(s.getTips())
+                    .transportToNext(s.getTransportToNext())
+                    .transportMinutes(s.getTransportMinutes())
+                    .transitSummary(s.getTransitSummary())
+                    .transitDetail(s.getTransitDetail())
+                    .build());
+        }
+    }
+
+    // 루트/커뮤니티 탭 신설 — 수동 루트 작성. day별로 요청 리스트 안에서의 등장 순서를
+    // order_index로 그대로 부여(시간·비용·이동정보는 스코프 밖이라 전부 null)
+    @Transactional
+    public void createManualSlots(UUID routeId, List<ManualSlotRequest> slots) {
+        Map<Integer, Integer> orderCounter = new HashMap<>();
+        for (ManualSlotRequest s : slots) {
+            int orderIndex = orderCounter.merge(s.dayNumber(), 1, Integer::sum) - 1;
+            routeSlotRepository.save(RouteSlot.builder()
+                    .routeId(routeId)
+                    .placeId(s.placeId())
+                    .dayNumber(s.dayNumber())
+                    .orderIndex(orderIndex)
+                    .build());
+        }
     }
 
     @Transactional

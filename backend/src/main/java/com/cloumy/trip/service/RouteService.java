@@ -4,6 +4,7 @@ import com.cloumy.common.exception.BusinessException;
 import com.cloumy.common.response.ErrorCode;
 import com.cloumy.payment.service.PassValidationService;
 import com.cloumy.trip.dto.AccommodationCreateRequest;
+import com.cloumy.trip.dto.ManualRouteCreateRequest;
 import com.cloumy.trip.dto.PublicRouteResponse;
 import com.cloumy.trip.dto.RouteGenRequest;
 import com.cloumy.trip.dto.RouteListResponse;
@@ -16,6 +17,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
@@ -29,6 +32,7 @@ public class RouteService {
     private final AccommodationRepository accommodationRepository;
     private final BudgetSettingsService budgetSettingsService;
     private final PersonaTagAutoAssignService personaTagAutoAssignService;
+    private final RouteSlotService routeSlotService;
 
     public Page<RouteListResponse> getMyRoutes(UUID userId, Pageable pageable) {
         return routeRepository.findByUserIdOrderByDisplayOrderAsc(userId, pageable)
@@ -110,11 +114,84 @@ public class RouteService {
 
     // 공유 루트 가져오기 — 목적지 일치 공개 루트 브라우징. 소유자 검증 없음(공개 열람이므로),
     // 요청자 본인 루트는 제외
+    // 루트/커뮤니티 탭 신설 — destination이 없으면 목적지 무관 전체 공개 루트 피드로 분기
     public Page<PublicRouteResponse> getPublicRoutes(String destination, UUID requesterId, Pageable pageable) {
-        return routeRepository.findByDestinationAndIsPublicTrueAndUserIdNot(destination, requesterId, pageable)
-                .map(r -> new PublicRouteResponse(
-                        r.getId(), r.getTitle(), r.getDestination(), r.getNights(), r.getTags(), r.getSaveCount()
-                ));
+        Page<Route> routes = (destination == null || destination.isBlank())
+                ? routeRepository.findByIsPublicTrueAndUserIdNot(requesterId, pageable)
+                : routeRepository.findByDestinationAndIsPublicTrueAndUserIdNot(destination, requesterId, pageable);
+        return routes.map(r -> new PublicRouteResponse(
+                r.getId(), r.getTitle(), r.getDestination(), r.getNights(), r.getTags(), r.getSaveCount()
+        ));
+    }
+
+    // 루트/커뮤니티 탭 신설 — 공개 루트 전체 복제. 박수는 원본 그대로 고정하고 시작일만 새로 받는다
+    // (day_number가 원본 박수 기준으로 확정돼 있어 새 박수를 자유롭게 받으면 슬롯을 잘라내거나
+    // 뭉개는 클램핑이 필요해짐 — 시작일만 받으면 구조를 그대로 보존하면서 "과거 여행 날짜 그대로
+    // 복사되는 문제"도 해결됨)
+    @Transactional
+    public RouteListResponse cloneRoute(UUID routeId, UUID userId, LocalDate startDate) {
+        Route original = routeRepository.findById(routeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
+        if (!original.isPublic()) {
+            throw new BusinessException(ErrorCode.ROUTE_ACCESS_DENIED);
+        }
+
+        LocalDate endDate = startDate.plusDays(original.getNights());
+        int displayOrder = routeRepository.findMinDisplayOrder(userId) - 1;
+
+        Route cloned = Route.builder()
+                .userId(userId)
+                .title(original.getTitle())
+                .destination(original.getDestination())
+                .startDate(startDate)
+                .endDate(endDate)
+                .nights(original.getNights())
+                .groupType(original.getGroupType())
+                .budgetLevel(original.getBudgetLevel())
+                .tags(original.getTags())
+                .density(original.getDensity())
+                .displayOrder(displayOrder)
+                .build();
+        Route saved = routeRepository.save(cloned);
+
+        routeSlotService.cloneSlots(routeId, saved.getId());
+        original.incrementSaveCount();
+
+        return new RouteListResponse(saved.getId(), saved.getTitle(), saved.getDestination(),
+                saved.getStartDate(), saved.getEndDate(), saved.getNights(), saved.getCreatedAt(), saved.isPublic());
+    }
+
+    // 루트/커뮤니티 탭 신설 — 수동 작성 폼 제출 시 즉시 공개 루트로 생성
+    // (groupType/budgetLevel/density는 폼에 없는 항목이라 내부 기본값 고정 — createRoute()의
+    // density 기본값 "normal"과 같은 관례)
+    @Transactional
+    public RouteListResponse createManualRoute(ManualRouteCreateRequest req, UUID userId) {
+        if (!req.endDate().isAfter(req.startDate())) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "종료일은 시작일 이후여야 합니다");
+        }
+        int nights = (int) ChronoUnit.DAYS.between(req.startDate(), req.endDate());
+        int displayOrder = routeRepository.findMinDisplayOrder(userId) - 1;
+
+        Route route = Route.builder()
+                .userId(userId)
+                .title(req.title())
+                .destination(req.destination())
+                .startDate(req.startDate())
+                .endDate(req.endDate())
+                .nights(nights)
+                .groupType("solo")
+                .budgetLevel("mid")
+                .tags(new String[]{})
+                .density("normal")
+                .displayOrder(displayOrder)
+                .build();
+        Route saved = routeRepository.save(route);
+        saved.updateVisibility(true);
+
+        routeSlotService.createManualSlots(saved.getId(), req.slots());
+
+        return new RouteListResponse(saved.getId(), saved.getTitle(), saved.getDestination(),
+                saved.getStartDate(), saved.getEndDate(), saved.getNights(), saved.getCreatedAt(), true);
     }
 
     // 공유 루트 가져오기 — 새 루트 생성 성공 후 가져온 원본 루트들의 save_count 증가.

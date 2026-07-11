@@ -17,6 +17,9 @@ public interface RouteRepository extends JpaRepository<Route, UUID> {
     // 공유 루트 가져오기 — 목적지 일치 + 공개 + 요청자 본인 루트 제외, 정렬은 Pageable의 Sort로(save_count DESC)
     Page<Route> findByDestinationAndIsPublicTrueAndUserIdNot(String destination, UUID userId, Pageable pageable);
 
+    // 루트/커뮤니티 탭 신설 — 목적지 무관 전체 공개 루트 피드(destination 파라미터 생략 시)
+    Page<Route> findByIsPublicTrueAndUserIdNot(UUID userId, Pageable pageable);
+
     // 리오더 응답에서 페이지네이션 없이 전체 순서를 다시 내려줄 때 사용
     List<Route> findByUserIdOrderByDisplayOrderAsc(UUID userId);
 
