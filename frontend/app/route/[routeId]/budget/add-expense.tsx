@@ -3,12 +3,20 @@ import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { router, useLocalSearchParams } from 'expo-router';
-import { X } from 'lucide-react-native';
+import { X, Utensils, Bus, Ticket, Gift, MoreHorizontal } from 'lucide-react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { addExpense } from '@/lib/api/budget';
 import type { ExpenseCategory } from '@/types';
+import { BUDGET_COLORS, EXPENSE_CATEGORY_COLORS, RECEIPT_LABEL, TABULAR_NUMS } from '@/lib/constants/budgetTheme';
 
 const CATEGORIES: ExpenseCategory[] = ['FOOD', 'TRANSPORT', 'ADMISSION', 'SOUVENIR', 'ETC'];
+const CATEGORY_ICONS: Record<ExpenseCategory, typeof Utensils> = {
+  FOOD: Utensils,
+  TRANSPORT: Bus,
+  ADMISSION: Ticket,
+  SOUVENIR: Gift,
+  ETC: MoreHorizontal,
+};
 
 export default function AddExpenseScreen() {
   const { t } = useTranslation();
@@ -42,29 +50,39 @@ export default function AddExpenseScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      <View className="flex-row items-center justify-between px-5 py-3 border-b border-slate-100">
-        <Text className="text-lg font-bold text-slate-800">{t('budgetAddExpense.headerTitle')}</Text>
+    <SafeAreaView className="flex-1" style={{ backgroundColor: BUDGET_COLORS.screenBg }}>
+      <View
+        className="flex-row items-center justify-between px-5 py-3 border-b"
+        style={{ backgroundColor: BUDGET_COLORS.paper, borderColor: BUDGET_COLORS.perforation }}
+      >
+        <Text className="text-lg font-bold" style={{ color: BUDGET_COLORS.ink }}>{t('budgetAddExpense.headerTitle')}</Text>
         <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
-          <X size={22} color="#475569" />
+          <X size={22} color={BUDGET_COLORS.ink} />
         </TouchableOpacity>
       </View>
 
       <ScrollView className="flex-1 px-6 pt-6" keyboardShouldPersistTaps="handled">
-        <Text className="font-bold text-slate-700 mb-3">{t('budgetAddExpense.categoryLabel')}</Text>
+        <Text className="text-xs font-bold mb-3" style={{ color: BUDGET_COLORS.ink, ...RECEIPT_LABEL }}>
+          {t('budgetAddExpense.categoryLabel')}
+        </Text>
         <View className="flex-row flex-wrap gap-2 mb-6">
           {CATEGORIES.map((c) => {
             const selected = category === c;
+            const color = EXPENSE_CATEGORY_COLORS[c];
+            const Icon = CATEGORY_ICONS[c];
             return (
               <TouchableOpacity
                 key={c}
                 onPress={() => setCategory(c)}
-                className={`px-4 py-2 rounded-full border-2 ${
-                  selected ? 'border-sky-500 bg-sky-50' : 'border-slate-200 bg-white'
-                }`}
+                className="flex-row items-center gap-1.5 px-4 py-2 rounded-full border-2"
+                style={{
+                  borderColor: selected ? color : BUDGET_COLORS.perforation,
+                  backgroundColor: selected ? `${color}1A` : '#fff',
+                }}
                 activeOpacity={0.8}
               >
-                <Text className={`text-sm font-bold ${selected ? 'text-sky-700' : 'text-slate-600'}`}>
+                <Icon size={14} color={selected ? color : '#9C8F73'} />
+                <Text className="text-sm font-bold" style={{ color: selected ? color : '#7A6F58' }}>
                   {t(`budgetAddExpense.categories.${c.toLowerCase()}`)}
                 </Text>
               </TouchableOpacity>
@@ -72,24 +90,35 @@ export default function AddExpenseScreen() {
           })}
         </View>
 
-        <Text className="font-bold text-slate-700 mb-3">{t('budgetAddExpense.amountLabel')}</Text>
-        <View className="flex-row items-center bg-slate-50 border-2 border-slate-200 rounded-2xl px-4 mb-6">
+        <Text className="text-xs font-bold mb-3" style={{ color: BUDGET_COLORS.ink, ...RECEIPT_LABEL }}>
+          {t('budgetAddExpense.amountLabel')}
+        </Text>
+        <View
+          className="flex-row items-center rounded-2xl px-4 mb-6 border"
+          style={{ backgroundColor: BUDGET_COLORS.paper, borderColor: BUDGET_COLORS.perforation }}
+        >
+          <Text className="text-lg font-bold mr-1" style={{ color: BUDGET_COLORS.ledgerGreen }}>₩</Text>
           <TextInput
             value={amount}
             onChangeText={(text) => setAmount(text.replace(/[^0-9]/g, ''))}
             placeholder={t('budgetAddExpense.amountPlaceholder')}
             keyboardType="number-pad"
-            className="flex-1 py-3 px-2 text-sm text-slate-700"
+            className="flex-1 py-3 px-2 text-lg font-bold"
+            style={{ color: BUDGET_COLORS.ink, ...TABULAR_NUMS }}
+            placeholderTextColor="#B5AA92"
           />
-          <Text className="text-slate-400 text-sm">{t('routeCreateStep3.currencyWon')}</Text>
         </View>
 
-        <Text className="font-bold text-slate-700 mb-3">{t('budgetAddExpense.memoLabel')}</Text>
+        <Text className="text-xs font-bold mb-3" style={{ color: BUDGET_COLORS.ink, ...RECEIPT_LABEL }}>
+          {t('budgetAddExpense.memoLabel')}
+        </Text>
         <TextInput
           value={memo}
           onChangeText={setMemo}
           placeholder={t('budgetAddExpense.memoPlaceholder')}
-          className="bg-slate-50 border-2 border-slate-200 rounded-2xl px-4 py-3 text-sm text-slate-700 mb-6"
+          className="rounded-2xl px-4 py-3 text-sm mb-6 border"
+          style={{ backgroundColor: BUDGET_COLORS.paper, borderColor: BUDGET_COLORS.perforation, color: BUDGET_COLORS.ink }}
+          placeholderTextColor="#B5AA92"
         />
       </ScrollView>
 
@@ -97,7 +126,8 @@ export default function AddExpenseScreen() {
         <TouchableOpacity
           onPress={handleSubmit}
           disabled={submitting}
-          className="bg-sky-500 py-4 rounded-2xl items-center"
+          className="py-4 rounded-2xl items-center"
+          style={{ backgroundColor: BUDGET_COLORS.ledgerGreen }}
           activeOpacity={0.9}
         >
           {submitting ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-bold text-base">{t('budgetAddExpense.submitButton')}</Text>}
