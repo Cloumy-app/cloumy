@@ -9,7 +9,9 @@ import com.cloumy.trip.dto.PublicRouteResponse;
 import com.cloumy.trip.dto.RouteGenRequest;
 import com.cloumy.trip.dto.RouteListResponse;
 import com.cloumy.trip.entity.Route;
+import com.cloumy.trip.entity.RouteBookmark;
 import com.cloumy.trip.repository.AccommodationRepository;
+import com.cloumy.trip.repository.RouteBookmarkRepository;
 import com.cloumy.trip.repository.RouteRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -29,6 +31,7 @@ public class RouteService {
 
     private final PassValidationService passValidationService;
     private final RouteRepository routeRepository;
+    private final RouteBookmarkRepository routeBookmarkRepository;
     private final AccommodationRepository accommodationRepository;
     private final BudgetSettingsService budgetSettingsService;
     private final PersonaTagAutoAssignService personaTagAutoAssignService;
@@ -115,13 +118,22 @@ public class RouteService {
     // 공유 루트 가져오기 — 목적지 일치 공개 루트 브라우징. 소유자 검증 없음(공개 열람이므로),
     // 요청자 본인 루트는 제외
     // 루트/커뮤니티 탭 신설 — destination이 없으면 목적지 무관 전체 공개 루트 피드로 분기
-    public Page<PublicRouteResponse> getPublicRoutes(String destination, UUID requesterId, Pageable pageable) {
-        Page<Route> routes = (destination == null || destination.isBlank())
-                ? routeRepository.findByIsPublicTrueAndUserIdNot(requesterId, pageable)
-                : routeRepository.findByDestinationAndIsPublicTrueAndUserIdNot(destination, requesterId, pageable);
-        return routes.map(r -> new PublicRouteResponse(
-                r.getId(), r.getTitle(), r.getDestination(), r.getNights(), r.getTags(), r.getSaveCount()
-        ));
+    public Page<PublicRouteResponse> getPublicRoutes(
+            String destination, boolean bookmarkedOnly, UUID requesterId, Pageable pageable) {
+        return routeRepository.findPublicRoutes(destination, requesterId, bookmarkedOnly, pageable)
+                .map(PublicRouteResponse::from);
+    }
+
+    @Transactional
+    public void addRouteBookmark(UUID userId, UUID routeId) {
+        if (!routeBookmarkRepository.existsByUserIdAndRouteId(userId, routeId)) {
+            routeBookmarkRepository.save(RouteBookmark.builder().userId(userId).routeId(routeId).build());
+        }
+    }
+
+    @Transactional
+    public void removeRouteBookmark(UUID userId, UUID routeId) {
+        routeBookmarkRepository.deleteByUserIdAndRouteId(userId, routeId);
     }
 
     // 루트/커뮤니티 탭 신설 — 공개 루트 전체 복제. 박수는 원본 그대로 고정하고 시작일만 새로 받는다

@@ -1,5 +1,6 @@
 package com.cloumy.trip.repository;
 
+import com.cloumy.trip.dto.PublicRouteProjection;
 import com.cloumy.trip.entity.Route;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -14,11 +15,34 @@ public interface RouteRepository extends JpaRepository<Route, UUID> {
 
     Page<Route> findByUserIdOrderByDisplayOrderAsc(UUID userId, Pageable pageable);
 
-    // 공유 루트 가져오기 — 목적지 일치 + 공개 + 요청자 본인 루트 제외, 정렬은 Pageable의 Sort로(save_count DESC)
-    Page<Route> findByDestinationAndIsPublicTrueAndUserIdNot(String destination, UUID userId, Pageable pageable);
-
-    // 루트/커뮤니티 탭 신설 — 목적지 무관 전체 공개 루트 피드(destination 파라미터 생략 시)
-    Page<Route> findByIsPublicTrueAndUserIdNot(UUID userId, Pageable pageable);
+    // 공유 루트 가져오기 — 목적지 일치(생략 시 커뮤니티 탭용 전체 피드) + 공개 + 요청자 본인 루트 제외
+    // + (bookmarkedOnly면 북마크한 것만). 유저별 북마크 여부(isBookmarked)도 함께 내려줘야 해서
+    // derived query 대신 네이티브 쿼리로 전환.
+    @Query(value = """
+            SELECT r.id::text AS id, r.title AS title, r.destination AS destination,
+                   r.nights AS nights, r.tags AS tags, r.save_count AS saveCount,
+                   EXISTS(SELECT 1 FROM route_bookmarks rb
+                          WHERE rb.route_id = r.id AND rb.user_id = :userId) AS isBookmarked
+            FROM routes r
+            WHERE (:destination IS NULL OR r.destination = :destination)
+              AND r.is_public = true AND r.user_id != :userId
+              AND (:bookmarkedOnly = false OR EXISTS(
+                    SELECT 1 FROM route_bookmarks rb2 WHERE rb2.route_id = r.id AND rb2.user_id = :userId))
+            ORDER BY r.save_count DESC
+            """,
+            countQuery = """
+            SELECT COUNT(*) FROM routes r
+            WHERE (:destination IS NULL OR r.destination = :destination)
+              AND r.is_public = true AND r.user_id != :userId
+              AND (:bookmarkedOnly = false OR EXISTS(
+                    SELECT 1 FROM route_bookmarks rb2 WHERE rb2.route_id = r.id AND rb2.user_id = :userId))
+            """,
+            nativeQuery = true)
+    Page<PublicRouteProjection> findPublicRoutes(
+            @Param("destination") String destination,
+            @Param("userId") UUID userId,
+            @Param("bookmarkedOnly") boolean bookmarkedOnly,
+            Pageable pageable);
 
     // 리오더 응답에서 페이지네이션 없이 전체 순서를 다시 내려줄 때 사용
     List<Route> findByUserIdOrderByDisplayOrderAsc(UUID userId);

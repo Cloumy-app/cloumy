@@ -144,13 +144,18 @@
     "nextWithCount": "{{count}}件を取り込む",
     "skip": "スキップ",
     "importTab": "共有ルートから",
+    "bookmarkedPlacesTab": "ブックマークした場所",
     "searchTab": "直接検索",
     "searchPlaceholder": "場所の名前で検索",
     "pickDayLabel": "何日目に入れますか？",
     "searchAddFailedTitle": "場所の追加に失敗しました",
     "searchAddFailedBody": "しばらくしてからもう一度お試しください。",
     "sourceRouteUnavailableTitle": "ルートを読み込めません",
-    "sourceRouteUnavailableBody": "非公開になったか削除されたルートです。他の共有ルートをお試しください。"
+    "sourceRouteUnavailableBody": "非公開になったか削除されたルートです。他の共有ルートをお試しください。",
+    "routesTabAll": "すべて",
+    "routesTabBookmarked": "ブックマーク",
+    "noBookmarkedRoutes": "まだブックマークした共有ルートがありません",
+    "noBookmarkedPlaces": "この地域にブックマークした場所がありません"
   },
   "community": {
     "headerTitle": "コミュニティ",
