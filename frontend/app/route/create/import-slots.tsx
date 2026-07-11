@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft, Check, Users, Bookmark } from 'lucide-react-native';
@@ -17,6 +17,8 @@ export default function RouteCreateImportSlots() {
     groupType: string;
     startDate: string;
     endDate: string;
+    sourceRouteId?: string;
+    sourceRouteTitle?: string;
   }>();
 
   const nightsNum = Number(params.nights ?? 1);
@@ -41,8 +43,8 @@ export default function RouteCreateImportSlots() {
     (async () => {
       setLoading(true);
       try {
-        const routes = await getPublicRoutes(params.destination ?? '서울');
-        if (!cancelled) setPublicRoutes(routes);
+        const routes = await getPublicRoutes(params.destination ?? '서울', 0, 10);
+        if (!cancelled) setPublicRoutes(routes.content);
       } catch {
         if (!cancelled) setPublicRoutes([]);
       } finally {
@@ -53,6 +55,42 @@ export default function RouteCreateImportSlots() {
       cancelled = true;
     };
   }, [params.destination]);
+
+  // 루트/커뮤니티 탭 신설 — 커뮤니티 미리보기의 "선택해서 가져오기"로 진입한 경우, 공개 루트
+  // 목록 단계를 건너뛰고 바로 이 루트가 열린 상태로 시작. nights/tags/saveCount는 이 뷰에서
+  // 렌더링에 쓰이지 않는 더미값이라 채워도 안전.
+  useEffect(() => {
+    if (!params.sourceRouteId || !params.sourceRouteTitle) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const slots = await getPublicRouteSlots(params.sourceRouteId!);
+        if (cancelled) return;
+        setOpenRoute({
+          id: params.sourceRouteId!,
+          title: params.sourceRouteTitle!,
+          destination: params.destination ?? '',
+          nights: 0,
+          tags: [],
+          saveCount: 0,
+        });
+        setOpenRouteSlots(slots);
+        const defaults: Record<string, number> = {};
+        slots.forEach((s) => {
+          defaults[s.placeId] = Math.min(s.dayNumber, dayCount);
+        });
+        setDayByPlace(defaults);
+      } catch {
+        if (!cancelled) {
+          Alert.alert(t('routeCreateImport.sourceRouteUnavailableTitle'), t('routeCreateImport.sourceRouteUnavailableBody'));
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onOpenRoute = async (route: PublicRouteListItem) => {
     setOpenRoute(route);

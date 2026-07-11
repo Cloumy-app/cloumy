@@ -25,6 +25,10 @@ public interface RouteSlotRepository extends JpaRepository<RouteSlot, UUID> {
     // start_time 캐스케이드 재계산용 — 해당 day 전체를 order_index 순으로 조회
     List<RouteSlot> findByRouteIdAndDayNumberOrderByOrderIndex(UUID routeId, int dayNumber);
 
+    // 루트/커뮤니티 탭 신설 — 전체 가져오기(clone) 시 원본 슬롯을 엔티티 그대로 복사하기 위한 조회.
+    // findSlotsByRouteId(SlotProjection)는 장소 조인 결과라 place_id/transport_* 원본 필드 복사에 부적합
+    List<RouteSlot> findByRouteIdOrderByDayNumberAscOrderIndexAsc(UUID routeId);
+
     // 슬롯 삽입 시 뒤 슬롯들의 order_index를 미는 대상 조회 — 큰 값부터 내림차순으로 반환해야
     // 순서대로 +1 했을 때 (route_id, day_number, order_index) UNIQUE 제약과 중간에 충돌하지 않는다.
     List<RouteSlot> findByRouteIdAndDayNumberAndOrderIndexGreaterThanOrderByOrderIndexDesc(

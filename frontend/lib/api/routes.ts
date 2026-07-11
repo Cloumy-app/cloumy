@@ -6,6 +6,7 @@ interface SpringPage<T> {
   content: T[];
   totalElements: number;
   totalPages: number;
+  last: boolean;
 }
 
 export async function getMyRoutes(page = 0, size = 10): Promise<SpringPage<RouteListItem>> {
@@ -99,11 +100,47 @@ export async function updateRouteVisibility(routeId: string, isPublic: boolean):
   if (!res.ok) throw new Error(`${res.status}`);
 }
 
-export async function getPublicRoutes(destination: string): Promise<PublicRouteListItem[]> {
-  const res = await apiFetch(`/v1/routes/public?destination=${encodeURIComponent(destination)}`);
+// 루트/커뮤니티 탭 신설 — destination 생략 시 목적지 무관 전체 공개 루트 피드(커뮤니티 탭용).
+// 기존 import-slots.tsx는 destination을 넘겨 목적지 일치 목록만 받는 기존 동작 그대로 유지.
+export async function getPublicRoutes(
+  destination?: string,
+  page = 0,
+  size = 10,
+): Promise<SpringPage<PublicRouteListItem>> {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  if (destination) params.set('destination', destination);
+  const res = await apiFetch(`/v1/routes/public?${params}`);
   if (!res.ok) throw new Error(`${res.status}`);
   const body: { data: SpringPage<PublicRouteListItem> } = await res.json();
-  return body.data.content;
+  return body.data;
+}
+
+export async function cloneRoute(routeId: string, startDate: string): Promise<RouteListItem> {
+  const res = await apiFetch(`/v1/routes/${routeId}/clone`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ startDate }),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+  const body: { data: RouteListItem } = await res.json();
+  return body.data;
+}
+
+export async function createManualRoute(payload: {
+  title: string;
+  destination: string;
+  startDate: string;
+  endDate: string;
+  slots: { placeId: string; dayNumber: number }[];
+}): Promise<RouteListItem> {
+  const res = await apiFetch('/v1/routes/manual', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+  const body: { data: RouteListItem } = await res.json();
+  return body.data;
 }
 
 export async function getPublicRouteSlots(routeId: string): Promise<SlotWithCoords[]> {

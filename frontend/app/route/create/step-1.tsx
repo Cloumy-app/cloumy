@@ -3,7 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft, MapPin, Users, Calendar, ChevronRight } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -34,6 +34,13 @@ function formatDisplayDate(d: Date, locale: string): string {
 
 export default function RouteCreateStep1() {
   const { t, i18n } = useTranslation();
+  // 루트/커뮤니티 탭 신설 — 커뮤니티 미리보기의 "선택해서 가져오기"로 진입 시 목적지 프리필 +
+  // sourceRouteId/sourceRouteTitle을 import-slots까지 그대로 전달
+  const { prefillDestination, sourceRouteId, sourceRouteTitle } = useLocalSearchParams<{
+    prefillDestination?: string;
+    sourceRouteId?: string;
+    sourceRouteTitle?: string;
+  }>();
   const [startDate, setStartDate] = useState(new Date());
   const [endDate, setEndDate] = useState(() => {
     const d = new Date();
@@ -76,7 +83,7 @@ export default function RouteCreateStep1() {
   const { control, handleSubmit, formState: { errors } } = useForm<Step1Form>({
     resolver: zodResolver(step1Schema),
     defaultValues: {
-      destination: '',
+      destination: prefillDestination ?? '',
       groupType: 'friends',
     },
   });
@@ -84,7 +91,7 @@ export default function RouteCreateStep1() {
   const onNext = (data: Step1Form) => {
     router.push({
       pathname: '/route/create/import-slots',
-      params: { ...data, startDate: toDateStr(startDate), endDate: toDateStr(endDate), nights },
+      params: { ...data, startDate: toDateStr(startDate), endDate: toDateStr(endDate), nights, sourceRouteId, sourceRouteTitle },
     });
   };
 

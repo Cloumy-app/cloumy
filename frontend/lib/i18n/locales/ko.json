@@ -148,7 +148,40 @@
     "searchPlaceholder": "장소 이름으로 검색",
     "pickDayLabel": "며칠차에 넣을까요?",
     "searchAddFailedTitle": "장소 추가 실패",
-    "searchAddFailedBody": "잠시 후 다시 시도해주세요."
+    "searchAddFailedBody": "잠시 후 다시 시도해주세요.",
+    "sourceRouteUnavailableTitle": "루트를 불러올 수 없어요",
+    "sourceRouteUnavailableBody": "비공개로 전환됐거나 삭제된 루트예요. 다른 공유 루트를 찾아보세요."
+  },
+  "community": {
+    "headerTitle": "커뮤니티",
+    "createButton": "루트 올리기",
+    "emptyTitle": "아직 공유된 루트가 없어요",
+    "emptySubtitle": "첫 번째로 여행 루트를 공유해보세요",
+    "loadError": "루트를 불러오지 못했어요",
+    "retryButton": "다시 시도",
+    "nightsLabel": "{{nights}}박"
+  },
+  "communityPreview": {
+    "notAvailableTitle": "루트를 볼 수 없어요",
+    "notAvailableBody": "비공개로 전환됐거나 삭제된 루트예요.",
+    "importAllButton": "전체 가져오기",
+    "importSelectedButton": "선택해서 가져오기",
+    "cloneModalTitle": "출발일을 선택하세요",
+    "cloneModalNightsHint": "{{nights}}박 일정 그대로, 종료일은 자동으로 계산돼요",
+    "cloneConfirmButton": "가져오기",
+    "cloneFailedTitle": "가져오기 실패",
+    "cloneFailedBody": "잠시 후 다시 시도해주세요."
+  },
+  "communityCreate": {
+    "headerTitle": "루트 올리기",
+    "titleLabel": "루트 제목",
+    "titlePlaceholder": "예: 나만의 도쿄 3박 4일",
+    "destinationLabel": "목적지",
+    "dateRangeLabel": "여행 날짜",
+    "addPlaceLabel": "장소 추가",
+    "publishButton": "공개로 올리기",
+    "publishFailedTitle": "등록 실패",
+    "publishFailedBody": "잠시 후 다시 시도해주세요."
   },
   "slotCard": {
     "transportModes": { "walk": "도보", "taxi": "자동차", "transit": "대중교통", "default": "이동" },

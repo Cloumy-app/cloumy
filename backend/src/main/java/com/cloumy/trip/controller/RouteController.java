@@ -3,8 +3,10 @@ package com.cloumy.trip.controller;
 import com.cloumy.auth.security.CloudmyUserDetails;
 import com.cloumy.common.response.ApiResponse;
 import com.cloumy.trip.dto.DaySummaryResponse;
+import com.cloumy.trip.dto.ManualRouteCreateRequest;
 import com.cloumy.trip.dto.PublicRouteResponse;
 import com.cloumy.trip.dto.ReorderRoutesRequest;
+import com.cloumy.trip.dto.RouteCloneRequest;
 import com.cloumy.trip.dto.RouteGenRequest;
 import com.cloumy.trip.dto.RouteListResponse;
 import com.cloumy.trip.dto.SlotResponse;
@@ -114,14 +116,36 @@ public class RouteController {
     }
 
     // 공유 루트 가져오기 — 목적지 일치 + 공개 + 요청자 본인 제외, save_count DESC 정렬
+    // 커뮤니티 탭 신설 — destination 생략 시 목적지 무관 전체 공개 루트 피드로 동작(하위호환 유지)
     @GetMapping("/routes/public")
     public ApiResponse<Page<PublicRouteResponse>> getPublicRoutes(
-            @RequestParam String destination,
+            @RequestParam(required = false) String destination,
             @AuthenticationPrincipal CloudmyUserDetails user,
             @PageableDefault(size = 10, sort = "saveCount", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         UUID userId = UUID.fromString(user.userId());
         return ApiResponse.ok(routeService.getPublicRoutes(destination, userId, pageable));
+    }
+
+    // 루트/커뮤니티 탭 신설 — 공개 루트 전체 복제(날짜만 새로 받음), 원본 save_count 증가
+    @PostMapping("/routes/{routeId}/clone")
+    public ApiResponse<RouteListResponse> cloneRoute(
+            @PathVariable UUID routeId,
+            @RequestBody @Valid RouteCloneRequest req,
+            @AuthenticationPrincipal CloudmyUserDetails user
+    ) {
+        UUID userId = UUID.fromString(user.userId());
+        return ApiResponse.ok(routeService.cloneRoute(routeId, userId, req.startDate()));
+    }
+
+    // 루트/커뮤니티 탭 신설 — AI 생성 없이 유저가 직접 입력한 루트를 즉시 공개로 생성
+    @PostMapping("/routes/manual")
+    public ApiResponse<RouteListResponse> createManualRoute(
+            @RequestBody @Valid ManualRouteCreateRequest req,
+            @AuthenticationPrincipal CloudmyUserDetails user
+    ) {
+        UUID userId = UUID.fromString(user.userId());
+        return ApiResponse.ok(routeService.createManualRoute(req, userId));
     }
 
     // 공유 루트 가져오기 — 그 루트가 공개일 때만 슬롯 목록 반환. RouteSlotController(/slots 하위)와
