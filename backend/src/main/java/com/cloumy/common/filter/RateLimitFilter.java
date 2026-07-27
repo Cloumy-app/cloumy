@@ -37,7 +37,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
             new Rule(new AntPathRequestMatcher("/v1/routes/generate", "POST"),
                     "ratelimit:routes:generate:", 3, Duration.ofSeconds(60)),
             new Rule(new AntPathRequestMatcher("/v1/chat", "POST"),
-                    "ratelimit:chat:", 10, Duration.ofSeconds(60))
+                    "ratelimit:chat:", 10, Duration.ofSeconds(60)),
+            // 앱을 열 때마다 호출되는 엔드포인트라 챗봇보다 넉넉히 잡되(앱 재진입 감안) 무한 루프는 막는다.
+            new Rule(new AntPathRequestMatcher("/v1/routes/*/proactive", "GET"),
+                    "ratelimit:proactive:", 30, Duration.ofSeconds(60))
     );
 
     private final StringRedisTemplate redisTemplate;

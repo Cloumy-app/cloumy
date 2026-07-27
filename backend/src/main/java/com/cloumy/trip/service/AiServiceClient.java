@@ -3,6 +3,7 @@ package com.cloumy.trip.service;
 import com.cloumy.common.exception.BusinessException;
 import com.cloumy.common.response.ErrorCode;
 import com.cloumy.trip.dto.ChatResponse;
+import com.cloumy.trip.dto.ProactiveResponse;
 import com.cloumy.trip.dto.RouteGenRequest;
 import com.cloumy.trip.dto.SlotAlternativeResponse;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -179,15 +180,17 @@ public class AiServiceClient {
     private record ChatLocationDto(double lat, double lng) {}
 
     private record ChatReq(
-            String user_id, String route_id, String message, ChatLocationDto current_location, String language
+            String user_id, String route_id, String message, ChatLocationDto current_location, String language,
+            String proactive_context
     ) {}
 
     public ChatResponse chat(
-            String userId, String routeId, String message, Double lat, Double lng, String language) {
+            String userId, String routeId, String message, Double lat, Double lng, String language,
+            String proactiveContext) {
         try {
             ChatLocationDto location = (lat != null && lng != null) ? new ChatLocationDto(lat, lng) : null;
             String body = objectMapper.writeValueAsString(
-                    new ChatReq(userId, routeId, message, location, language));
+                    new ChatReq(userId, routeId, message, location, language, proactiveContext));
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(fastapiUrl + "/ai/chat"))
@@ -211,6 +214,34 @@ public class AiServiceClient {
         } catch (Exception e) {
             log.error("챗봇 요청 실패: {}", e.getMessage());
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "챗봇 요청에 실패했습니다");
+        }
+    }
+
+    // 프로액티브는 chat()과 실패 처리가 다르다 — 배너는 없어도 되는 것이라 타임아웃·5xx를
+    // 예외로 승격하지 않고 "개입 없음"(empty())으로 삼킨다. 404(RouteNotFound)만 예외로 던진다.
+    public ProactiveResponse proactive(String userId, String routeId) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(fastapiUrl + "/ai/proactive?user_id=" + userId + "&route_id=" + routeId))
+                    .header("X-Internal-Key", internalApiKey)
+                    .GET()
+                    .timeout(Duration.ofSeconds(5))  // 배너는 오래 기다릴 이유가 없다 — chat()의 15초보다 짧게
+                    .build();
+
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 404) {
+                throw new BusinessException(ErrorCode.ROUTE_NOT_FOUND);
+            }
+            if (response.statusCode() >= 400) {
+                log.warn("프로액티브 조회 실패 — 개입 없음으로 처리: status={}", response.statusCode());
+                return ProactiveResponse.empty();
+            }
+            return objectMapper.readValue(response.body(), ProactiveResponse.class);
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("프로액티브 요청 실패 — 개입 없음으로 처리: {}", e.getMessage());
+            return ProactiveResponse.empty();
         }
     }
 
