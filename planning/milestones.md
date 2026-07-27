@@ -279,6 +279,7 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 - [x] 추천 장소 → 일정에 바로 삽입 — 챗봇 카드 탭 시 추정 슬롯과 다음 슬롯 사이에 새 슬롯 삽입(`POST /v1/routes/{routeId}/slots`), 이웃 이동정보·start_time 재계산 — 2026-07-05
 - [x] `route_slots.start_time` 알고리즘 계산 — 하루 09:00 고정 시작 + duration/transport 누적 역산, LLM이 시간 직접 생성 안 함 (`route_service.py`) — 2026-07-05
 - [x] 챗봇 후속 개선 — 이동수단 기본값(car) 적용, get_route_status 날짜 인식 수정, 추천 카드 한줄 이유(Haiku) 추가 — 2026-07-06
+- [x] 프로액티브 개입 엔진(이슈 #143) — 챗봇을 리액티브 단독에서 **배너(프로액티브) → 챗봇(리액티브)** 구조로 확장. 여행 전날(D-1) 브리핑 1종(`PRE_TRIP_BRIEFING`) + 여행 중 규칙 7종(`FLIGHT_DEPARTURE`/`DEPARTURE_SOON`/`EMPTY_DAY`/`WEATHER_ALERT`/`BUDGET_OVER`/`BOOKMARK_NEARBY`/`FREE_GAP`) — 순수 함수로 판단만 하고 문구는 앱이 조립(`ai/app/services/proactive_service.py`), `GET /v1/routes/{routeId}/proactive`(분당 30회) + `POST .../proactive/feedback`(탭/닫기 로그만, DB 미저장) 신설, 배너 탭 시 `proactiveContext`로 챗봇 첫 메시지에 맥락 인계. 설계: `docs/superpowers/specs/2026-07-27-proactive-chatbot-design.md` — 2026-07-27
 - [ ] (다음 단계) LangChain 멀티턴 챗봇 파이프라인 고도화, 챗봇 스트리밍
 - [ ] (다음 단계) `record_expense`/`get_remaining_budget` — 예산 추적 기능 선행 필요
 - [ ] (다음 단계) `modify_route_slot`/`suggest_alternatives` — Pin&Reshuffle과 통합 검토
@@ -298,7 +299,7 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 - [x] 잔여 예산 배너 — 총액 기준만(카테고리별 잔여는 계획지출 미분류로 이번 단계 제외) — 2026-07-06
 - [x] 여행 후 지출 리포트 — 계획지출은 "현지 활동비" 하나로, 비계획지출만 카테고리별 차트(victory-native, `@shopify/react-native-skia` 신규 설치) — 2026-07-06
 - [x] 루트 생성 시 총예산 미입력한 기존 루트를 위한 예산 화면 사후 설정 (`POST budget-settings`, 중복 설정 방지) — 2026-07-11
-- [ ] 예산 초과 시 챗봇 저가 대안 자동 제안 — 별도 태스크로 분리(기존 챗봇 인프라 변경 영향범위가 커서 이번 스코프에서 제외)
+- [x] 예산 초과 시 챗봇 저가 대안 자동 제안 — 프로액티브 개입 엔진 T5(`BUDGET_OVER`)가 이 요구를 흡수(오늘 지출이 하루 예산의 1.2배를 넘으면 배너로 알림 — "저가 대안 제안"에서 "초과 알림"으로 스코프가 좁혀졌으나 별도 태스크 분리 없이 프로액티브 규칙 하나로 해소) — 2026-07-27
 - [ ] (다음 단계) 숙박비 반영 — 예약 기능으로 실제 숙박 비용 데이터 확보되면 카테고리 재도입
 - [ ] (다음 단계) 계획 지출 카테고리 자동 분류 고도화 — `category_tags` → expense category 매핑 정확도 개선
 
