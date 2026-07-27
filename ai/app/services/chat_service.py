@@ -122,7 +122,9 @@ class RouteNotFoundError(Exception):
 
 async def _load_route(db: asyncpg.Pool, user_id: str, route_id: str) -> asyncpg.Record:
     row = await db.fetchrow(
-        "SELECT id, destination, start_date, end_date, nights "
+        # departure_at은 프로액티브 T1(출국 준비) 전용 — 챗봇은 안 쓰지만 조회 함수를
+        # 공유하므로(proactive_service도 import) 컬럼만 추가하고 반환 형태는 그대로 둔다.
+        "SELECT id, destination, start_date, end_date, nights, departure_at "
         "FROM routes WHERE id = $1 AND user_id = $2",
         route_id, user_id,
     )
@@ -349,6 +351,7 @@ async def handle_chat(
     user_message: str,
     current_location: tuple[float, float] | None = None,
     language: str | None = None,
+    proactive_context: str | None = None,
 ) -> tuple[str, list[dict] | None, dict | None]:
     """route_id가 user_id 소유가 아니면 RouteNotFoundError를 던진다.
     반환: (자연어 답변, search_nearby_places 결과 장소 목록(카드 렌더용, 없으면 None),
@@ -378,6 +381,11 @@ async def handle_chat(
         nights_plus_1=route["nights"] + 1,
         fallback_language=_LANGUAGE_NAMES.get(language, "한국어"),
     ) + location_hint
+
+    if proactive_context:
+        # 배너 탭 직후 첫 메시지에만 실려온다 — 유저가 "응 바꿔줘"만 보내도 뭘 바꾸란 건지
+        # 알 수 있도록 방금 먼저 안내한 내용을 시스템 프롬프트에 덧붙인다.
+        system_prompt += f"\n\n[방금 먼저 안내한 내용]\n{proactive_context}"
 
     messages: list[dict] = [*history, {"role": "user", "content": user_message}]
 
