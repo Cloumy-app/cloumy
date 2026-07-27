@@ -130,7 +130,7 @@ B는 데이터 소유(routes·slots·expenses가 Spring 것)라는 장점이 있
 | 날씨 | Day별 강수확률 ≥ 0.6 → "우산 챙기세요" |
 | 폭염·한파 | Day별 최고 ≥ 33℃ 또는 최저 ≤ -5℃ |
 | 빡빡한 Day | 슬롯 ≥ 5개 **AND** 총 이동시간 ≥ 180분 |
-| 숙소에서 먼 밤 일정 | 그 날 마지막 슬롯 → 숙소 이동시간 ≥ 40분 |
+| 숙소에서 먼 밤 일정 | 그 날 마지막 슬롯 → 숙소 **직선거리 ≥ 8km** |
 | 긴 도보 구간 | `transport_to_next = 'walk'` **AND** `transport_minutes ≥ 40` |
 | 첫 일정 시각 | 항상 표시 ("첫 일정은 9시 경복궁") |
 
@@ -168,7 +168,7 @@ B는 데이터 소유(routes·slots·expenses가 Spring 것)라는 장점이 있
 - **온도 — 추가 비용 0.** `_get_forecast_by_block()`이 OpenWeatherMap 응답에서 강수확률만 뽑고 온도를 버리고 있다. 안 버리기만 하면 폭염·한파 판정이 공짜로 된다(새 API·컬럼·호출 없음)
 - 예산 — `budget_settings.total_budget` + `expenses.created_at`(KST 오늘로 필터). `expenses`에 날짜 컬럼이 따로 없어 `created_at`을 쓴다
 - 북마크 — `bookmarks(user_id, place_id)`. V17에서 생성됨
-- 숙소 좌표 — `accommodations.location GEOGRAPHY`. V7에서 생성됨
+- 숙소 좌표 — `accommodations.location GEOGRAPHY`. V7에서 생성됨. **숙소까지의 이동시간은 저장돼 있지 않다**(`transport_minutes`는 슬롯 간 값) → PostGIS 직선거리로 근사한다. 경고가 목적이지 정확한 안내가 아니라 충분하다
 - 이동시간·이동수단 — `route_slots.transport_minutes` / `transport_to_next`. 이미 저장돼 있어 외부 API 재호출 불필요
 - **출국 일시 — 유일하게 없는 데이터.** `routes.departure_at TIMESTAMPTZ NULL` 신설 + 입력 UI 필요(T7 전제). 선택 입력이라 미입력 시 T7만 안 뜬다
 
