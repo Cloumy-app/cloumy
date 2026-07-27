@@ -2,53 +2,11 @@ import { Text, TouchableOpacity, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import type { TFunction } from 'i18next';
 import { Sparkles, X } from 'lucide-react-native';
 import { getProactive, sendProactiveFeedback } from '@/lib/api/proactive';
 import { useChatStore } from '@/stores/useChatStore';
 import { isDismissedToday, dismissToday } from '@/lib/proactiveDismissal';
-import type { ProactiveIntervention } from '@/types';
-
-// 서버(FastAPI)는 type + params만 반환한다(판단은 규칙이, 표현은 앱이) — 여기서 문구를 조립한다.
-function formatClockTime(isoDateTime: string, locale: string): string {
-  return new Date(isoDateTime).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
-}
-
-// i18next의 t() 두 번째 인자는 인덱스 시그니처가 있는 타입을 요구한다 — 서버 params 타입은
-// 규칙별로 필드가 고정돼 있어(any 금지) 여기서만 보간용으로 넓혀서 넘긴다.
-function asI18nParams(params: object): Record<string, unknown> {
-  return params as Record<string, unknown>;
-}
-
-function buildProactiveText(t: TFunction, locale: string, intervention: ProactiveIntervention): string {
-  if (intervention.type === 'PRE_TRIP_BRIEFING') {
-    const { destination, nights, flags } = intervention.params;
-    const intro = t('proactive.PRE_TRIP_BRIEFING', {
-      destination: t(`routeCreateStep1.cities.${destination}`, destination),
-      nights,
-    });
-    const flagTexts = flags.map((flag) => {
-      if (flag.kind === 'first_slot') {
-        return t('proactive.flags.first_slot', asI18nParams({ ...flag, time: flag.time.slice(0, 5) }));
-      }
-      return t(`proactive.flags.${flag.kind}`, asI18nParams(flag));
-    });
-    return [intro, ...flagTexts].join(' ');
-  }
-
-  if (intervention.type === 'WEATHER_ALERT') {
-    return t(`proactive.WEATHER_ALERT.${intervention.params.kind}`, asI18nParams(intervention.params));
-  }
-
-  if (intervention.type === 'FLIGHT_DEPARTURE') {
-    return t('proactive.FLIGHT_DEPARTURE', asI18nParams({
-      ...intervention.params,
-      leaveByTime: formatClockTime(intervention.params.leaveByTime, locale),
-    }));
-  }
-
-  return t(`proactive.${intervention.type}`, asI18nParams(intervention.params));
-}
+import { buildProactiveText, asI18nParams } from '@/lib/proactiveText';
 
 export function ProactiveBanner({ routeId }: { routeId: string }) {
   const { t, i18n } = useTranslation();
@@ -96,7 +54,11 @@ export function ProactiveBanner({ routeId }: { routeId: string }) {
         borderRadius: 20,
         paddingVertical: 12,
         paddingHorizontal: 16,
-        marginBottom: 16,
+        // 홈 최상단(헤더 위)에 놓이므로 좌우 여백을 부모에 기대지 않고 자체적으로 갖는다.
+        // 개입이 없으면 이 컴포넌트가 통째로 null이라 빈 여백도 남지 않는다.
+        marginHorizontal: 24,
+        marginTop: 12,
+        marginBottom: 4,
       }}
     >
       <View

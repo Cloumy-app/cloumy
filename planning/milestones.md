@@ -280,6 +280,7 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 - [x] `route_slots.start_time` 알고리즘 계산 — 하루 09:00 고정 시작 + duration/transport 누적 역산, LLM이 시간 직접 생성 안 함 (`route_service.py`) — 2026-07-05
 - [x] 챗봇 후속 개선 — 이동수단 기본값(car) 적용, get_route_status 날짜 인식 수정, 추천 카드 한줄 이유(Haiku) 추가 — 2026-07-06
 - [x] 프로액티브 개입 엔진(이슈 #143) — 챗봇을 리액티브 단독에서 **배너(프로액티브) → 챗봇(리액티브)** 구조로 확장. 여행 전날(D-1) 브리핑 1종(`PRE_TRIP_BRIEFING`) + 여행 중 규칙 7종(`FLIGHT_DEPARTURE`/`DEPARTURE_SOON`/`EMPTY_DAY`/`WEATHER_ALERT`/`BUDGET_OVER`/`BOOKMARK_NEARBY`/`FREE_GAP`) — 순수 함수로 판단만 하고 문구는 앱이 조립(`ai/app/services/proactive_service.py`), `GET /v1/routes/{routeId}/proactive`(분당 30회) + `POST .../proactive/feedback`(탭/닫기 로그만, DB 미저장) 신설, 배너 탭 시 `proactiveContext`로 챗봇 첫 메시지에 맥락 인계. 설계: `docs/superpowers/specs/2026-07-27-proactive-chatbot-design.md` — 2026-07-27
+- [x] 프로액티브 배너 후속(실기기 확인 반영) — 배너를 홈 최상단(헤더 위)으로 이동, 탭바로 챗봇에 직접 진입해도 자동으로 먼저 말 걸기. 문구 조립을 `frontend/lib/proactiveText.ts`로 공용화해 배너·챗봇이 같은 문구를 쓰도록 단일 출처화, 자동 개입 계측은 `auto_shown`으로 분리(배너 탭률 왜곡 방지) — 2026-07-28
 - [ ] (다음 단계) LangChain 멀티턴 챗봇 파이프라인 고도화, 챗봇 스트리밍
 - [ ] (다음 단계) `record_expense`/`get_remaining_budget` — 예산 추적 기능 선행 필요
 - [ ] (다음 단계) `modify_route_slot`/`suggest_alternatives` — Pin&Reshuffle과 통합 검토

@@ -14,7 +14,9 @@ export async function getProactive(routeId: string): Promise<ProactiveInterventi
 export async function sendProactiveFeedback(
   routeId: string,
   type: string,
-  action: 'tapped' | 'dismissed',
+  // auto_shown — 홈 배너를 거치지 않고 챗봇에 직접 들어와 자동으로 말을 건 경우.
+  // tapped와 섞으면 배너 탭률이 왜곡되므로 별도 값으로 둔다.
+  action: 'tapped' | 'dismissed' | 'auto_shown',
 ): Promise<void> {
   try {
     await apiFetch(`/v1/routes/${routeId}/proactive/feedback`, {
