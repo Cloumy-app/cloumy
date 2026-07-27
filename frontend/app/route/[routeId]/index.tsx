@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, Alert, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, Alert, StyleSheet, Platform, Modal } from 'react-native';
 import { useLocalSearchParams, useNavigation, router } from 'expo-router';
-import { ChevronLeft, Sparkles, Wallet, Share2 } from 'lucide-react-native';
+import { ChevronLeft, Sparkles, Wallet, Share2, PlaneTakeoff } from 'lucide-react-native';
+import DateTimePicker from '@expo/ui/community/datetime-picker';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useTranslation } from 'react-i18next';
-import { getRoute, getRouteSlots, getRouteDaySummaries, toggleSlotPin as apiToggleSlotPin, deleteRouteSlot, deleteRoute, replaceRouteSlot, reorderRouteSlots, updateRouteVisibility } from '@/lib/api/routes';
+import { getRoute, getRouteSlots, getRouteDaySummaries, toggleSlotPin as apiToggleSlotPin, deleteRouteSlot, deleteRoute, replaceRouteSlot, reorderRouteSlots, updateRouteVisibility, updateRouteDeparture } from '@/lib/api/routes';
 import { getRouteAccommodations } from '@/lib/api/accommodations';
 import { fetchForecast } from '@/lib/api/weather';
 import { getBudgetSummary } from '@/lib/api/budget';
@@ -55,6 +56,11 @@ export default function RouteResultScreen() {
 
   const isNewRoute = mode === 'new';
   const [isPublic, setIsPublic] = useState(false);
+
+  // 출국 일시(선택 입력) — 프로액티브 T1(출국 준비) 전제. 미입력이 기본
+  const [departureAt, setDepartureAt] = useState<Date | null>(null);
+  const [showDeparturePicker, setShowDeparturePicker] = useState(false);
+  const [tempDepartureAt, setTempDepartureAt] = useState(new Date());
 
   // 스냅 포인트
   const SNAP_TOP = insets.top + 60;
@@ -119,8 +125,21 @@ export default function RouteResultScreen() {
       });
     }
     if (routeMeta) setIsPublic(routeMeta.isPublic);
+    if (routeMeta) setDepartureAt(routeMeta.departureAt ? new Date(routeMeta.departureAt) : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeMeta]);
+
+  const handleDepartureConfirm = async () => {
+    if (!routeId) return;
+    const prev = departureAt;
+    setDepartureAt(tempDepartureAt); // 낙관적 업데이트 — 실패 시 롤백
+    setShowDeparturePicker(false);
+    try {
+      await updateRouteDeparture(routeId, tempDepartureAt.toISOString());
+    } catch {
+      setDepartureAt(prev);
+    }
+  };
 
   const onToggleVisibility = async () => {
     if (!routeId) return;
@@ -448,6 +467,29 @@ export default function RouteResultScreen() {
             </TouchableOpacity>
           )}
 
+          {!isNewRoute && (
+            <TouchableOpacity
+              onPress={() => {
+                setTempDepartureAt(departureAt ?? new Date());
+                setShowDeparturePicker(true);
+              }}
+              style={{
+                width: 40,
+                height: 40,
+                backgroundColor: 'rgba(255,255,255,0.92)',
+                borderRadius: 20,
+                alignItems: 'center',
+                justifyContent: 'center',
+                shadowColor: '#000',
+                shadowOpacity: 0.12,
+                shadowRadius: 8,
+                elevation: 4,
+              }}
+            >
+              <PlaneTakeoff size={20} color={departureAt ? '#0ea5e9' : '#334155'} />
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             onPress={() => router.push({ pathname: '/route/[routeId]/budget', params: { routeId } })}
             style={{
@@ -467,6 +509,58 @@ export default function RouteResultScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* 출국 일시 피커 모달 — 선택 입력, 프로액티브 T1(출국 준비) 전제 */}
+      <Modal visible={showDeparturePicker} transparent animationType="slide">
+        <TouchableOpacity
+          style={{ flex: 1 }}
+          activeOpacity={1}
+          onPress={() => setShowDeparturePicker(false)}
+        />
+        <View style={{ backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 40 }}>
+          <View style={{ width: 40, height: 4, backgroundColor: '#e2e8f0', borderRadius: 2, alignSelf: 'center', marginBottom: 16 }} />
+          <Text style={{ fontSize: 16, fontWeight: '800', color: '#1e293b', marginBottom: 4 }}>
+            {t('routeResult.departureLabel')}
+          </Text>
+          <Text style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>
+            {t('routeResult.departureHint')}
+          </Text>
+          <DateTimePicker
+            value={tempDepartureAt}
+            mode="datetime"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            minimumDate={new Date()}
+            onValueChange={(_, date) => {
+              if (date) setTempDepartureAt(date);
+            }}
+          />
+          <TouchableOpacity
+            onPress={handleDepartureConfirm}
+            style={{ backgroundColor: '#0ea5e9', paddingVertical: 14, borderRadius: 16, alignItems: 'center', marginTop: 16 }}
+          >
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>{t('routeCreateStep1.confirmButton')}</Text>
+          </TouchableOpacity>
+          {departureAt && (
+            <TouchableOpacity
+              onPress={async () => {
+                setShowDeparturePicker(false);
+                const prev = departureAt;
+                setDepartureAt(null);
+                try {
+                  await updateRouteDeparture(routeId!, null);
+                } catch {
+                  setDepartureAt(prev);
+                }
+              }}
+              style={{ paddingVertical: 12, alignItems: 'center', marginTop: 4 }}
+            >
+              <Text style={{ color: '#94a3b8', fontWeight: '600', fontSize: 13 }}>
+                {t('routeResult.departureClear')}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </Modal>
 
       {/* Reanimated 드래그 바텀시트 */}
       <Animated.View

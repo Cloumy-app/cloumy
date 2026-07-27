@@ -11,6 +11,29 @@
     "recommendedPlaces": "おすすめスポット",
     "insertHint": "タップすると次の予定の間に追加されます"
   },
+  "proactive": {
+    "PRE_TRIP_BRIEFING": "{{destination}}への旅行まであと1日！{{nights}}泊の日程を事前にチェックしましょう。",
+    "flags": {
+      "rain": "傘をお忘れなく、雨の予報があります ☔",
+      "heat": "猛暑レベルの暑さです、涼しい服装を準備しましょう",
+      "cold": "厳しい寒さの予報です、暖かい服装でお出かけください",
+      "packed_day": "{{day}}日目は移動が多く、ハードなスケジュールです",
+      "far_from_stay": "{{day}}日目の最後の予定が宿泊先からかなり離れています（{{distanceM}}m）",
+      "long_walk": "{{day}}日目に徒歩{{minutes}}分の区間があります",
+      "first_slot": "最初の予定は{{time}}の{{placeName}}です"
+    },
+    "FLIGHT_DEPARTURE": "そろそろ出発の準備を！{{leaveByTime}}までには出発しましょう。",
+    "DEPARTURE_SOON": "あと{{minutesLeft}}分で出発してください（{{nextPlaceName}}まで{{transportMinutes}}分）",
+    "EMPTY_DAY": "今日（{{day}}日目）は予定が空いています。近くで何をしましょうか？",
+    "WEATHER_ALERT": {
+      "rain": "今日は雨の予報です。屋外の予定が{{outdoorCount}}件あるので傘をお持ちください。",
+      "heat": "今日は猛暑レベルの暑さです。屋外の予定が{{outdoorCount}}件、水分補給をお忘れなく。",
+      "cold": "今日は厳しい寒さです。屋外の予定が{{outdoorCount}}件、暖かい服装でお出かけください。"
+    },
+    "BUDGET_OVER": "今日の支出が1日の予算（{{dailyBudget}}ウォン）を超えました。本日の支出は{{spentToday}}ウォンです。",
+    "BOOKMARK_NEARBY": "近くにブックマークした{{placeName}}があります！{{distanceM}}mの距離です。",
+    "FREE_GAP": "次の予定まで{{gapMinutes}}分の余裕があります。近くのカフェはいかがですか？"
+  },
   "login": {
     "subtitle": "AIが設計するあなただけの旅行ルート",
     "googleButton": "Googleで始める",
@@ -131,7 +154,10 @@
     "reorderFailedTitle": "並び替えに失敗しました",
     "reorderFailedBody": "予定の順序を保存できませんでした。もう一度お試しください。",
     "shareToggleFailedTitle": "共有設定の変更に失敗しました",
-    "shareToggleFailedBody": "しばらくしてからもう一度お試しください。"
+    "shareToggleFailedBody": "しばらくしてからもう一度お試しください。",
+    "departureLabel": "出国日時",
+    "departureHint": "設定すると出発前のお知らせが受け取れます（任意）",
+    "departureClear": "出国日時を削除"
   },
   "routeCreateImport": {
     "headerTitle": "共有ルートから取り込む",

@@ -15,6 +15,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Getter
@@ -67,6 +68,10 @@ public class Route extends BaseEntity {
     @Column(name = "display_order", nullable = false)
     private int displayOrder;
 
+    // 출국 일시(선택 입력) — 프로액티브 T1(출국 준비) 알림의 기준값. 미입력이 기본(V19)
+    @Column(name = "departure_at")
+    private LocalDateTime departureAt;
+
     @Builder
     private Route(UUID userId, String title, String destination,
                   LocalDate startDate, LocalDate endDate, int nights,
@@ -93,6 +98,10 @@ public class Route extends BaseEntity {
 
     public void updateVisibility(boolean isPublic) {
         this.isPublic = isPublic;
+    }
+
+    public void updateDepartureAt(LocalDateTime departureAt) {
+        this.departureAt = departureAt;
     }
 
     public void incrementSaveCount() {

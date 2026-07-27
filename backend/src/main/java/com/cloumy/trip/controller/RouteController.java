@@ -10,6 +10,7 @@ import com.cloumy.trip.dto.RouteCloneRequest;
 import com.cloumy.trip.dto.RouteGenRequest;
 import com.cloumy.trip.dto.RouteListResponse;
 import com.cloumy.trip.dto.SlotResponse;
+import com.cloumy.trip.dto.UpdateDepartureRequest;
 import com.cloumy.trip.dto.UpdateVisibilityRequest;
 import com.cloumy.trip.entity.Route;
 import com.cloumy.trip.service.AiServiceClient;
@@ -112,6 +113,18 @@ public class RouteController {
     ) {
         UUID userId = UUID.fromString(user.userId());
         routeService.updateVisibility(routeId, userId, req.isPublic());
+        return ApiResponse.ok(null);
+    }
+
+    // 프로액티브 T1(출국 준비) 전제 — 선택 입력. body의 departureAt이 null이면 미입력 상태로 되돌린다.
+    @PatchMapping("/routes/{routeId}/departure")
+    public ApiResponse<Void> updateDeparture(
+            @PathVariable UUID routeId,
+            @RequestBody @Valid UpdateDepartureRequest req,
+            @AuthenticationPrincipal CloudmyUserDetails user
+    ) {
+        UUID userId = UUID.fromString(user.userId());
+        routeService.updateDepartureAt(routeId, userId, req.departureAt());
         return ApiResponse.ok(null);
     }
 

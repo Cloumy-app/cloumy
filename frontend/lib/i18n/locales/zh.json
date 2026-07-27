@@ -11,6 +11,29 @@
     "recommendedPlaces": "推荐地点",
     "insertHint": "点击即可添加到下一个行程之间"
   },
+  "proactive": {
+    "PRE_TRIP_BRIEFING": "距离{{destination}}之旅还有一天！提前看看{{nights}}晚的行程吧。",
+    "flags": {
+      "rain": "记得带伞，有降雨预报 ☔",
+      "heat": "预计将出现酷暑，请准备清凉的衣物",
+      "cold": "预计将出现严寒，请注意保暖",
+      "packed_day": "第{{day}}天移动较多，行程比较紧凑",
+      "far_from_stay": "第{{day}}天最后一个行程离住宿地较远（{{distanceM}}米）",
+      "long_walk": "第{{day}}天有一段{{minutes}}分钟的步行路段",
+      "first_slot": "第一个行程是{{time}}的{{placeName}}"
+    },
+    "FLIGHT_DEPARTURE": "该准备出发了！最好在{{leaveByTime}}前出发。",
+    "DEPARTURE_SOON": "{{minutesLeft}}分钟后需要出发了（距{{nextPlaceName}}还需{{transportMinutes}}分钟）",
+    "EMPTY_DAY": "今天（第{{day}}天）还没有安排行程，附近有什么想去的地方吗？",
+    "WEATHER_ALERT": {
+      "rain": "今天有降雨预报，有{{outdoorCount}}个户外行程，记得带伞。",
+      "heat": "今天将出现酷暑，有{{outdoorCount}}个户外行程，记得补充水分。",
+      "cold": "今天将出现严寒，有{{outdoorCount}}个户外行程，请注意保暖。"
+    },
+    "BUDGET_OVER": "今日支出已超过每日预算（{{dailyBudget}}韩元），今天已花费{{spentToday}}韩元。",
+    "BOOKMARK_NEARBY": "附近有您收藏的{{placeName}}！距离{{distanceM}}米。",
+    "FREE_GAP": "距离下一个行程还有{{gapMinutes}}分钟空闲时间，要不要去附近的咖啡馆看看？"
+  },
   "login": {
     "subtitle": "AI 为你规划专属旅行路线",
     "googleButton": "使用 Google 登录",
@@ -131,7 +154,10 @@
     "reorderFailedTitle": "排序失败",
     "reorderFailedBody": "未能保存新的行程顺序，请重试。",
     "shareToggleFailedTitle": "共享设置修改失败",
-    "shareToggleFailedBody": "请稍后重试。"
+    "shareToggleFailedBody": "请稍后重试。",
+    "departureLabel": "出发日期时间",
+    "departureHint": "设置后可以收到出发前的提醒（可选）",
+    "departureClear": "清除出发日期时间"
   },
   "routeCreateImport": {
     "headerTitle": "从共享路线导入",

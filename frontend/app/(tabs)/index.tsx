@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getMyRoutes } from '@/lib/api/routes';
 import { getTripStatusLabel } from '@/lib/date';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { ProactiveBanner } from '@/components/route/ProactiveBanner';
 import type { RouteListItem } from '@/types';
 
 const QUICK_ACTIONS = [
@@ -98,6 +99,10 @@ export default function HomeScreen() {
   return (
     <SafeAreaView className="flex-1 bg-white">
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+        {/* 프로액티브 배너 — 헤더보다 위. 여행 중이거나 D-1일 때만 서버가 응답하고,
+            그 외엔 컴포넌트가 통째로 null이라 헤더가 그대로 맨 위에 온다 */}
+        {upcomingRoute && <ProactiveBanner routeId={upcomingRoute.id} />}
+
         {/* 상단 헤더 */}
         <View className="pt-4 pb-6 px-6 bg-sky-100">
           <View className="flex-row justify-between items-center mb-6">

@@ -10,7 +10,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.cloumy",
       "infoPlist": {
-        "LSApplicationQueriesSchemes": ["comgooglemaps", "nmap"]
+        "LSApplicationQueriesSchemes": ["comgooglemaps", "nmap"],
+        "NSLocalNetworkUsageDescription": "개발 중 로컬 네트워크의 Metro 번들러 및 백엔드 서버에 연결하기 위해 사용됩니다.",
+        "NSBonjourServices": ["_expo._tcp"]
       }
     },
     "android": {

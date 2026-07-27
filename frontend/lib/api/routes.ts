@@ -100,6 +100,16 @@ export async function updateRouteVisibility(routeId: string, isPublic: boolean):
   if (!res.ok) throw new Error(`${res.status}`);
 }
 
+// 출국 일시(선택 입력) — 프로액티브 T1(출국 준비) 전제. departureAt이 null이면 미입력 상태로 되돌린다.
+export async function updateRouteDeparture(routeId: string, departureAt: string | null): Promise<void> {
+  const res = await apiFetch(`/v1/routes/${routeId}/departure`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ departureAt }),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+}
+
 // 루트/커뮤니티 탭 신설 — destination 생략 시 목적지 무관 전체 공개 루트 피드(커뮤니티 탭용).
 // 공유 루트 가져오기 화면 북마크 개편 — bookmarkedOnly로 "북마크한 루트만" 토글.
 export async function getPublicRoutes(

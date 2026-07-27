@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
@@ -42,7 +43,7 @@ public class RouteService {
                 .map(r -> new RouteListResponse(
                         r.getId(), r.getTitle(), r.getDestination(),
                         r.getStartDate(), r.getEndDate(), r.getNights(),
-                        r.getCreatedAt(), r.isPublic()
+                        r.getCreatedAt(), r.isPublic(), r.getDepartureAt()
                 ));
     }
 
@@ -55,8 +56,19 @@ public class RouteService {
         return new RouteListResponse(
                 route.getId(), route.getTitle(), route.getDestination(),
                 route.getStartDate(), route.getEndDate(), route.getNights(),
-                route.getCreatedAt(), route.isPublic()
+                route.getCreatedAt(), route.isPublic(), route.getDepartureAt()
         );
+    }
+
+    // 프로액티브 T1(출국 준비) 전제 — 선택 입력, null로 다시 지울 수도 있다(미입력 상태로 되돌림)
+    @Transactional
+    public void updateDepartureAt(UUID routeId, UUID userId, LocalDateTime departureAt) {
+        Route route = routeRepository.findById(routeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
+        if (!route.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.ROUTE_ACCESS_DENIED);
+        }
+        route.updateDepartureAt(departureAt);
     }
 
     @Transactional
@@ -170,7 +182,8 @@ public class RouteService {
         original.incrementSaveCount();
 
         return new RouteListResponse(saved.getId(), saved.getTitle(), saved.getDestination(),
-                saved.getStartDate(), saved.getEndDate(), saved.getNights(), saved.getCreatedAt(), saved.isPublic());
+                saved.getStartDate(), saved.getEndDate(), saved.getNights(), saved.getCreatedAt(),
+                saved.isPublic(), saved.getDepartureAt());
     }
 
     // 루트/커뮤니티 탭 신설 — 수동 작성 폼 제출 시 즉시 공개 루트로 생성
@@ -203,7 +216,8 @@ public class RouteService {
         routeSlotService.createManualSlots(saved.getId(), req.slots());
 
         return new RouteListResponse(saved.getId(), saved.getTitle(), saved.getDestination(),
-                saved.getStartDate(), saved.getEndDate(), saved.getNights(), saved.getCreatedAt(), true);
+                saved.getStartDate(), saved.getEndDate(), saved.getNights(), saved.getCreatedAt(),
+                true, saved.getDepartureAt());
     }
 
     // 공유 루트 가져오기 — 새 루트 생성 성공 후 가져온 원본 루트들의 save_count 증가.
@@ -254,7 +268,7 @@ public class RouteService {
                 .map(r -> new RouteListResponse(
                         r.getId(), r.getTitle(), r.getDestination(),
                         r.getStartDate(), r.getEndDate(), r.getNights(),
-                        r.getCreatedAt(), r.isPublic()
+                        r.getCreatedAt(), r.isPublic(), r.getDepartureAt()
                 ))
                 .toList();
     }

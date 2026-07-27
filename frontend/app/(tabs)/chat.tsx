@@ -15,6 +15,9 @@ import { Check, MessageCircle, Plus, Send, Sparkles } from 'lucide-react-native'
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { getMyRoutes, insertRouteSlot } from '@/lib/api/routes';
+import { getProactive, sendProactiveFeedback } from '@/lib/api/proactive';
+import { isDismissedToday, dismissToday } from '@/lib/proactiveDismissal';
+import { buildProactiveText, asI18nParams } from '@/lib/proactiveText';
 import { useChatStore } from '@/stores/useChatStore';
 import type { ChatEstimatedSlot, ChatMessage, ChatPlaceCard } from '@/types';
 
@@ -116,10 +119,11 @@ function MessageBubble({ message, routeId }: { message: ChatMessage; routeId: st
 }
 
 export default function ChatScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [input, setInput] = useState('');
   const listRef = useRef<FlatList>(null);
-  const { messages, isSending, activeRouteId, setActiveRouteId, sendMessage } = useChatStore();
+  const { messages, isSending, activeRouteId, setActiveRouteId, sendMessage, seedFromProactive } =
+    useChatStore();
 
   const { data, isLoading } = useQuery({
     queryKey: ['routes', 'list'],
@@ -131,6 +135,33 @@ export default function ChatScreen() {
     const latestRoute = data?.content[0] ?? null;
     if (latestRoute) setActiveRouteId(latestRoute.id);
   }, [data, setActiveRouteId]);
+
+  // 홈 배너를 거치지 않고 탭바로 직접 들어온 경우에도 챗봇이 먼저 말을 건다.
+  // 배너에서만 말을 걸면 "같은 시점, 같은 개입인데 어디로 들어왔느냐에 따라 다르게" 동작한다.
+  // 조회 키(['proactive', routeId])와 문구 조립을 배너와 공유해 항상 같은 말이 나오게 한다.
+  const { data: intervention } = useQuery({
+    queryKey: ['proactive', activeRouteId],
+    queryFn: () => getProactive(activeRouteId as string),
+    enabled: !!activeRouteId,
+    staleTime: 1000 * 60 * 5,
+    retry: false, // 실패하면 조용히 넘어간다 — 개입은 없어도 되는 것이다(FFE #11)
+  });
+
+  useEffect(() => {
+    if (!activeRouteId || !intervention) return;
+    // 대화가 이미 시작됐으면 끼어들지 않는다. 배너를 탭해 들어온 경우도 여기서 걸린다
+    // (배너 쪽에서 이미 같은 말풍선을 넣고 dismissToday까지 찍었다).
+    if (messages.length > 0) return;
+    if (isDismissedToday(activeRouteId, intervention.type)) return;
+
+    dismissToday(activeRouteId, intervention.type);
+    sendProactiveFeedback(activeRouteId, intervention.type, 'auto_shown');
+    seedFromProactive(
+      intervention.type,
+      asI18nParams(intervention.params),
+      buildProactiveText(t, i18n.language, intervention),
+    );
+  }, [activeRouteId, intervention, messages.length, seedFromProactive, t, i18n.language]);
 
   useEffect(() => {
     if (messages.length > 0) {

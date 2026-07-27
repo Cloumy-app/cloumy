@@ -42,6 +42,8 @@ export interface RouteListItem {
   nights: number;
   createdAt: string;
   isPublic: boolean;
+  // 출국 일시(선택 입력) — 프로액티브 T1(출국 준비) 전제. 미입력이면 null
+  departureAt: string | null;
 }
 
 // 공유 루트 가져오기 — 목적지 일치 공개 루트 브라우징 목록 항목
@@ -225,6 +227,69 @@ export interface ChatMessage {
   places?: ChatPlaceCard[];
   estimatedSlot?: ChatEstimatedSlot;
 }
+
+// 프로액티브 개입 엔진 — 판단은 서버 규칙이, 문구는 앱이 조립한다(서버 응답엔 한국어가 없음).
+// P1(PRE_TRIP_BRIEFING)의 flags 배열 항목 — 진단 종류마다 필요한 필드가 달라 kind로 판별한다.
+export type ProactiveFlag =
+  | { kind: 'rain' }
+  | { kind: 'heat' }
+  | { kind: 'cold' }
+  | { kind: 'packed_day'; day: number }
+  | { kind: 'far_from_stay'; day: number; distanceM: number }
+  | { kind: 'long_walk'; day: number; minutes: number }
+  | { kind: 'first_slot'; time: string; placeName: string };
+
+export interface PreTripBriefingParams {
+  nights: number;
+  destination: string;
+  flags: ProactiveFlag[];
+}
+
+export interface FlightDepartureParams {
+  departureAt: string;
+  leaveByTime: string;
+}
+
+export interface DepartureSoonParams {
+  nextPlaceName: string;
+  minutesLeft: number;
+  transportMinutes: number;
+}
+
+export interface EmptyDayParams {
+  day: number;
+  slotCount: number;
+}
+
+export interface WeatherAlertParams {
+  day: number;
+  kind: 'rain' | 'heat' | 'cold';
+  outdoorCount: number;
+}
+
+export interface BudgetOverParams {
+  spentToday: number;
+  dailyBudget: number;
+}
+
+export interface BookmarkNearbyParams {
+  placeName: string;
+  distanceM: number;
+}
+
+export interface FreeGapParams {
+  gapMinutes: number;
+}
+
+export type ProactiveIntervention =
+  | { type: 'PRE_TRIP_BRIEFING'; params: PreTripBriefingParams }
+  | { type: 'FLIGHT_DEPARTURE'; params: FlightDepartureParams }
+  | { type: 'DEPARTURE_SOON'; params: DepartureSoonParams }
+  | { type: 'EMPTY_DAY'; params: EmptyDayParams }
+  | { type: 'WEATHER_ALERT'; params: WeatherAlertParams }
+  | { type: 'BUDGET_OVER'; params: BudgetOverParams }
+  | { type: 'BOOKMARK_NEARBY'; params: BookmarkNearbyParams }
+  | { type: 'FREE_GAP'; params: FreeGapParams };
 
 // totalBudget이 null이면 이 루트에 예산이 설정되지 않은 것(에러 아님)
 export interface BudgetSummary {

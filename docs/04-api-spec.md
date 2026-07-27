@@ -182,11 +182,19 @@ GET /routes?page=0&size=20
 { "success": true, "data": [ { "id": "uuid1", "title": "...", ... }, ... ] }
 ```
 
+#### PATCH /routes/{routeId}/departure
+출국 일시 설정(선택 입력) — 프로액티브 FLIGHT_DEPARTURE 규칙의 전제 조건(아래 프로액티브 섹션 참고). `departureAt`이 null이면 미입력 상태로 되돌린다.
+
+```json
+// 요청
+{ "departureAt": "2026-07-28T09:30:00" }
+```
+
 ---
 
 ### 챗봇 (Chatbot)
 
-> 📌 실제 구현은 WebSocket 스트리밍이 아닌 REST 단발 응답 — 실제 요청/응답 구조는 `docs/06-ai-chatbot.md` 참고. 아래는 원래 계획 스펙에 다국어 `language` 필드만 반영.
+> 📌 실제 구현은 WebSocket 스트리밍이 아닌 REST 단발 응답 — 실제 요청/응답 구조는 `docs/06-ai-chatbot.md` 참고. 아래는 원래 계획 스펙에 다국어 `language` 필드와, 프로액티브 배너 탭 직후 첫 메시지에만 실리는 선택 필드 `proactiveContext`(문자열)를 반영.
 
 #### WebSocket ws://api.cloumy.app/v1/chat
 
@@ -212,6 +220,67 @@ GET /routes?page=0&size=20
 // 지출 자연어 파싱 예시
 // 입력: "기념품 12,000원 썼어"
 { "type": "done", "metadata": { "expenseParsed": { "category": "SOUVENIR", "amount": 12000 } } }
+```
+
+---
+
+### 프로액티브 (Proactive)
+
+> 배경·규칙 설계는 `docs/superpowers/specs/2026-07-27-proactive-chatbot-design.md` 참고. 아래는 계약(엔드포인트 스펙)만 다룸.
+
+#### GET /routes/{routeId}/proactive
+지금 이 루트에 개입할 게 있는지 조회. 서버 응답에는 문구가 없다 — `type` + `params`만 내려주고, 실제 표현(문구)은 앱이 만든다.
+
+```json
+// 응답 200 — 개입 없음
+// AI 서비스 장애·타임아웃일 때도 이 형태로 나간다(에러로 승격하지 않음, 아래 참고)
+{ "success": true, "data": { "intervention": null } }
+
+// 응답 200 — 개입 있음
+{
+  "success": true,
+  "data": {
+    "intervention": {
+      "type": "DEPARTURE_SOON",
+      "params": { "nextPlaceName": "자갈치시장", "minutesLeft": 8, "transportMinutes": 12 }
+    }
+  }
+}
+```
+
+프로액티브는 부가 기능이라 **어떤 실패도 앱의 주 흐름을 막지 않는다** — AI 서비스 다운·타임아웃·5xx, Redis 다운, 날씨 API 오류는 모두 `intervention: null`로 수렴한다(404 ROUTE_NOT_FOUND만 에러로 내려간다). 앱은 이 필드가 비어 있으면 배너를 그리지 않으면 된다.
+
+후보가 여러 개 뜨면 우선순위(priority) 최솟값 하나만 반환한다. 여행 전날(D-1)에는 `PRE_TRIP_BRIEFING` 하나만 평가되고, 여행 중에는 나머지 7종 중 하나가 평가된다.
+
+`type`별 `params` 필드:
+
+| type | priority | 뜨는 조건 | params |
+|---|---|---|---|
+| `PRE_TRIP_BRIEFING` | 1 | 여행 전날(D-1) | `nights`, `destination`, `flags`(아래 표) |
+| `FLIGHT_DEPARTURE` | 1 | 출국 준비 — 출발 시각 기준 공항 이동시간+체크인 버퍼를 뺀 "지금 나가야 할 시각"까지 0~60분 (`departureAt` 미설정이면 평가 자체를 스킵) | `departureAt`, `leaveByTime` |
+| `DEPARTURE_SOON` | 2 | 다음 일정 출발까지 0~15분 (위치 추정 confidence가 high일 때만) | `nextPlaceName`, `minutesLeft`, `transportMinutes` |
+| `EMPTY_DAY` | 3 | 오늘 슬롯이 1개 이하 (정오 이전에만) | `day`, `slotCount` |
+| `WEATHER_ALERT` | 4 | 오늘 실외 슬롯이 있고 비/폭염/한파 예보 | `day`, `kind`(`rain`\|`heat`\|`cold`), `outdoorCount` |
+| `BUDGET_OVER` | 5 | 오늘 지출이 하루 예산의 1.2배 초과 | `spentToday`, `dailyBudget` |
+| `BOOKMARK_NEARBY` | 6 | 추정 위치 반경 500m 내 유저 북마크 존재 (위치 추정 confidence가 high일 때만) | `placeName`, `distanceM` |
+| `FREE_GAP` | 7 | 현재 슬롯 종료~다음 슬롯 사이 공백이 이동시간+60분 이상 (위치 추정 confidence가 high일 때만) | `gapMinutes` |
+
+`PRE_TRIP_BRIEFING.params.flags`는 진단 배열이다(0개면 브리핑 자체가 뜨지 않음). `kind`별 필드:
+
+| flags[].kind | 부가 필드 |
+|---|---|
+| `rain` / `heat` / `cold` | 없음 |
+| `packed_day` | `day` |
+| `far_from_stay` | `day`, `distanceM` |
+| `long_walk` | `day`, `minutes` |
+| `first_slot` | `time`, `placeName` |
+
+#### POST /routes/{routeId}/proactive/feedback
+배너 탭/닫기 계측. **DB에 저장하지 않고 로그만 남긴다**(베타 규모에서는 grep으로 충분하다는 판단).
+
+```json
+// 요청 — action: tapped | dismissed
+{ "type": "DEPARTURE_SOON", "action": "tapped" }
 ```
 
 ---
