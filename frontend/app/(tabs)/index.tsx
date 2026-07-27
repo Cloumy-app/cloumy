@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getMyRoutes } from '@/lib/api/routes';
 import { getTripStatusLabel } from '@/lib/date';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { ProactiveBanner } from '@/components/route/ProactiveBanner';
 import type { RouteListItem } from '@/types';
 
 const QUICK_ACTIONS = [
@@ -129,6 +130,9 @@ export default function HomeScreen() {
         </View>
 
         <View className="px-6 pt-6">
+          {/* 프로액티브 배너 — 여행 중이거나 D-1일 때만 서버가 응답, 그 외엔 조용히 안 뜬다 */}
+          {upcomingRoute && <ProactiveBanner routeId={upcomingRoute.id} />}
+
           {/* 빠른 액션 */}
           <View className="flex-row justify-between mb-8">
             {QUICK_ACTIONS.map((action, i) => (

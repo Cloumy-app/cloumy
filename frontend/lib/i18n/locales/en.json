@@ -11,6 +11,29 @@
     "recommendedPlaces": "Recommended places",
     "insertHint": "Tap to add it between your next two stops"
   },
+  "proactive": {
+    "PRE_TRIP_BRIEFING": "Your trip to {{destination}} starts in a day! Here's a quick look at your {{nights}}-night itinerary.",
+    "flags": {
+      "rain": "Pack an umbrella — rain is in the forecast ☔",
+      "heat": "It's forecast to be extremely hot — dress light and stay hydrated",
+      "cold": "It's forecast to be extremely cold — bundle up",
+      "packed_day": "Day {{day}} has a lot of travel time packed in",
+      "far_from_stay": "Day {{day}}'s last stop is pretty far from your stay ({{distanceM}}m)",
+      "long_walk": "Day {{day}} has a {{minutes}}-min walking stretch",
+      "first_slot": "Your first stop is at {{time}}, {{placeName}}"
+    },
+    "FLIGHT_DEPARTURE": "Time to head out soon! Try to leave by {{leaveByTime}}.",
+    "DEPARTURE_SOON": "Leave in {{minutesLeft}} min ({{transportMinutes}} min to {{nextPlaceName}})",
+    "EMPTY_DAY": "Day {{day}} is wide open today. Want something nearby?",
+    "WEATHER_ALERT": {
+      "rain": "Rain's in the forecast today. You have {{outdoorCount}} outdoor stop(s) — bring an umbrella.",
+      "heat": "It's extreme heat today. You have {{outdoorCount}} outdoor stop(s) — bring water.",
+      "cold": "It's extreme cold today. You have {{outdoorCount}} outdoor stop(s) — bundle up."
+    },
+    "BUDGET_OVER": "Today's spending passed your daily budget (₩{{dailyBudget}}). You've spent ₩{{spentToday}} so far.",
+    "BOOKMARK_NEARBY": "You bookmarked {{placeName}} nearby! It's {{distanceM}}m away.",
+    "FREE_GAP": "You have {{gapMinutes}} min free before your next stop. How about a nearby cafe?"
+  },
   "login": {
     "subtitle": "Your AI-planned travel route",
     "googleButton": "Continue with Google",
@@ -131,7 +154,10 @@
     "reorderFailedTitle": "Reorder failed",
     "reorderFailedBody": "Couldn't save the new order. Please try again.",
     "shareToggleFailedTitle": "Couldn't change sharing setting",
-    "shareToggleFailedBody": "Please try again in a moment."
+    "shareToggleFailedBody": "Please try again in a moment.",
+    "departureLabel": "Departure time",
+    "departureHint": "Set this to get a heads-up before you need to leave for the airport (optional)",
+    "departureClear": "Clear departure time"
   },
   "routeCreateImport": {
     "headerTitle": "Import from shared routes",
