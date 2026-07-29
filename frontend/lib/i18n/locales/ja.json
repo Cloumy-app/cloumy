@@ -23,6 +23,7 @@
       "first_slot": "最初の予定は{{time}}の{{placeName}}です"
     },
     "FLIGHT_DEPARTURE": "そろそろ出発の準備を！{{leaveByTime}}までには出発しましょう。",
+    "RETURN_DEPARTURE": "帰る日です！{{leaveByTime}}までに空港へ出発しましょう。",
     "DEPARTURE_SOON": "あと{{minutesLeft}}分で出発してください（{{nextPlaceName}}まで{{transportMinutes}}分）",
     "EMPTY_DAY": "今日（{{day}}日目）は予定が空いています。近くで何をしましょうか？",
     "WEATHER_ALERT": {
@@ -155,9 +156,12 @@
     "reorderFailedBody": "予定の順序を保存できませんでした。もう一度お試しください。",
     "shareToggleFailedTitle": "共有設定の変更に失敗しました",
     "shareToggleFailedBody": "しばらくしてからもう一度お試しください。",
-    "departureLabel": "出国日時",
+    "departureLabel": "行きの日時",
     "departureHint": "設定すると出発前のお知らせが受け取れます（任意）",
-    "departureClear": "出国日時を削除"
+    "departureClear": "行きの日時を削除",
+    "returnLabel": "帰りの日時",
+    "returnHint": "設定すると帰宅前のお知らせが受け取れます（任意）",
+    "returnClear": "帰りの日時を削除"
   },
   "routeCreateImport": {
     "headerTitle": "共有ルートから取り込む",

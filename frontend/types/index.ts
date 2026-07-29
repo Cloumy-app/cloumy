@@ -42,8 +42,10 @@ export interface RouteListItem {
   nights: number;
   createdAt: string;
   isPublic: boolean;
-  // 출국 일시(선택 입력) — 프로액티브 T1(출국 준비) 전제. 미입력이면 null
+  // 가는 편 출발 일시(선택 입력) — 프로액티브 T1(가는 편 준비) 전제. 미입력이면 null
   departureAt: string | null;
+  // 오는 편 출발 일시(선택 입력) — RETURN_DEPARTURE 규칙 전제. 미입력이면 null
+  returnAt: string | null;
 }
 
 // 공유 루트 가져오기 — 목적지 일치 공개 루트 브라우징 목록 항목
@@ -250,6 +252,12 @@ export interface FlightDepartureParams {
   leaveByTime: string;
 }
 
+// RETURN_DEPARTURE — T1(FlightDepartureParams)과 대칭. 여행 마지막 날 오는 편 준비 알림.
+export interface ReturnDepartureParams {
+  returnAt: string;
+  leaveByTime: string;
+}
+
 export interface DepartureSoonParams {
   nextPlaceName: string;
   minutesLeft: number;
@@ -284,6 +292,7 @@ export interface FreeGapParams {
 export type ProactiveIntervention =
   | { type: 'PRE_TRIP_BRIEFING'; params: PreTripBriefingParams }
   | { type: 'FLIGHT_DEPARTURE'; params: FlightDepartureParams }
+  | { type: 'RETURN_DEPARTURE'; params: ReturnDepartureParams }
   | { type: 'DEPARTURE_SOON'; params: DepartureSoonParams }
   | { type: 'EMPTY_DAY'; params: EmptyDayParams }
   | { type: 'WEATHER_ALERT'; params: WeatherAlertParams }

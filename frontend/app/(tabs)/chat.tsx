@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Check, MessageCircle, Plus, Send, Sparkles } from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { getMyRoutes, insertRouteSlot } from '@/lib/api/routes';
+import { getActiveRoute, insertRouteSlot } from '@/lib/api/routes';
 import { getProactive, sendProactiveFeedback } from '@/lib/api/proactive';
 import { isDismissedToday, dismissToday } from '@/lib/proactiveDismissal';
 import { buildProactiveText, asI18nParams } from '@/lib/proactiveText';
@@ -125,16 +125,18 @@ export default function ChatScreen() {
   const { messages, isSending, activeRouteId, setActiveRouteId, sendMessage, seedFromProactive } =
     useChatStore();
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['routes', 'list'],
-    queryFn: () => getMyRoutes(0, 1),
+  // 홈과 같은 쿼리 키('routes','active')를 써서 항상 같은 루트를 가리키게 한다 —
+  // 예전에는 홈이 getMyRoutes(0,5), 챗봇이 getMyRoutes(0,1)로 같은 캐시 키를 다른 size로
+  // 공유해 크기 불일치 버그가 있었다(계획 Step 2-2, FFE #13).
+  const { data: activeRoute, isLoading } = useQuery({
+    queryKey: ['routes', 'active'],
+    queryFn: getActiveRoute,
     staleTime: 1000 * 60 * 2,
   });
 
   useEffect(() => {
-    const latestRoute = data?.content[0] ?? null;
-    if (latestRoute) setActiveRouteId(latestRoute.id);
-  }, [data, setActiveRouteId]);
+    if (activeRoute) setActiveRouteId(activeRoute.id);
+  }, [activeRoute, setActiveRouteId]);
 
   // 홈 배너를 거치지 않고 탭바로 직접 들어온 경우에도 챗봇이 먼저 말을 건다.
   // 배너에서만 말을 걸면 "같은 시점, 같은 개입인데 어디로 들어왔느냐에 따라 다르게" 동작한다.

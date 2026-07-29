@@ -23,6 +23,7 @@
       "first_slot": "Your first stop is at {{time}}, {{placeName}}"
     },
     "FLIGHT_DEPARTURE": "Time to head out soon! Try to leave by {{leaveByTime}}.",
+    "RETURN_DEPARTURE": "It's your return day! Head to the airport by {{leaveByTime}}.",
     "DEPARTURE_SOON": "Leave in {{minutesLeft}} min ({{transportMinutes}} min to {{nextPlaceName}})",
     "EMPTY_DAY": "Day {{day}} is wide open today. Want something nearby?",
     "WEATHER_ALERT": {
@@ -155,9 +156,12 @@
     "reorderFailedBody": "Couldn't save the new order. Please try again.",
     "shareToggleFailedTitle": "Couldn't change sharing setting",
     "shareToggleFailedBody": "Please try again in a moment.",
-    "departureLabel": "Departure time",
+    "departureLabel": "Outbound time",
     "departureHint": "Set this to get a heads-up before you need to leave for the airport (optional)",
-    "departureClear": "Clear departure time"
+    "departureClear": "Clear outbound time",
+    "returnLabel": "Return time",
+    "returnHint": "Set this to get a heads-up before you need to head home (optional)",
+    "returnClear": "Clear return time"
   },
   "routeCreateImport": {
     "headerTitle": "Import from shared routes",

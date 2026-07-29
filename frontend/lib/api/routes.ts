@@ -100,7 +100,7 @@ export async function updateRouteVisibility(routeId: string, isPublic: boolean):
   if (!res.ok) throw new Error(`${res.status}`);
 }
 
-// 출국 일시(선택 입력) — 프로액티브 T1(출국 준비) 전제. departureAt이 null이면 미입력 상태로 되돌린다.
+// 가는 편 출발 일시(선택 입력) — 프로액티브 T1(가는 편 준비) 전제. departureAt이 null이면 미입력 상태로 되돌린다.
 export async function updateRouteDeparture(routeId: string, departureAt: string | null): Promise<void> {
   const res = await apiFetch(`/v1/routes/${routeId}/departure`, {
     method: 'PATCH',
@@ -108,6 +108,26 @@ export async function updateRouteDeparture(routeId: string, departureAt: string 
     body: JSON.stringify({ departureAt }),
   });
   if (!res.ok) throw new Error(`${res.status}`);
+}
+
+// 오는 편 출발 일시(선택 입력) — RETURN_DEPARTURE 규칙 전제. returnAt이 null이면 미입력 상태로 되돌린다.
+export async function updateRouteReturn(routeId: string, returnAt: string | null): Promise<void> {
+  const res = await apiFetch(`/v1/routes/${routeId}/return`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ returnAt }),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+}
+
+// "지금 도와줄 여행이 무엇인가"를 서버가 판정한다 — display_order 목록 첫 항목은 여행 날짜와
+// 무관해서 클라이언트가 직접 고르면 틀린 루트를 짚을 수 있다(계획 Step 2-1).
+// 활성 루트가 없어도 { data: { route: null } }로 route 키가 유지된다(FFE #9).
+export async function getActiveRoute(): Promise<RouteListItem | null> {
+  const res = await apiFetch('/v1/routes/active');
+  if (!res.ok) throw new Error(`${res.status}`);
+  const body: { data: { route: RouteListItem | null } } = await res.json();
+  return body.data.route;
 }
 
 // 루트/커뮤니티 탭 신설 — destination 생략 시 목적지 무관 전체 공개 루트 피드(커뮤니티 탭용).
