@@ -31,9 +31,10 @@ _HEAT_C, _COLD_C = 33.0, -5.0  # P1·T4
 _PACKED_SLOTS, _PACKED_TRANSPORT_MIN = 5, 180  # P1
 _FAR_FROM_STAY_M = 8000  # P1 — 직선거리(이동시간 계산 불가, 근사치로 충분)
 _LONG_WALK_MIN = 40  # P1
-_AIRPORT_MINUTES = {"서울": 90, "부산": 60, "제주": 30}  # T1
-_AIRPORT_MINUTES_DEFAULT = 90  # T1 — 표에 없는 도시
-_CHECKIN_BUFFER_MIN = 120  # T1
+_AIRPORT_MINUTES = {"서울": 90, "부산": 60, "제주": 30}  # T1·RETURN
+_AIRPORT_MINUTES_DEFAULT = 90  # T1·RETURN — 표에 없는 도시
+_CHECKIN_BUFFER_MIN = 120  # T1·RETURN
+_FLIGHT_WINDOW_MIN = 60  # T1·RETURN — leave_by까지 남은 시간이 이 안이면 발동
 
 
 def _trip_phase(route: asyncpg.Record, now: datetime) -> str:
@@ -53,6 +54,16 @@ def _trip_phase(route: asyncpg.Record, now: datetime) -> str:
 def _combine(d: date, t: time) -> datetime:
     """route_slots.start_time(TIME, naive)을 날짜와 합쳐 KST aware datetime으로 만든다."""
     return datetime.combine(d, t, tzinfo=_KST)
+
+
+def _flight_leave_by(snap: dict, at_key: str) -> datetime | None:
+    """항공편 출발 시각(departure_at 또는 return_at)에서 '집을 나서야 하는 시각'을 역산한다.
+    가는 편/오는 편이 같은 계산이라 T1·RETURN_DEPARTURE가 함께 쓰는 헬퍼다. 미입력이면 None."""
+    at = snap["route"][at_key]
+    if at is None:
+        return None  # FFE #5 — 선택 입력이라 미입력이면 해당 규칙만 스킵
+    airport_minutes = _AIRPORT_MINUTES.get(snap["route"]["destination"], _AIRPORT_MINUTES_DEFAULT)
+    return at - timedelta(minutes=airport_minutes + _CHECKIN_BUFFER_MIN)
 
 
 # ============================================================
@@ -138,21 +149,37 @@ def _rule_pre_trip_briefing(snap: dict) -> dict | None:
 
 def _rule_flight_departure(snap: dict) -> dict | None:
     """T1. 출국 준비 — 실패 비용이 가장 큰 규칙이라 우선순위 1위.
-    departure_at − 공항이동(도시별 근사) − 체크인 버퍼 − now 가 0~60분이면 발동."""
-    departure_at = snap["route"]["departure_at"]
-    if departure_at is None:
+    leave_by(_flight_leave_by)까지 남은 시간이 0~_FLIGHT_WINDOW_MIN분이면 발동."""
+    leave_by = _flight_leave_by(snap, "departure_at")
+    if leave_by is None:
         return None  # FFE #5 — 미입력(선택 입력)이면 T1만 스킵
 
-    airport_minutes = _AIRPORT_MINUTES.get(snap["route"]["destination"], _AIRPORT_MINUTES_DEFAULT)
-    leave_by = departure_at - timedelta(minutes=airport_minutes + _CHECKIN_BUFFER_MIN)
     minutes_left = (leave_by - snap["now"]).total_seconds() / 60
-    if not (0 <= minutes_left <= 60):
+    if not (0 <= minutes_left <= _FLIGHT_WINDOW_MIN):
         return None
 
     return {
         "type": "FLIGHT_DEPARTURE",
         "priority": 1,
-        "params": {"departureAt": departure_at.isoformat(), "leaveByTime": leave_by.isoformat()},
+        "params": {"departureAt": snap["route"]["departure_at"].isoformat(), "leaveByTime": leave_by.isoformat()},
+    }
+
+
+def _rule_return_departure(snap: dict) -> dict | None:
+    """RETURN. 귀가 준비 — T1(가는 편)과 대칭인 오는 편 규칙. 우선순위도 T1과 동일하게 1위다
+    (실패 비용이 똑같이 크다 — 비행기를 놓치는 건 가는 편이든 오는 편이든 같은 무게다)."""
+    leave_by = _flight_leave_by(snap, "return_at")
+    if leave_by is None:
+        return None  # FFE #4 — 오는 편은 가는 편과 독립적인 선택 입력이라 미입력이면 이 규칙만 스킵
+
+    minutes_left = (leave_by - snap["now"]).total_seconds() / 60
+    if not (0 <= minutes_left <= _FLIGHT_WINDOW_MIN):
+        return None
+
+    return {
+        "type": "RETURN_DEPARTURE",
+        "priority": 1,
+        "params": {"returnAt": snap["route"]["return_at"].isoformat(), "leaveByTime": leave_by.isoformat()},
     }
 
 
@@ -275,9 +302,14 @@ def _rule_free_gap(snap: dict) -> dict | None:
     return {"type": "FREE_GAP", "priority": 7, "params": {"gapMinutes": round(gap_minutes)}}
 
 
-_RULES_PRE_TRIP = [_rule_pre_trip_briefing]
+# pre_trip에도 T1을 등록한다 — 새벽 항공편은 leave_by가 D-1로 넘어가버려 during 진입 전에
+# 이미 발동 창이 열려 있을 수 있다(리뷰 9번 회귀 방지). T1과 P1(_rule_pre_trip_briefing)은
+# 둘 다 priority=1로 동점인데, _select가 min()이라 동점이면 리스트에서 먼저 나온 쪽이 이긴다.
+# 그래서 T1을 앞에 둔다 — "지금 나가야 해요"가 "짐 싸세요" 브리핑보다 급하다(FFE #5).
+_RULES_PRE_TRIP = [_rule_flight_departure, _rule_pre_trip_briefing]
 _RULES_DURING = [
     _rule_flight_departure,
+    _rule_return_departure,
     _rule_departure_soon,
     _rule_empty_day,
     _rule_weather_alert,

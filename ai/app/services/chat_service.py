@@ -122,9 +122,10 @@ class RouteNotFoundError(Exception):
 
 async def _load_route(db: asyncpg.Pool, user_id: str, route_id: str) -> asyncpg.Record:
     row = await db.fetchrow(
-        # departure_at은 프로액티브 T1(출국 준비) 전용 — 챗봇은 안 쓰지만 조회 함수를
-        # 공유하므로(proactive_service도 import) 컬럼만 추가하고 반환 형태는 그대로 둔다.
-        "SELECT id, destination, start_date, end_date, nights, departure_at "
+        # departure_at·return_at은 프로액티브 T1(출국 준비)·RETURN_DEPARTURE(귀가 준비) 전용 —
+        # 챗봇은 안 쓰지만 조회 함수를 공유하므로(proactive_service도 import) 컬럼만 추가하고
+        # 반환 형태는 그대로 둔다.
+        "SELECT id, destination, start_date, end_date, nights, departure_at, return_at "
         "FROM routes WHERE id = $1 AND user_id = $2",
         route_id, user_id,
     )

@@ -2,6 +2,7 @@ from datetime import date, datetime, time, timedelta
 
 from app.services.chat_service import _KST
 from app.services.proactive_service import (
+    _RULES_PRE_TRIP,
     _rule_bookmark_nearby,
     _rule_budget_over,
     _rule_departure_soon,
@@ -9,6 +10,7 @@ from app.services.proactive_service import (
     _rule_flight_departure,
     _rule_free_gap,
     _rule_pre_trip_briefing,
+    _rule_return_departure,
     _rule_weather_alert,
     _select,
     _trip_phase,
@@ -53,9 +55,9 @@ def test_select_empty_returns_none():
 # P1. PRE_TRIP_BRIEFING
 # ============================================================
 
-def _base_pre_trip_snap(**overrides) -> dict:
+def _base_pre_trip_snap(departure_at=None, return_at=None, **overrides) -> dict:
     snap = {
-        "route": {"nights": 2, "destination": "서울"},
+        "route": {"nights": 2, "destination": "서울", "departure_at": departure_at, "return_at": return_at},
         "day1_slots": [],
         "day_forecast": {},
         "day_temps": None,
@@ -203,6 +205,61 @@ def test_flight_departure_none_when_too_early():
     departure_at = now + timedelta(minutes=210 + 400)  # 아직 한참 남음
     snap = {"route": {"departure_at": departure_at, "destination": "서울"}, "now": now}
     assert _rule_flight_departure(snap) is None
+
+
+# ============================================================
+# T1 pre_trip 등록 — 새벽 항공편이 D-1에도 잡혀야 한다 (리뷰 9번 회귀 방지)
+# ============================================================
+
+def test_flight_departure_fires_in_pre_trip_phase():
+    # 익일 새벽 출발 항공편 — D-1 밤 시각에 leave_by 창(0~60분)에 들어와야 한다
+    now = datetime(2026, 7, 29, 23, 50, tzinfo=_KST)
+    departure_at = now + timedelta(minutes=210 + 30)
+    snap = _base_pre_trip_snap(departure_at=departure_at, now=now)
+    candidates = [c for c in (rule(snap) for rule in _RULES_PRE_TRIP) if c is not None]
+    result = _select(candidates)
+    assert result is not None
+    assert result["type"] == "FLIGHT_DEPARTURE"
+
+
+def test_pre_trip_briefing_loses_to_flight_departure():
+    # PRE_TRIP_BRIEFING(비 예보)도 동시에 발동 조건을 만족시킨다 — 둘 다 priority=1 동점.
+    # _select는 min()이라 동점이면 리스트 등록 순서가 이긴다. T1이 먼저 등록돼야 한다(FFE #5).
+    now = datetime(2026, 7, 29, 23, 50, tzinfo=_KST)
+    departure_at = now + timedelta(minutes=210 + 30)
+    snap = _base_pre_trip_snap(departure_at=departure_at, now=now, day_forecast={"오후": 0.8})
+    candidates = [c for c in (rule(snap) for rule in _RULES_PRE_TRIP) if c is not None]
+    assert {c["type"] for c in candidates} == {"FLIGHT_DEPARTURE", "PRE_TRIP_BRIEFING"}
+    result = _select(candidates)
+    assert result["type"] == "FLIGHT_DEPARTURE"
+
+
+# ============================================================
+# RETURN. RETURN_DEPARTURE — T1과 대칭인 오는 편 규칙
+# ============================================================
+
+def test_return_departure_fires_within_window():
+    now = datetime(2026, 7, 29, 10, 0, tzinfo=_KST)
+    # 서울 공항이동 90분 + 체크인버퍼 120분 = 210분. 30분 여유를 두고 return_at 설정
+    return_at = now + timedelta(minutes=210 + 30)
+    snap = {"route": {"return_at": return_at, "destination": "서울"}, "now": now}
+    result = _rule_return_departure(snap)
+    assert result is not None
+    assert result["type"] == "RETURN_DEPARTURE"
+    assert result["params"]["returnAt"] == return_at.isoformat()
+
+
+def test_return_departure_none_when_not_set():
+    now = datetime(2026, 7, 29, 10, 0, tzinfo=_KST)
+    snap = {"route": {"return_at": None, "destination": "서울"}, "now": now}
+    assert _rule_return_departure(snap) is None  # FFE #4 — 오는 편 미입력이면 이 규칙만 스킵
+
+
+def test_return_departure_none_when_window_passed():
+    now = datetime(2026, 7, 29, 10, 0, tzinfo=_KST)
+    return_at = now + timedelta(minutes=200)  # leave_by = return_at - 210 = now - 10분(이미 지남)
+    snap = {"route": {"return_at": return_at, "destination": "서울"}, "now": now}
+    assert _rule_return_departure(snap) is None
 
 
 # ============================================================
