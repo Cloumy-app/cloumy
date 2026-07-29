@@ -15,7 +15,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Getter
@@ -68,9 +68,14 @@ public class Route extends BaseEntity {
     @Column(name = "display_order", nullable = false)
     private int displayOrder;
 
-    // 출국 일시(선택 입력) — 프로액티브 T1(출국 준비) 알림의 기준값. 미입력이 기본(V19)
+    // 가는 편 출발 일시(선택 입력) — 프로액티브 T1(출국 준비) 알림의 기준값. 미입력이 기본(V19)
+    // DB(TIMESTAMPTZ)·프론트(UTC ISO)와 시간대 정보를 맞추기 위해 OffsetDateTime을 쓴다.
     @Column(name = "departure_at")
-    private LocalDateTime departureAt;
+    private OffsetDateTime departureAt;
+
+    // 오는 편 출발 일시(선택 입력) — RETURN_DEPARTURE 규칙의 기준값. departure_at과 대칭(V20)
+    @Column(name = "return_at")
+    private OffsetDateTime returnAt;
 
     @Builder
     private Route(UUID userId, String title, String destination,
@@ -100,8 +105,12 @@ public class Route extends BaseEntity {
         this.isPublic = isPublic;
     }
 
-    public void updateDepartureAt(LocalDateTime departureAt) {
+    public void updateDepartureAt(OffsetDateTime departureAt) {
         this.departureAt = departureAt;
+    }
+
+    public void updateReturnAt(OffsetDateTime returnAt) {
+        this.returnAt = returnAt;
     }
 
     public void incrementSaveCount() {
