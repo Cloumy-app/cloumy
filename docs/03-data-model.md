@@ -87,8 +87,13 @@ group_trips
 | accommodation_area | VARCHAR | - | 숙소 위치 (동선 최적화 기준점) |
 | is_public | BOOLEAN | ✅ | 커뮤니티 공유 여부 |
 | save_count | INTEGER | ✅ | 저장 수 (기본값 0) |
+| display_order | INTEGER | ✅ | 목록 수동 드래그 정렬 순서 (V12). 신규 루트는 최솟값-1로 맨 앞 |
+| departure_at | TIMESTAMPTZ | - | 가는 편 출발 일시 (V19). 프로액티브 `FLIGHT_DEPARTURE` 규칙의 기준값, 선택 입력 |
+| return_at | TIMESTAMPTZ | - | 오는 편 출발 일시 (V20). 프로액티브 `RETURN_DEPARTURE` 규칙의 기준값, 선택 입력 |
 | created_at | TIMESTAMPTZ | ✅ | |
 | updated_at | TIMESTAMPTZ | ✅ | fn_set_updated_at() 트리거 자동 갱신 |
+
+> 📌 `departure_at` / `return_at`은 `TIMESTAMPTZ`이고 Java는 `OffsetDateTime`으로 매핑한다. 오프셋 없는 `LocalDateTime`으로 받으면 프론트가 보내는 UTC ISO와 KST 사이에서 값이 어긋난다(2026-07-29 수정).
 
 ### route_slots
 

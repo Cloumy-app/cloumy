@@ -36,6 +36,20 @@
   5. `POST /v1/auth/logout` → Redis 블랙리스트 등록 확인
   6. 로그아웃된 Refresh Token으로 갱신 시도 → 401 `TOKEN_REVOKED` 확인
 
+### (번호추가) Android 항공편 피커 실기기 검증 미완료
+- **관련 태스크**: 프로액티브 후속 수정 — 항공편 시각 정합성 + 활성 루트 선택 (2026-07-29)
+- **파일**: `frontend/app/route/[routeId]/index.tsx` (`FlightTimePicker`)
+- **현재 상태**: 서버 검증 11종은 전부 통과했으나(AI 126 passed / Spring `compileJava` EXIT=0 / FE `tsc` 에러 0), **Android 실기기·에뮬레이터가 없어 피커 수정을 눌러보지 못했다.** 이번 수정의 상당 부분이 Android 피커 관련이다(2단계 분리 · `onDismiss` · 정오 정규화).
+- **위험**: 정오 정규화와 `onDismiss`는 **`@expo/ui` 라이브러리 소스(JS·Kotlin)에서 근거를 찾은 것이지 실제로 재현·확인한 게 아니다.** iOS는 기존 `<Modal>` + spinner 경로를 그대로 둬서 영향이 없다.
+- **테스트해야 할 흐름** (Android 실기기 필수):
+  1. 가는 편 피커 열기 → 날짜·시각 **2단계**로 뜨고 다이얼로그가 겹치지 않는지
+  2. 날짜 단계에서 뒤로가기/바깥 탭 → 다이얼로그가 닫히고 값이 안 바뀌는지 (FFE #6)
+  3. 새벽 시각(02:00) 저장 → 재진입 → 피커 열기 → 날짜가 **하루 밀리지 않는지** (FFE #7)
+  4. 지우기 → 뒤로 → 재진입 → 값이 되살아나지 않는지 (FFE #11)
+  5. 재진입 후 피커 열기 → 초기값이 현재 시각이 아니라 **저장된 값**인지
+  6. 진행 중 여행을 목록 맨 아래로 드래그 → 홈·챗봇이 **같은 진행 중 여행** 기준인지 (활성 루트)
+- **우선순위**: 🟠 머지 전 필수 — 코드는 있으나 검증이 안 된 상태다
+
 ---
 
 ## 🟡 개발 환경 복원 필요
@@ -125,6 +139,86 @@
 - **위험**: 몇 년 전에 끝난 축제도 영구 장소처럼 계속 루트 추천에 노출될 수 있음.
 - **해야 할 것(논의 필요)**: `searchFestival2` 엔드포인트로 기간 정보 보강 수집, 또는 만료된 축제를 걸러낼 별도 이벤트 전용 테이블(시작일/종료일 컬럼) 설계 — `places`의 "영구 장소" 가정과 안 맞아서 스키마 변경 필요.
 - **우선순위**: 낮음 — 지금도 루트가 완전히 깨지진 않음(그냥 오래된 축제가 추천될 뿐), 이벤트 전용 데이터 모델이 필요해지면 재검토.
+
+---
+
+## 🔵 프로액티브 엔진 후속 (2026-07-29 코드 리뷰에서 남은 결함)
+
+> **맥락**: 프로액티브 개입 엔진(#143)이 `main`에 머지된 뒤 진행한 코드 리뷰에서 **검증된 결함 10건**이 나왔다.
+> 그중 6건은 「프로액티브 후속 수정 — 항공편 시각 정합성 + 활성 루트 선택」(2026-07-29, `feat/proactive-followup-fixes`)에서 처리했다.
+> 여기 남은 것은 **그때 의도적으로 범위에서 뺀 4건 + 그 작업 중 새로 발견한 3건 = 7건**이다.
+> 계획 문서: `docs/superpowers/plans/2026-07-29-proactive-followup-fixes.md` (「제외 (의도적)」 절)
+
+**한눈에 보기**
+
+| # | 항목 | 계층 | 한 줄 증상 | 우선순위 |
+|---|---|---|---|---|
+| 1 | `start_time` NULL 슬롯이 T2·T7을 죽임 | AI | 시간 미입력 슬롯 하나로 그 유저는 여행 내내 `DEPARTURE_SOON`·`FREE_GAP`을 못 받음 | 중간 |
+| 2 | `FREE_GAP`이 현재 시각 미검사 | AI | 첫 일정 시작 전인데 "다음 일정까지 여유 있어요"가 뜨고 그날 개입 기회를 소모 | 중간 |
+| 3 | 챗봇 자동 개입 가드가 세션 전역 | Frontend | 한 번 대화하면 그 앱 세션 동안 "먼저 말 걸기"가 영구히 안 됨 | 중간 |
+| 4 | `proactiveContext` 무검증 시스템 프롬프트 삽입 | Spring + AI | 클라이언트 문자열이 system 역할로 들어가 신뢰 경계가 깨짐 | 중간 |
+| 5 | 배너 X가 즉시 안 사라짐 | Frontend | 리렌더가 안 걸려 X를 눌러도 배너가 남음(재노출 방지 자체는 정상) | 낮음 |
+| 6 | 오는 편이 `end_date` 다음날 새벽이면 미발동 | AI | 그 시각 phase가 `out_of_range`라 `RETURN_DEPARTURE`가 평가조차 안 됨 | 낮음 |
+| 7 | `createdAt`도 `LocalDateTime` 매핑 | Spring | `departureAt`과 같은 타입 불일치 — 표시 전용이라 체감 버그는 없음 | 낮음 |
+
+> **묶어서 처리하기 좋은 단위**: 1·2·6은 전부 `ai/app/services/proactive_service.py` 한 파일이고 단위 테스트로 검증 가능하다.
+> 3·5는 프론트 프로액티브 UI 한 덩어리다. 4는 성격이 보안이라 단독으로 다루는 게 맞다.
+
+### (번호추가) start_time이 NULL인 슬롯 하나가 T2·T7을 통째로 죽인다
+- **관련 태스크**: 2026-07-29 코드 리뷰 — 검증된 결함 10건 중 후속 수정 범위에서 제외
+- **파일**: `ai/app/services/proactive_service.py`(`_current_and_next`, `_load_slots`), `ai/app/services/chat_service.py`(`_estimate_current_slot`)
+- **현재 상태**: 두 함수가 **서로 다른 슬롯 목록을 본다**. `proactive_service._load_slots`는 `start_time` 필터 없이 전 슬롯을 가져오는데, `chat_service._estimate_current_slot`은 `WHERE ... AND rs.start_time IS NOT NULL`로 시간 있는 슬롯만 본다. 그래서 `_current_and_next`가 `today_slots[idx+1]`로 고른 "다음 슬롯"이 시간 미입력 슬롯일 수 있다.
+- **증상**: Day가 `[10:00 A, (시간 미입력) B, 14:00 C]`인 사용자가 11:00에 앱을 열면 next_slot이 B로 잡히고, `_rule_departure_soon`이 `next_slot["start_time"] is None`에서 즉시 None을 반환한다. 실제로는 14:00 C로 이동해야 해 13:20에 알림이 떠야 하지만, **시간 미입력 슬롯이 하나만 끼어도 그 사용자는 여행 내내 `DEPARTURE_SOON`(T2)·`FREE_GAP`(T7)을 한 번도 못 받는다.**
+- **해야 할 것**: `_current_and_next`가 다음 슬롯을 고를 때 `start_time`이 있는 것 중 첫 번째를 찾도록 수정. 두 함수가 같은 목록을 보게 통일하는 것이 근본 해법이지만, `_load_slots`는 `_rule_empty_day`의 슬롯 카운트에도 쓰이므로 필터를 그냥 추가하면 안 된다.
+- **우선순위**: 중간 — 기능 손실이고 발생 조건이 흔하다(시간 미입력 슬롯은 정상적인 사용 패턴)
+
+### (번호추가) FREE_GAP이 현재 시각을 안 봐서 미래 공백을 "지금 여유"로 안내한다
+- **관련 태스크**: 2026-07-29 코드 리뷰
+- **파일**: `ai/app/services/proactive_service.py`(`_rule_free_gap`)
+- **현재 상태**: `gap_minutes`를 계획상 `current_end`와 `next_start`만으로 계산하고 `snap["now"]`와 비교하지 않는다.
+- **증상**: 09:00 시작(2시간) → 13:00 다음 일정인 Day에 08:30에 앱을 열면, `_estimate_current_slot`이 첫 일정 전이라 `slots[0]`을 current로 잡고 gap=60분이 임계치를 넘어 FREE_GAP이 선택된다. 유저는 **아직 첫 일정도 시작 안 했는데 "다음 일정까지 60분 여유가 있어요"** 를 보게 되고, 정작 실제 공백인 11:00~13:00에는 그날 `dismissToday`가 이미 찍혀 배너가 안 뜬다.
+- **해야 할 것**: `current_end <= now < next_start` 조건을 추가한다. 규칙 함수는 순수 함수이므로 `snap["now"]`만 쓰면 되고 새 의존성은 없다.
+- **우선순위**: 중간 — 틀린 안내가 나가고, 그날의 정상 개입 기회까지 소모한다
+
+### (번호추가) 챗봇 자동 개입이 한 번 대화하면 그 세션 내내 막힌다
+- **관련 태스크**: 2026-07-29 코드 리뷰
+- **파일**: `frontend/app/(tabs)/chat.tsx`, `frontend/stores/useChatStore.ts`
+- **현재 상태**: 자동 개입 가드가 전역 `useChatStore.messages` 길이만 본다. 이 배열은 **루트별로 분리되지도, 화면 이탈 시 초기화되지도 않는다** — `useChatStore.reset()`은 저장소 어디에서도 호출되지 않는다(grep 0건).
+- **증상**: ① 챗봇에서 아무 질문이나 한 번 하면 그 앱 세션 동안 "먼저 말 걸기"가 영구히 안 된다. ② 반대로 홈 배너를 탭하면 무관한 어제 대화 끝에 맥락 없는 개입 말풍선이 붙고, 다음 메시지에 그 문구가 `proactive_context`로 실린다.
+- **해야 할 것(논의 필요)**: 가드를 "이 세션에 이 루트로 개입을 이미 넣었는가"로 바꾸는 것이 정확하다. `messages`를 루트별로 스코프하거나, 개입 주입 여부를 별도 플래그로 두는 안. 후자가 변경 범위가 작다.
+- **우선순위**: 중간 — 2026-07-28 후속 작업에서 추가한 "챗봇 직접 진입 자동 개입" 기능이 사실상 첫 대화 이후 동작하지 않는다
+
+### (번호추가) proactiveContext가 검증 없이 시스템 프롬프트에 삽입된다
+- **관련 태스크**: 2026-07-29 코드 리뷰 — 보안 성격이라 항공편·루트선택 수정과 분리
+- **파일**: `backend/src/main/java/com/cloumy/trip/dto/ChatRequest.java`, `ai/app/services/chat_service.py`(`handle_chat`)
+- **현재 상태**: `ChatRequest.proactiveContext`에 `@Size`도 화이트리스트 검증도 없다. `AiServiceClient`가 그대로 FastAPI로 넘기고 `system_prompt += f"\n\n[방금 먼저 안내한 내용]\n{proactive_context}"`로 **system 역할에 삽입**된다. "시스템 프롬프트는 서버가 만든다"는 불변식이 깨져 있다.
+- **위험**: ① 인증된 사용자가 `proactiveContext`에 지시문을 실어 보내면 유저 메시지가 아니라 시스템 지시로 해석돼 프롬프트 유출·도구 제약 우회가 가능하다. ② 길이 상한이 없어 수십 KB를 분당 10회(챗봇 레이트리밋) 보내면 입력 토큰 비용이 그대로 곱해진다.
+- **해야 할 것**: 클라이언트가 임의 문자열을 보내는 구조 자체를 바꾸는 것이 근본이다 — 개입 `type` + `params`만 받고 **문구는 서버가 재조립**하면 신뢰 경계가 복원된다(이미 `type`/`params` 스키마가 양쪽에 있다). 그게 크면 최소 조치로 `@Size(max=500)` + 개입 타입 화이트리스트 검증.
+- **우선순위**: 중간 — 인증 사용자만 가능하고 자기 세션에 한정되지만, 신뢰 경계가 깨진 것 자체가 구조적 문제다
+
+### (번호추가) 배너 X가 같은 화면에 머무는 동안 사라지지 않는다
+- **관련 태스크**: 2026-07-29 코드 리뷰
+- **파일**: `frontend/components/route/ProactiveBanner.tsx`
+- **현재 상태**: `handleDismiss`가 `dismissToday`(MMKV 쓰기)와 `sendProactiveFeedback`(fire-and-forget)만 호출한다. 둘 다 React 상태나 쿼리 캐시를 안 건드려 리렌더가 발생하지 않는데, `isDismissedToday` 검사는 렌더 시점에만 수행된다.
+- **증상**: X를 눌러도 배너가 남아 있고, 다시 탭하면 같은 말풍선이 챗봇에 중복으로 쌓인다. 화면을 벗어났다 오면(언마운트/리마운트) 정상 동작하므로 **재노출 방지 자체는 정상**이다(2026-07-27 실기기 검증 기록 참고).
+- **해야 할 것**: 로컬 `dismissed` 상태를 두거나 `queryClient.setQueryData(['proactive', routeId], null)`로 리렌더를 유발한다.
+- **우선순위**: 낮음 — 기능 손실이 아닌 UX 결함
+
+### (번호추가) 오는 편이 여행 종료일 다음날 새벽이면 RETURN_DEPARTURE가 안 뜬다
+- **관련 태스크**: 프로액티브 후속 수정 (2026-07-29)
+- **파일**: `ai/app/services/proactive_service.py` (`_trip_phase`)
+- **현재 상태**: `_trip_phase`는 `start_date - 1`(pre_trip)과 `start_date ~ end_date`(during)만 인정한다. 가는 편 새벽 항공편은 `FLIGHT_DEPARTURE`를 `_RULES_PRE_TRIP`에 등록해 해결했지만, 오는 편이 `end_date` **다음날** 새벽이면 그 시각의 phase가 `out_of_range`라 규칙이 평가되지 않는다.
+- **위험**: 낮다. 사용자가 그 날을 `end_date`로 잡는 게 자연스러워 실제 발생 빈도가 낮다.
+- **해야 할 것(논의 필요)**: `_trip_phase`에 `post_trip`을 추가하거나 `end_date + 1`까지 during으로 넓히는 안. 다만 `_trip_phase`는 **비용 방어의 핵심 경로**다(FFE #1 — 대부분의 호출이 여기서 쿼리 1개로 끝난다). 범위를 넓히면 모든 유저의 여행 종료 다음날 호출이 스냅샷 수집까지 진행된다. 이득 대비 비용을 먼저 따져야 한다.
+- **우선순위**: 낮음
+
+### (번호추가) `createdAt`이 TIMESTAMPTZ인데 Java는 LocalDateTime으로 매핑
+- **관련 태스크**: 프로액티브 후속 수정 (2026-07-29) — `departureAt`을 `OffsetDateTime`으로 고치면서 발견
+- **파일**: `backend/src/main/java/com/cloumy/trip/dto/RouteListResponse.java`, `backend/src/main/java/com/cloumy/common/entity/BaseEntity.java`
+- **현재 상태**: `created_at`/`updated_at` 컬럼은 `TIMESTAMPTZ`인데 Java는 오프셋 없는 `LocalDateTime`으로 받는다. `departureAt`과 정확히 같은 구조의 불일치다.
+- **위험**: 낮다. `createdAt`은 표시 전용이고 프론트가 이 값을 서버로 되돌려 보내지 않아 왕복 누적 오차가 없다. 또 `LocalDateTimeSerializer`는 `InstantSerializerBase`를 상속하지 않아 `spring.jackson.time-zone` 영향도 안 받는다.
+- **해야 할 것**: `OffsetDateTime`으로 통일. 다만 `RouteListResponse`는 목록·커뮤니티·탐색·클론·수동생성 5개 경로가 공유하므로 회귀 범위가 넓다.
+- **우선순위**: 낮음 — 체감 버그가 없다. 다른 이유로 `RouteListResponse`를 손댈 때 함께 처리하는 게 합리적이다.
 
 ---
 
