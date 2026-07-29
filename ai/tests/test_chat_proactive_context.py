@@ -136,3 +136,44 @@ def _all_rule_types() -> set[str]:
 
 def test_gloss_covers_all_rule_types():
     assert set(_INTERVENTION_GLOSS.keys()) == _all_rule_types()
+
+
+# ============================================================
+# 시각 표기 — 배너와 챗봇이 같은 시각을 말해야 한다
+#
+# 규칙은 DB에서 온 UTC aware 값을 그대로 내보내고, 앱 배너는 formatClockTime이
+# 기기 로컬(KST)로 변환해 보여준다. 서술이 UTC 숫자를 그대로 넘기면 LLM이 오프셋을
+# 계산하지 않고 읽어 챗봇만 9시간 틀린 시각을 말한다(실기기에서 실제로 발생 —
+# 배너 "오후 10:04" vs 챗봇 "오후 1시 4분").
+# ============================================================
+
+def test_descriptor_renders_datetime_in_kst():
+    """UTC aware datetime은 KST로 변환해 넣는다."""
+    ctx = TypeAdapter(ProactiveContext).validate_python({
+        "type": "FLIGHT_DEPARTURE",
+        "params": {
+            "departureAt": "2026-07-29T16:34:00+00:00",   # KST 07-30 01:34
+            "leaveByTime": "2026-07-29T13:04:00+00:00",   # KST 07-29 22:04
+        },
+    })
+    descriptor = _build_proactive_descriptor(ctx)
+
+    assert "22:04" in descriptor        # 배너가 보여주는 값과 일치
+    assert "2026-07-30 01:34" in descriptor
+    assert "13:04" not in descriptor    # UTC 숫자가 새어나가면 안 된다
+
+
+def test_descriptor_renders_naive_time_without_conversion():
+    """route_slots.start_time은 tz 없는 KST 벽시계 값이라 변환하면 안 된다."""
+    ctx = TypeAdapter(ProactiveContext).validate_python({
+        "type": "PRE_TRIP_BRIEFING",
+        "params": {
+            "nights": 2,
+            "destination": "서울",
+            "flags": [{"kind": "first_slot", "time": "09:00:00", "placeName": "경복궁"}],
+        },
+    })
+    descriptor = _build_proactive_descriptor(ctx)
+
+    assert "09:00" in descriptor
+    assert "18:00" not in descriptor    # +9시간이 잘못 적용되면 안 된다

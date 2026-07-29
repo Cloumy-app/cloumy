@@ -115,6 +115,14 @@ def _format_proactive_value(value: object) -> str:
     dict는 '{k=v, ...}'로, list는 '[..., ...]'로 재귀 변환한다 — 자유 문자열 필드는
     어느 깊이에 있든 걸러진다(_FREE_TEXT_FIELDS). PRE_TRIP_BRIEFING.flags처럼 리스트
     안에 dict가 있는 경우가 이 재귀가 필요한 유일한 케이스다."""
+    if isinstance(value, datetime):
+        # KST로 바꿔 넣는다. 규칙은 DB에서 온 UTC aware 값을 그대로 내보내는데, LLM은
+        # 오프셋을 계산하지 않고 앞의 숫자를 그대로 읽는다. 배너는 기기 로컬(KST)로
+        # 보여주므로 변환하지 않으면 같은 개입인데 배너와 챗봇이 9시간 다른 시각을 말한다.
+        return value.astimezone(_KST).strftime("%Y-%m-%d %H:%M")
+    if isinstance(value, time):
+        # route_slots.start_time은 tz 없는 KST 벽시계 값이라 변환하지 않는다.
+        return value.strftime("%H:%M")
     if isinstance(value, dict):
         inner = ", ".join(
             f"{k}={_format_proactive_value(v)}" for k, v in value.items() if k not in _FREE_TEXT_FIELDS
@@ -131,7 +139,9 @@ def _build_proactive_descriptor(proactive: ProactiveContext) -> str:
     형식: "{타입별 한 줄} (key=value, key=value, ...)". 숫자·열거·시각만 들어가고
     자유 문자열은 빠진다 — 이게 이 함수의 전부다(결함 4 핵심 회귀 지점)."""
     gloss = _INTERVENTION_GLOSS[proactive.type]
-    params = proactive.model_dump(mode="json")["params"]
+    # mode="json"을 쓰면 Pydantic이 datetime을 ISO 문자열로 바꿔버려 KST 변환 분기를
+    # 못 탄다 — 파이썬 객체 그대로 받아 _format_proactive_value가 직접 포맷한다.
+    params = proactive.model_dump()["params"]
     fields = ", ".join(
         f"{k}={_format_proactive_value(v)}" for k, v in params.items() if k not in _FREE_TEXT_FIELDS
     )
