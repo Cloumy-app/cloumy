@@ -176,7 +176,16 @@
 ### ~~FREE_GAP이 현재 시각을 안 봐서 미래 공백을 "지금 여유"로 안내한다~~ — 해결됨 (2026-07-29, `d241581`)
 `_rule_free_gap`에 `current_end <= now < next_start` 가드를 넣고 `gapMinutes`를 `next_start - now`(남은 여유)로 바꿨다. 가드만 넣으면 공백 한가운데서 이미 지나간 시간까지 세는 문제가 남는데, 문구가 "다음 일정까지 {{gapMinutes}}분 여유가 있어요"라 남은 시간을 말해야 맞다. 회귀 테스트 3종 추가.
 
-### (번호추가) 챗봇 자동 개입이 한 번 대화하면 그 세션 내내 막힌다
+### ~~챗봇 자동 개입이 한 번 대화하면 그 세션 내내 막힌다~~ — 해결됨 (2026-07-29)
+대화를 루트에 귀속시켜 해결했다. `setActiveRouteId`가 루트 **변경 시에만** `messages`·`pendingProactive`를 비우고(같은 routeId 재호출은 쿼리 refetch라 건드리면 안 된다), `seedFromProactive`가 `routeId`를 받아 `activeRouteId`를 함께 확정한다 — 후자가 없으면 홈에서 배너를 탭할 때 `activeRouteId`가 아직 null이라, 챗 마운트 시 `null → routeId`가 '루트 변경'으로 판정돼 배너가 방금 넣은 말풍선을 지운다.
+
+가드(`messages.length > 0`)는 그대로 뒀다. messages가 루트에 귀속되면 "이 루트의 대화가 진행 중인가"라는 정확한 의미가 되기 때문이다. 가드의 두 목적 중 "배너 탭 케이스 거르기"는 원래부터 `isDismissedToday`와 중복이었다(배너가 `seedFromProactive`보다 먼저 `dismissToday`를 찍는다).
+
+**의도적으로 남긴 구멍**: 같은 루트·같은 앱 세션에서 사용자가 먼저 말을 건 뒤에는 자동 개입이 안 뜬다. Zustand에 persist가 없어 앱 재시작 시 초기화되고 홈 배너는 독립적으로 계속 뜨므로 개입 자체가 사라지진 않는다. "대화 중 끼어들지 않는다"는 원래 의도를 지키는 쪽이다.
+
+**미완**: 실기기 확인 5항목 — 특히 배너 탭 → 챗 진입 시 말풍선이 정확히 1개인지.
+
+### (참고) 원래 기록 — 챗봇 자동 개입 결함
 - **관련 태스크**: 2026-07-29 코드 리뷰
 - **파일**: `frontend/app/(tabs)/chat.tsx`, `frontend/stores/useChatStore.ts`
 - **현재 상태**: 자동 개입 가드가 전역 `useChatStore.messages` 길이만 본다. 이 배열은 **루트별로 분리되지도, 화면 이탈 시 초기화되지도 않는다** — `useChatStore.reset()`은 저장소 어디에서도 호출되지 않는다(grep 0건).

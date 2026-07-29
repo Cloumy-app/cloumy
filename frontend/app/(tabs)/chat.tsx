@@ -151,14 +151,17 @@ export default function ChatScreen() {
 
   useEffect(() => {
     if (!activeRouteId || !intervention) return;
-    // 대화가 이미 시작됐으면 끼어들지 않는다. 배너를 탭해 들어온 경우도 여기서 걸린다
-    // (배너 쪽에서 이미 같은 말풍선을 넣고 dismissToday까지 찍었다).
+    // 이 루트의 대화가 이미 진행 중이면 끼어들지 않는다. messages는 setActiveRouteId가
+    // 루트 전환 때 비우므로 '전역 대화'가 아니라 '이 루트의 대화'를 뜻한다.
     if (messages.length > 0) return;
+    // 배너를 탭해 들어온 경우는 여기서 걸린다 — 배너가 seedFromProactive보다 먼저
+    // dismissToday를 찍기 때문이다(ProactiveBanner.handleTap).
     if (isDismissedToday(activeRouteId, intervention.type)) return;
 
     dismissToday(activeRouteId, intervention.type);
     sendProactiveFeedback(activeRouteId, intervention.type, 'auto_shown');
     seedFromProactive(
+      activeRouteId,
       intervention.type,
       asI18nParams(intervention.params),
       buildProactiveText(t, i18n.language, intervention),

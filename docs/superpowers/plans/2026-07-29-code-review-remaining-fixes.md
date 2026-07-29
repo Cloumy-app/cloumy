@@ -11,7 +11,7 @@
 |---|---|---|
 | 1 | `FREE_GAP`이 현재 시각을 안 봄 | ✅ 완료 (2026-07-29) |
 | 2 | `start_time` NULL 슬롯과 `_current_and_next`의 비대칭 | ✅ 완료 — 결함 아님으로 판명 (2026-07-29) |
-| 3 | 챗봇 자동 개입이 세션 내내 막힘 | ⬜ 대기 |
+| 3 | 챗봇 자동 개입이 세션 내내 막힘 | ✅ 완료 (2026-07-29) — 실기기 확인 미완 |
 | 4 | `proactiveContext` 무검증 시스템 프롬프트 삽입 | ⬜ 대기 |
 
 ---
@@ -247,3 +247,184 @@ cd ai && .venv/bin/python -m pytest -q
 **이 결정에서 배운 것**
 
 리뷰가 "코드 A와 코드 B가 서로 다른 가정을 한다"는 **구조적 비대칭**을 정확히 찾아냈지만, 그것이 **런타임에 도달 가능한가**와 **고치면 더 나아지는가**는 별개였다. 두 질문을 따로 확인하지 않으면 멀쩡한 안전 동작을 "버그"로 바꿔 실제 회귀를 만든다. 특히 `_load_slots`에 필터를 넣는 안은 T3·T4를 망가뜨렸을 것이다.
+
+---
+
+# 결함 3 — 챗봇 자동 개입이 한 번 대화하면 세션 내내 막힌다
+
+**스택**: Frontend
+**예상 소요**: 40분
+**참조 전문가 스킬**: `frontend-expert`
+
+## 문제
+
+`frontend/app/(tabs)/chat.tsx:156`의 자동 개입 가드가 전역 `useChatStore.messages` 길이만 본다.
+
+```tsx
+if (messages.length > 0) return;
+```
+
+이 배열은 **루트별로 분리되지도, 화면 이탈 시 초기화되지도 않는다.** `setActiveRouteId`는 `activeRouteId`만 바꾸고 `messages`는 그대로 두며(`useChatStore.ts:24`), `reset()`은 저장소 어디에서도 호출되지 않는다(전수 grep 0건).
+
+### 증상 ① — 한 번 대화하면 그 세션 내내 자동 개입이 안 된다
+
+챗봇에서 아무 질문이나 하면 `messages.length > 0`이 되고 다시 0으로 돌아갈 방법이 없다. 여행 당일 아침에 챗봇 탭에 들어와도 가드에 걸려 `seedFromProactive`가 실행되지 않는다. **2026-07-28에 추가한 "챗봇 직접 진입 자동 개입"이 첫 대화 이후 사실상 죽는다.**
+
+### 증상 ② — 무관한 대화 끝에 개입이 붙는다
+
+반대로 루트를 바꿔도 `messages`가 남아 있어, 어제 도쿄 여행 대화 끝에 오늘 부산 여행의 개입 말풍선이 맥락 없이 끼어든다.
+
+### 가드의 두 목적 중 하나는 이미 중복이다
+
+`:154-155` 주석은 가드의 목적을 둘로 적고 있다.
+
+1. 대화가 진행 중일 때 끼어들지 않는다
+2. 배너를 탭해 들어온 경우를 걸러낸다(배너가 이미 같은 말풍선을 넣었다)
+
+**목적 2는 `isDismissedToday`가 이미 처리한다.** `ProactiveBanner.handleTap`이 `dismissToday`를 **먼저** 호출하고 `seedFromProactive` → `router.push('/chat')` 순서로 진행하므로(`ProactiveBanner.tsx:31-36`), 챗 화면이 마운트될 때 `:157`의 `isDismissedToday` 검사에서 이미 걸린다. 즉 `messages.length > 0`은 목적 2에 대해 잉여다.
+
+남는 건 목적 1인데, 그것을 **"전역 대화가 비어 있는가"** 로 구현한 게 결함의 원인이다. 올바른 질문은 **"지금 이 루트의 대화가 진행 중인가"** 다.
+
+## 수정 방향 — 대화를 루트에 귀속시킨다
+
+가드를 없애는 게 아니라, 가드가 **참조하는 상태를 올바른 범위로** 만든다.
+
+### (1) `setActiveRouteId`가 루트 전환 시 대화를 비운다
+
+```ts
+// 대화는 루트에 귀속된다 — 다른 여행으로 바뀌면 이전 대화는 맥락이 아니라 잡음이다.
+// 같은 routeId로 다시 호출되는 경우(쿼리 refetch)에는 건드리지 않는다. 안 그러면
+// 화면에 머무는 동안 대화가 통째로 날아간다.
+setActiveRouteId: (routeId) =>
+  set((s) =>
+    s.activeRouteId === routeId
+      ? { activeRouteId: routeId }
+      : { activeRouteId: routeId, messages: [], pendingProactive: null },
+  ),
+```
+
+### (2) `seedFromProactive`가 `routeId`도 받아 함께 세팅한다
+
+**(1)만 넣으면 배너 → 챗봇 인계가 깨진다.** 순서를 보면 명확하다.
+
+| 순서 | 상태 |
+|---|---|
+| 홈에서 배너 탭 | `activeRouteId`는 아직 `null`(챗을 연 적 없으면) |
+| `seedFromProactive` | `messages`에 말풍선 1개 추가 |
+| `/chat` 진입 → 쿼리 resolve → `setActiveRouteId(routeId)` | `null → routeId`는 **변경**이므로 (1)이 방금 넣은 말풍선을 지운다 ❌ |
+
+배너는 자기가 어느 루트를 위해 씨를 뿌리는지 알고 있으므로(`ProactiveBanner`의 `routeId` prop) 함께 넘긴다.
+
+```ts
+seedFromProactive: (routeId, type, params, text) =>
+  set((s) => ({
+    // 씨를 뿌리는 시점에 루트도 함께 확정한다 — 그래야 챗 화면이 마운트되며
+    // setActiveRouteId를 불러도 '같은 루트'로 판정돼 말풍선이 살아남는다.
+    activeRouteId: routeId,
+    messages: [
+      ...(s.activeRouteId === routeId ? s.messages : []),
+      { id: `${Date.now()}-proactive`, role: 'assistant', content: text, createdAt: new Date() },
+    ],
+    pendingProactive: { type, params, text },
+  })),
+```
+
+### (3) 가드는 그대로 두되 주석을 사실에 맞게 고친다
+
+`messages`가 루트에 귀속되면 `messages.length > 0`은 **"지금 이 루트의 대화가 진행 중"** 이라는 정확한 의미가 된다. 코드는 그대로, 주석만 고친다.
+
+### 남는 구멍 — 의도적으로 남긴다
+
+같은 루트 · 같은 앱 세션에서 **사용자가 먼저 말을 건 뒤**에는 자동 개입이 안 뜬다. 다만 이건 손실이 아니다.
+
+- Zustand에 persist가 없어 앱을 재시작하면 `messages`가 비고 다시 뜬다
+- **홈 배너는 독립적으로 계속 뜬다**(`isDismissedToday`만 본다) — 개입 자체가 사라지지 않는다
+- "대화 중 끼어들지 않는다"는 원래 의도를 지키는 쪽이다
+
+가드를 아예 제거하는 안도 검토했으나, 사용자가 메시지를 보내는 중에 개입 말풍선이 끼어들어 순서가 어색해질 수 있어 채택하지 않았다.
+
+## 실패 시나리오 (FFE)
+
+| # | 실패 상황 | 감지 방법 | 대응 방안 |
+|---|---|---|---|
+| 1 | **배너가 뿌린 말풍선이 챗 마운트 시 지워짐** | 실기기: 배너 탭 → 챗 진입 시 말풍선 없음 | (2)로 `seedFromProactive`가 `activeRouteId`를 함께 세팅 → 같은 루트로 판정돼 살아남음 |
+| 2 | 쿼리 refetch가 같은 routeId를 돌려줘 대화가 날아감 | 실기기: 챗에 머무는 동안 대화 사라짐 | `s.activeRouteId === routeId`일 때는 `messages`를 건드리지 않음 |
+| 3 | `pendingProactive`가 살아남아 엉뚱한 루트 메시지에 실림 | 서버 로그의 `proactive_context` | 루트 전환 시 `messages`와 함께 `pendingProactive`도 비움 |
+| 4 | 활성 루트가 없어 `activeRouteId`가 `null`이 됨 | — | `null → routeId`는 변경으로 처리(대화 비움). 최초 진입 시엔 어차피 비어 있어 무해 |
+| 5 | `getActiveRoute` 실패로 `activeRoute`가 `undefined` | `isError` | `if (activeRoute)` 가드가 이미 있어 `setActiveRouteId` 자체가 호출되지 않음 — 기존 대화 유지 |
+
+## 구현 단계
+
+### Step 1: `frontend/stores/useChatStore.ts`
+
+- `seedFromProactive` 시그니처에 `routeId: string` 추가 (첫 번째 인자)
+- `seedFromProactive`가 `activeRouteId`를 함께 세팅, 다른 루트면 `messages`를 갈아엎고 시작
+- `setActiveRouteId`가 루트 **변경 시에만** `messages`·`pendingProactive` 초기화
+- 인터페이스 주석에 "대화는 루트에 귀속된다" 명시
+
+### Step 2: `frontend/components/route/ProactiveBanner.tsx`
+
+`handleTap`의 `seedFromProactive` 호출에 `routeId` 전달.
+
+### Step 3: `frontend/app/(tabs)/chat.tsx`
+
+- 자동 개입 `seedFromProactive` 호출에 `activeRouteId` 전달
+- `:154-155` 주석을 사실에 맞게 교체 — "전역 대화"가 아니라 "이 루트의 대화"이고, 배너 탭 케이스는 `isDismissedToday`가 거른다는 점 명시
+
+## 검증
+
+```bash
+cd frontend && ./node_modules/.bin/tsc --noEmit
+# 기대: 소스 에러 0 (tsconfig.json:6 baseUrl deprecated 경고 1건은 기존 이슈)
+```
+
+프론트엔드에는 테스트 러너가 없다(`package.json`에 test 스크립트·jest·vitest 모두 없음). 동작 확인은 실기기 수동 조작이다.
+
+| 항목 | 방법 | 기대 |
+|---|---|---|
+| **증상 ① 회귀** | 챗봇에서 아무 질문 → 홈 → 루트 전환 → 챗봇 재진입 | 새 루트의 개입 말풍선이 뜬다 |
+| **증상 ② 회귀** | 루트 A 대화 후 루트 B로 전환 → 챗봇 | A의 대화가 남아 있지 않다 |
+| **FFE #1 (가장 중요)** | 앱 재시작 → 홈 배너 탭 → 챗 진입 | 배너와 같은 말풍선이 **1개** 보인다(0개도 2개도 아님) |
+| FFE #2 | 챗봇에 머문 채 2분 대기(쿼리 refetch) | 대화가 사라지지 않는다 |
+| 맥락 인계 | 배너 탭 → 첫 메시지 전송 | 서버 로그에 `proactive_context`가 실린다 |
+
+## 체크리스트
+
+- [x] `useChatStore.setActiveRouteId` 루트 변경 시에만 대화 초기화
+- [x] `useChatStore.seedFromProactive`에 `routeId` 추가 + `activeRouteId` 동시 세팅
+- [x] `ProactiveBanner.handleTap` 호출부 갱신
+- [x] `chat.tsx` 호출부 갱신 + 가드 주석 사실화
+- [x] `tsc --noEmit` 통과
+- [ ] 실기기 5항목 (특히 FFE #1 배너 인계) — **미완**
+
+## 수정 결과 ✅ (실기기 확인 미완)
+
+**변경 파일**
+
+| 파일 | 변경 |
+|---|---|
+| `frontend/stores/useChatStore.ts` | `setActiveRouteId`가 루트 **변경 시에만** `messages`·`pendingProactive` 초기화. `seedFromProactive`가 `routeId`를 받아 `activeRouteId`를 함께 확정. 인터페이스에 "대화는 루트에 귀속된다" 주석 |
+| `frontend/components/route/ProactiveBanner.tsx` | `handleTap`의 `seedFromProactive` 호출에 `routeId` 전달 |
+| `frontend/app/(tabs)/chat.tsx` | 자동 개입 호출에 `activeRouteId` 전달. 가드 주석을 사실에 맞게 교체 — 두 목적을 뭉쳐 적던 것을 "이 루트의 대화" 가드와 "배너 탭은 `isDismissedToday`가 거른다"로 분리 |
+
+**계획과 다른 점**: 없음.
+
+**검증**
+
+```bash
+cd frontend && ./node_modules/.bin/tsc --noEmit
+# → tsconfig.json(6,5) baseUrl deprecated 경고 1건(기존 이슈), 소스 에러 0
+```
+
+`seedFromProactive` 호출부 전수 확인 — `ProactiveBanner.tsx:34`, `chat.tsx:163` 둘뿐이며 모두 갱신됨.
+
+**FFE #1 흐름 검증 (코드 추적)**
+
+| 순서 | 스토어 상태 |
+|---|---|
+| 앱 시작 | `activeRouteId: null`, `messages: []` |
+| 배너 탭 → `seedFromProactive(R, ...)` | `null ≠ R`이라 messages를 새로 시작 → 말풍선 **1개**, `activeRouteId: R` |
+| 챗 마운트 → `setActiveRouteId(R)` | `s.activeRouteId === R` → messages 손대지 않음 → 말풍선 **1개 유지** ✓ |
+| 자동 개입 effect | `messages.length > 0`에서 return, `isDismissedToday`도 true → 중복 없음 ✓ |
+
+**남은 것 — 실기기 확인 5항목.** 이 수정은 화면 전환·마운트 타이밍에 의존하므로 코드 추적만으로는 부족하다. 특히 FFE #1(배너 탭 → 챗 진입 시 말풍선이 0개도 2개도 아닌 정확히 1개)이 이 변경에서 가장 깨지기 쉬운 지점이다.
