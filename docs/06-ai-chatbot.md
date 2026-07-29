@@ -91,7 +91,17 @@
 [프론트엔드] 답변 텍스트 렌더 + (search_nearby_places를 썼다면) 장소 카드 렌더
 ```
 
-**`proactiveContext`(선택, 2026-07-27 추가)**: 프로액티브 배너를 탭한 직후 첫 메시지에만 함께 실려오는 문자열입니다(`ChatRequest.proactiveContext` → Spring `AiServiceClient.chat()` → FastAPI `ChatRequest.proactive_context`). 값이 있으면 `handle_chat()`이 시스템 프롬프트 끝에 `\n\n[방금 먼저 안내한 내용]\n{proactive_context}`를 덧붙여, 챗봇이 배너가 방금 무슨 얘기를 했는지 알고 자연스럽게 이어받아 답하도록 합니다(`ai/app/services/chat_service.py`).
+**`proactive`(선택, 2026-07-27 추가 → 2026-07-29 구조 변경)**: 프로액티브 배너를 탭한 직후 첫 메시지에만 함께 실려옵니다(`ChatRequest.proactive` → Spring `AiServiceClient.chat()` → FastAPI `ChatRequest.proactive`). 값이 있으면 `handle_chat()`이 시스템 프롬프트 끝에 `[방금 먼저 안내한 내용]`을 덧붙여, 챗봇이 배너가 방금 무슨 얘기를 했는지 알고 자연스럽게 이어받아 답하도록 합니다.
+
+```json
+{ "proactive": { "type": "WEATHER_ALERT", "params": { "day": 2, "kind": "rain", "outdoorCount": 3 } } }
+```
+
+> ⚠️ **앱은 완성된 문장을 보내지 않습니다.** 2026-07-29 이전에는 앱이 i18n으로 조립한 한국어 문장을 그대로 보내고 서버가 시스템 프롬프트에 붙였는데, 검증이 없어 **인증된 사용자가 임의 문장을 시스템 지시 자리에 써넣을 수 있었습니다**. 지금은 `type` + `params`만 받고 **문장은 서버가 만듭니다**(`chat_service._build_proactive_descriptor`).
+>
+> - **검증**: `app/models/schemas.ProactiveContext` — `type`으로 `params` 모델을 판별하는 태그드 유니온(9종). 불일치 시 422. Spring은 `type` 화이트리스트만 보는 얇은 가드이고, `params` 스키마 지식은 FastAPI에만 둡니다 — 규칙마다 필드가 달라 Java에 복제하면 규칙 추가 시 변경 지점이 3배가 됩니다.
+> - **자유 문자열은 서술에서 제외**합니다(`placeName`, `destination`, `nextPlaceName`). 숫자·열거·시각만 넣어 프롬프트에 임의 텍스트가 닿을 통로를 없앱니다. 장소명이 필요하면 챗봇이 `get_route_status`로 직접 조회합니다.
+> - 사용자에게 보이는 4개 언어 문구는 **여전히 앱 `proactiveText.ts`가** 만듭니다("판단은 규칙이, 표현은 앱이" 원칙 유지). 서버가 만드는 건 AI만 읽는 한국어 한 줄이라 번역 대상이 아닙니다.
 
 **핵심 파일**
 | 파일 | 역할 |

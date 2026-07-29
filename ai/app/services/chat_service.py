@@ -7,6 +7,7 @@ import asyncpg
 
 from app.config.city_centers import CITY_CENTERS
 from app.config.settings import settings
+from app.models.schemas import ProactiveContext
 from app.services.retrievers import PostgisTagRetriever, describe_candidate
 from app.services.route_service import _anthropic
 from app.services.weather_service import _get_forecast_by_block, _label_for_day
@@ -81,6 +82,60 @@ SYSTEM_PROMPT_TEMPLATE = """당신은 트리피(Tripy)의 여행 중 실시간 �
 
 # 프론트 SupportedLanguage 코드 → 프롬프트에 넣을 자연어 이름 (앱 설정 언어 폴백 힌트용)
 _LANGUAGE_NAMES = {"ko": "한국어", "en": "English", "ja": "日本語", "zh": "中文"}
+
+# ============================================================
+# 프로액티브 개입 서술 조립 — type+params(검증된 ProactiveContext)를 AI 전용
+# 한국어 한 줄로 만든다. 사용자에게 보이는 4개 언어 문구는 앱 proactiveText.ts가
+# 만들므로 여기 한국어는 번역 대상이 아니다(AI만 읽는다).
+# ============================================================
+
+# 타입별 한 줄 설명 — app.services.proactive_service._RULES_PRE_TRIP + _RULES_DURING이
+# 내보내는 type 9종과 반드시 1:1 대응해야 한다(테스트: test_gloss_covers_all_rule_types).
+_INTERVENTION_GLOSS: dict[str, str] = {
+    "PRE_TRIP_BRIEFING": "여행 전날 브리핑",
+    "FLIGHT_DEPARTURE": "가는 편 출발 준비 안내",
+    "RETURN_DEPARTURE": "오는 편 출발 준비 안내",
+    "DEPARTURE_SOON": "다음 일정 출발 임박 안내",
+    "EMPTY_DAY": "오늘 일정 비어있음 안내",
+    "WEATHER_ALERT": "날씨 경고 안내",
+    "BUDGET_OVER": "오늘 예산 초과 안내",
+    "BOOKMARK_NEARBY": "근처 북마크 장소 안내",
+    "FREE_GAP": "다음 일정까지 여유 시간 안내",
+}
+
+# 자유 문자열은 서술에서 뺀다 — 시스템 프롬프트에 들어갈 수 있는 유일한 주입 통로다(결함 4).
+# 장소명이 필요하면 챗봇이 get_route_status로 직접 조회한다. PRE_TRIP_BRIEFING.flags 안에도
+# placeName(first_slot)이 있어 중첩 dict/list까지 재귀적으로 걸러야 한다.
+_FREE_TEXT_FIELDS = {"placeName", "destination", "nextPlaceName"}
+
+
+def _format_proactive_value(value: object) -> str:
+    """params 값 하나를 서술용 문자열로 만든다.
+
+    dict는 '{k=v, ...}'로, list는 '[..., ...]'로 재귀 변환한다 — 자유 문자열 필드는
+    어느 깊이에 있든 걸러진다(_FREE_TEXT_FIELDS). PRE_TRIP_BRIEFING.flags처럼 리스트
+    안에 dict가 있는 경우가 이 재귀가 필요한 유일한 케이스다."""
+    if isinstance(value, dict):
+        inner = ", ".join(
+            f"{k}={_format_proactive_value(v)}" for k, v in value.items() if k not in _FREE_TEXT_FIELDS
+        )
+        return f"{{{inner}}}"
+    if isinstance(value, list):
+        return "[" + ", ".join(_format_proactive_value(v) for v in value) + "]"
+    return str(value)
+
+
+def _build_proactive_descriptor(proactive: ProactiveContext) -> str:
+    """검증된 개입(type+params)을 AI 전용 한국어 한 줄로 조립한다.
+
+    형식: "{타입별 한 줄} (key=value, key=value, ...)". 숫자·열거·시각만 들어가고
+    자유 문자열은 빠진다 — 이게 이 함수의 전부다(결함 4 핵심 회귀 지점)."""
+    gloss = _INTERVENTION_GLOSS[proactive.type]
+    params = proactive.model_dump(mode="json")["params"]
+    fields = ", ".join(
+        f"{k}={_format_proactive_value(v)}" for k, v in params.items() if k not in _FREE_TEXT_FIELDS
+    )
+    return f"{gloss} ({fields})" if fields else gloss
 
 
 def _choose_model(user_message: str, history_len: int) -> str:
@@ -352,7 +407,7 @@ async def handle_chat(
     user_message: str,
     current_location: tuple[float, float] | None = None,
     language: str | None = None,
-    proactive_context: str | None = None,
+    proactive: ProactiveContext | None = None,
 ) -> tuple[str, list[dict] | None, dict | None]:
     """route_id가 user_id 소유가 아니면 RouteNotFoundError를 던진다.
     반환: (자연어 답변, search_nearby_places 결과 장소 목록(카드 렌더용, 없으면 None),
@@ -383,10 +438,12 @@ async def handle_chat(
         fallback_language=_LANGUAGE_NAMES.get(language, "한국어"),
     ) + location_hint
 
-    if proactive_context:
+    if proactive is not None:
         # 배너 탭 직후 첫 메시지에만 실려온다 — 유저가 "응 바꿔줘"만 보내도 뭘 바꾸란 건지
-        # 알 수 있도록 방금 먼저 안내한 내용을 시스템 프롬프트에 덧붙인다.
-        system_prompt += f"\n\n[방금 먼저 안내한 내용]\n{proactive_context}"
+        # 알 수 있도록 방금 먼저 안내한 내용을 시스템 프롬프트에 덧붙인다. 문장은 서버가
+        # 조립한다(_build_proactive_descriptor) — 자유 문자열을 빼서 프롬프트 주입 통로를
+        # 없앤 게 이 수정의 핵심이다(결함 4).
+        system_prompt += f"\n\n[방금 먼저 안내한 내용]\n{_build_proactive_descriptor(proactive)}"
 
     messages: list[dict] = [*history, {"role": "user", "content": user_message}]
 

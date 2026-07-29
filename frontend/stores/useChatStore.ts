@@ -57,9 +57,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const { activeRouteId, isSending, pendingProactive } = get();
     if (!activeRouteId || !trimmed || isSending) return;
 
-    // pendingProactive가 있으면 seedFromProactive에서 저장해둔 배너 문구를 이번 전송에만 실어 보낸다.
+    // pendingProactive가 있으면 seedFromProactive에서 저장해둔 type+params를 이번 전송에만 실어 보낸다.
+    // 완성 문장(text)이 아니라 type+params를 보내야 서버가 문장을 직접 조립해 검증한다 —
+    // 문장을 그대로 보내면 시스템 프롬프트에 임의 지시를 주입하는 통로가 된다.
     // 즉시 클리어해야 다음 메시지부터는 맥락이 중복으로 안 실린다.
-    const proactiveContext = pendingProactive?.text;
+    const proactive = pendingProactive
+      ? { type: pendingProactive.type, params: pendingProactive.params }
+      : undefined;
     if (pendingProactive) set({ pendingProactive: null });
 
     const userMessage: ChatMessage = {
@@ -74,7 +78,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const { reply, places, estimatedSlot } = await sendChatMessage(
         activeRouteId,
         trimmed,
-        proactiveContext,
+        proactive,
       );
       const assistantMessage: ChatMessage = {
         id: `${Date.now()}-assistant`,

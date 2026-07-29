@@ -2,6 +2,7 @@ package com.cloumy.trip.service;
 
 import com.cloumy.common.exception.BusinessException;
 import com.cloumy.common.response.ErrorCode;
+import com.cloumy.trip.dto.ChatRequest;
 import com.cloumy.trip.dto.ChatResponse;
 import com.cloumy.trip.dto.ProactiveResponse;
 import com.cloumy.trip.dto.RouteGenRequest;
@@ -23,6 +24,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -179,18 +181,27 @@ public class AiServiceClient {
 
     private record ChatLocationDto(double lat, double lng) {}
 
+    // FastAPI ProactiveContext와 동일한 형태로 직렬화 — params는 Map으로 그대로 흘려보낸다
+    // (스키마 지식을 Java에 복제하지 않는다. ProactiveIntervention.java의 기존 설계 결정과 동일)
+    private record ProactiveContextDto(String type, Map<String, Object> params) {}
+
+    // FastAPI ChatRequest 필드명에 맞춤 — proactive_context(문자열) → proactive(type+params).
+    // 완성 문장을 보내던 옛 필드는 없앴다: 서버가 문장을 조립해야 시스템 프롬프트 주입 통로가 사라진다.
     private record ChatReq(
             String user_id, String route_id, String message, ChatLocationDto current_location, String language,
-            String proactive_context
+            ProactiveContextDto proactive
     ) {}
 
     public ChatResponse chat(
             String userId, String routeId, String message, Double lat, Double lng, String language,
-            String proactiveContext) {
+            ChatRequest.ProactiveContext proactive) {
         try {
             ChatLocationDto location = (lat != null && lng != null) ? new ChatLocationDto(lat, lng) : null;
+            ProactiveContextDto proactiveDto = proactive != null
+                    ? new ProactiveContextDto(proactive.type(), proactive.params())
+                    : null;
             String body = objectMapper.writeValueAsString(
-                    new ChatReq(userId, routeId, message, location, language, proactiveContext));
+                    new ChatReq(userId, routeId, message, location, language, proactiveDto));
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(fastapiUrl + "/ai/chat"))
@@ -203,6 +214,13 @@ public class AiServiceClient {
             var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 404) {
                 throw new BusinessException(ErrorCode.ROUTE_NOT_FOUND);
+            }
+            // 422(Pydantic 검증 실패)는 클라이언트 잘못이지 서버 오류가 아니다 — 여기서 걸러내지
+            // 않으면 아래 4xx 뭉뚱그리기에 잡혀 500 "챗봇 오류"로 승격되고, 검증 실패가 사용자에게
+            // "챗봇이 고장났다"로 보인다.
+            if (response.statusCode() == 422) {
+                log.warn("FastAPI 챗봇 검증 실패: status=422, body={}", response.body());
+                throw new BusinessException(ErrorCode.INVALID_INPUT, "잘못된 요청입니다");
             }
             if (response.statusCode() >= 400) {
                 log.error("FastAPI 챗봇 오류: status={}", response.statusCode());

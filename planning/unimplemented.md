@@ -193,7 +193,14 @@
 - **해야 할 것(논의 필요)**: 가드를 "이 세션에 이 루트로 개입을 이미 넣었는가"로 바꾸는 것이 정확하다. `messages`를 루트별로 스코프하거나, 개입 주입 여부를 별도 플래그로 두는 안. 후자가 변경 범위가 작다.
 - **우선순위**: 중간 — 2026-07-28 후속 작업에서 추가한 "챗봇 직접 진입 자동 개입" 기능이 사실상 첫 대화 이후 동작하지 않는다
 
-### (번호추가) proactiveContext가 검증 없이 시스템 프롬프트에 삽입된다
+### ~~proactiveContext가 검증 없이 시스템 프롬프트에 삽입된다~~ — 해결됨 (2026-07-29)
+클라이언트가 완성된 문장을 보내던 것을 폐기하고 `type` + `params`만 받아 **서버가 AI용 서술을 조립**하도록 바꿨다(`chat_service._build_proactive_descriptor`). 검증은 FastAPI의 태그드 유니온(`schemas.ProactiveContext`, 9종)이 맡고 Spring은 `type` 화이트리스트만 보는 얇은 가드다 — `params` 스키마를 Java에 복제하면 규칙 추가 시 변경 지점이 3배가 된다.
+
+핵심은 **자유 문자열(`placeName`/`destination`/`nextPlaceName`)을 서술에서 아예 제외**한 것이다. `type`+`params`로 바꾸기만 하면 그 필드들이 여전히 주입 통로로 남는다(길이를 25자로 제한해도 지시문이 들어간다). 숫자·열거·시각만 넣어 통로 자체를 없앴다. 검증: `placeName`에 지시문을 넣어도 챗봇이 따르지 않고 응답·로그 어디에도 나타나지 않음.
+
+사용자에게 보이는 4개 언어 문구는 여전히 앱 `proactiveText.ts`가 만든다("판단은 규칙이, 표현은 앱이" 유지).
+
+### (참고) 원래 기록 — proactiveContext 신뢰 경계
 - **관련 태스크**: 2026-07-29 코드 리뷰 — 보안 성격이라 항공편·루트선택 수정과 분리
 - **파일**: `backend/src/main/java/com/cloumy/trip/dto/ChatRequest.java`, `ai/app/services/chat_service.py`(`handle_chat`)
 - **현재 상태**: `ChatRequest.proactiveContext`에 `@Size`도 화이트리스트 검증도 없다. `AiServiceClient`가 그대로 FastAPI로 넘기고 `system_prompt += f"\n\n[방금 먼저 안내한 내용]\n{proactive_context}"`로 **system 역할에 삽입**된다. "시스템 프롬프트는 서버가 만든다"는 불변식이 깨져 있다.
