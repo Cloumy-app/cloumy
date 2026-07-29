@@ -393,27 +393,50 @@ def test_bookmark_nearby_none_when_confidence_low():
 # T7. FREE_GAP
 # ============================================================
 
-def test_free_gap_fires_when_gap_exceeds_threshold():
+def _free_gap_snap(now_hm: tuple[int, int], next_hm: tuple[int, int] = (13, 0)) -> dict:
+    """T7 스냅샷 — current는 10:00 시작 60분(이동 10분)으로 고정, now와 next만 바꾼다.
+    current_end=11:00, threshold=10+60=70분이 기준선이다."""
     today = date(2026, 7, 29)
-    snap = {
+    return {
         "estimated": {"confidence": "high"},
         "current_slot": {"start_time": time(10, 0), "duration_minutes": 60, "transport_minutes": 10},
-        "next_slot": {"start_time": time(13, 0)},
+        "next_slot": {"start_time": time(*next_hm)},
         "today_date": today,
+        "now": datetime(2026, 7, 29, *now_hm, tzinfo=_KST),
     }
-    # current_end=11:00, next_start=13:00 → gap 120분, threshold 10+60=70분
-    result = _rule_free_gap(snap)
+
+
+def test_free_gap_fires_when_gap_exceeds_threshold():
+    # 공백(11:00~13:00) 시작 시점에 열면 남은 여유 120분 ≥ threshold 70분
+    result = _rule_free_gap(_free_gap_snap((11, 0)))
     assert result is not None
     assert result["params"]["gapMinutes"] == 120
 
 
 def test_free_gap_none_when_gap_within_threshold():
-    today = date(2026, 7, 29)
-    snap = {
-        "estimated": {"confidence": "high"},
-        "current_slot": {"start_time": time(10, 0), "duration_minutes": 60, "transport_minutes": 10},
-        "next_slot": {"start_time": time(11, 30)},
-        "today_date": today,
-    }
-    # current_end=11:00, next_start=11:30 → gap 30분 < threshold 70분
-    assert _rule_free_gap(snap) is None
+    # current_end=11:00, next_start=11:30 → 남은 여유 30분 < threshold 70분
+    assert _rule_free_gap(_free_gap_snap((11, 0), next_hm=(11, 30))) is None
+
+
+def test_free_gap_none_when_now_before_gap():
+    """첫 일정 시작 전에는 발동하면 안 된다.
+
+    _estimate_current_slot이 첫 일정 전에도 slots[0]을 high로 잡아주기 때문에
+    now를 안 보면 아침에 열어도 발동한다. 그러면 그날 dismiss를 소모해
+    정작 실제 공백(11:00~13:00)에는 배너가 안 뜬다."""
+    assert _rule_free_gap(_free_gap_snap((8, 0))) is None
+
+
+def test_free_gap_none_when_now_after_gap():
+    # 다음 일정이 이미 시작됐으면 여유가 아니다
+    assert _rule_free_gap(_free_gap_snap((13, 30))) is None
+
+
+def test_free_gap_reports_remaining_not_planned_gap():
+    """공백 한가운데서는 계획상 공백(120분)이 아니라 남은 여유를 안내해야 한다.
+
+    문구가 "다음 일정까지 {{gapMinutes}}분 여유가 있어요"이므로 이미 지나간
+    시간까지 세면 과대 안내가 된다."""
+    result = _rule_free_gap(_free_gap_snap((11, 30)))
+    assert result is not None
+    assert result["params"]["gapMinutes"] == 90

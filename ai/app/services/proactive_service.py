@@ -281,7 +281,7 @@ def _rule_bookmark_nearby(snap: dict) -> dict | None:
 
 
 def _rule_free_gap(snap: dict) -> dict | None:
-    """T7. 현재 슬롯 종료 후 다음 슬롯까지 공백이 크면 개입. 위치 추정에 의존한다."""
+    """T7. 지금 다음 슬롯까지 남은 여유가 크면 개입. 위치 추정에 의존한다."""
     if snap["estimated"]["confidence"] != "high":
         return None
     current, next_slot = snap.get("current_slot"), snap.get("next_slot")
@@ -294,7 +294,15 @@ def _rule_free_gap(snap: dict) -> dict | None:
         minutes=current["duration_minutes"] or 120
     )
     next_start = _combine(snap["today_date"], next_slot["start_time"])
-    gap_minutes = (next_start - current_end).total_seconds() / 60
+
+    # 계획상 공백이 아니라 '지금 남은 여유'를 본다. 계획 시각만 보면 두 가지가 틀어진다 —
+    # _estimate_current_slot이 첫 일정 시작 전에도 slots[0]을 high로 잡아주므로 아침에
+    # 열어도 발동해 그날 dismiss를 소모해버리고(정작 실제 공백엔 안 뜬다), 공백 한가운데선
+    # 이미 지나간 시간까지 여유로 세어 과대 안내가 된다.
+    if not (current_end <= snap["now"] < next_start):
+        return None
+    gap_minutes = (next_start - snap["now"]).total_seconds() / 60
+
     threshold = (current["transport_minutes"] or 0) + _FREE_GAP_EXTRA_MIN
     if gap_minutes < threshold:
         return None
