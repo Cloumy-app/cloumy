@@ -122,10 +122,15 @@
 Anthropic의 [tool use](https://docs.anthropic.com/) 기능으로 구현. LLM이 스스로 "이 질문엔 어떤 도구가 필요한지" 판단하고, 필요하면 도구 이름 + 입력값을 반환 → 서버가 실제로 실행 → 결과를 다시 LLM에 주면 LLM이 그걸 바탕으로 자연어 답변을 만듭니다.
 
 ### 4-1. `search_nearby_places`
-- **언제 호출되나**: "근처 맛집/카페/관광지 추천해줘" 류의 요청
-- **입력**: `category_tags`(선택, 예: `['#카페']`), `radius_m`(선택, 기본 1500m)
-- **실행 로직** (`_tool_search_nearby_places`): `PostgisTagRetriever`(`ai/app/services/retrievers.py`)를 그대로 재사용 — 루트 생성 때 후보 장소를 찾는 것과 **동일한 검색기**. 검색 중심 좌표 우선순위: **①현재 위치(있으면) → ②시간 기반 추정 슬롯 좌표(확신 높을 때만) → ③여행지 도시 중심**
-- **참조 DB**: `places` 테이블 (`ST_DWithin` 반경 검색 + `category_tags &&` 배열 필터, `is_active = true`만)
+- **언제 호출되나**: "근처 맛집/카페/관광지 추천해줘" 류의 요청, **"숙소 근처 카페 찾아줘"처럼 숙소를 기준으로 묻는 요청**
+- **입력**: `category_tags`(선택, 예: `['#카페']`), `radius_m`(선택, 기본 1500m), **`origin`(선택, `current`|`accommodation`, 2026-07-29 추가)**
+- **실행 로직** (`_tool_search_nearby_places`): `PostgisTagRetriever`(`ai/app/services/retrievers.py`)를 그대로 재사용 — 루트 생성 때 후보 장소를 찾는 것과 **동일한 검색기**. 검색 중심 좌표 우선순위:
+  - `origin="accommodation"`: **오늘 밤 묵는 숙소 좌표**(`_resolve_stay`). 특정 못 하면 검색하지 않고 `{"places": [], "error": ...}`를 돌려준다 — 예외를 던지면 대화가 끊긴다
+  - 그 외(기본): **①현재 위치(있으면) → ②시간 기반 추정 슬롯 좌표(확신 높을 때만) → ③여행지 도시 중심**
+- **`origin` 인자를 넣은 이유 (2026-07-29)**: 이게 없으면 **"숙소 기준으로 찾아줘"를 표현할 방법 자체가 없었다.** 모델이 숙소를 알아도 그 근처를 검색할 수단이 없어 "지금 어디 계세요?"라고 되묻는 게 실기기에서 실측됐다. 인자를 생략하면 기존 3단 폴백이 100% 그대로 동작한다(하위호환).
+- **반환에 `origin` 필드 동봉**: `{kind, name, date_matched}`. `date_matched=false`는 "그 숙소가 오늘 날짜와 안 맞는데 등록된 숙소가 그것뿐이라 기준으로 삼았다"는 뜻 — 모델이 *"등록하신 OO 기준으로"* 라고 근거를 밝히게 하려는 것이다. 조용히 맞는 척하지 않는다.
+- **참조 DB**: `places` 테이블 (`ST_DWithin` 반경 검색 + `category_tags &&` 배열 필터, `is_active = true`만), `origin="accommodation"`일 때 `accommodations` 테이블
+- ⚠️ **"근처"가 최대 50km까지 벌어질 수 있다**: `PostgisTagRetriever`는 후보 3건 미만이면 반경을 50km로 자동 확장하는데(`retrievers.py:76-77`) 확장 사실이 반환에 없어 모델은 여전히 "근처"라고 말한다. 숙소 기준·현재 위치 기준 모두 해당하는 **기존 동작**이다 — `planning/unimplemented.md`에 별건으로 기록
 - **반환**: 상위 5곳의 이름/태그/Hidden Gem 여부/평균 체류시간 + **`reason`(한줄 추천 이유, 2026-07-06 추가)** → 이 목록은 채팅 답변에 **장소 카드**로도 그대로 노출됨(`ChatResponse.places`)
 - **`reason` 생성 방식**: 후보 5곳을 Haiku에 한 번에 보내 후보별 1문장 추천 이유를 받는다(`_generate_place_reasons`) — `slot_alternatives.py`(Pin&Reshuffle)와 동일한 index 기반 JSON 응답 패턴 재사용(place_id를 LLM이 직접 안 베끼게 해 환각 방지). 처음엔 LLM 호출 없이 태그만 잘라 붙이는 결정론적 폴백(`describe_candidate`, `retrievers.py`)만 썼다가, 다른 슬롯들의 풍부한 팁과 톤이 안 맞는다는 피드백으로 LLM 생성 방식으로 교체 — `describe_candidate`는 LLM 응답 파싱 실패 시의 폴백으로만 남음
 
@@ -140,7 +145,10 @@ Anthropic의 [tool use](https://docs.anthropic.com/) 기능으로 구현. LLM이
 - **언제 호출되나**: "내 일정 어떻게 돼?", "지금까지 뭐 했지?", "다음 장소까지 어떻게 가?" 류의 요청
 - **입력**: 없음 (routeId는 이미 요청 컨텍스트에 있음)
 - **실행 로직** (`_tool_get_route_status`): 신규 작성한 조회 함수. **소유권 검증을 통과한 route**에 한해서만 조회.
-- **참조 DB**: `route_slots`(day_number/order_index/start_time/is_pinned/**transport_to_next/transport_minutes/transit_summary** + `places.name` JOIN) + `route_day_summaries`(day별 한 줄 요약)
+- **참조 DB**: `route_slots`(day_number/order_index/start_time/is_pinned/**transport_to_next/transport_minutes/transit_summary** + `places.name` JOIN) + `route_day_summaries`(day별 한 줄 요약) + **`accommodations`(2026-07-29 추가)**
+- **`accommodations`/day별 `accommodation` 필드 (2026-07-29 추가)**: 챗봇에 숙소를 물으면 되묻던 문제를 고친 것. 숙소 전용 도구를 4번째로 만들지 않고 이 도구에 얹은 이유는 아래 두 가지 — ①도구가 늘면 매 요청 토큰이 늘고 모델이 "언제 부를지" 판단을 한 번 더 해야 하는데, 바로 위 `today_day` 항목이 그 판단에 실패한 실측 기록이다 ②숙소는 "일정의 일부"라 Day별 일정을 주면서 그날 밤 어디서 자는지만 빼는 게 오히려 부자연스럽다.
+  - 최상위 `accommodations`: 등록된 숙소 전체(`name`/`check_in_date`/`check_out_date`). 좌표는 모델에 불필요해서 뺀다
+  - day별 `accommodation`: 그 Day 날짜가 체크인~체크아웃 구간에 **실제로 들어갈 때만** 이름을 채운다. "숙소가 1곳뿐이면 그걸 쓴다" 폴백을 여기까지 적용하면 *"모든 Day의 숙소가 OO"* 라는 틀린 단정이 되므로, 폴백은 검색 기준점(`search_nearby_places`) 한정이다
 - 이동정보(`transport_to_next` 등)는 **루트 생성 시점에 이미 계산·저장된 값을 그대로 재사용** — 이 도구가 호출될 때 Tmap 등 외부 API를 새로 부르지 않음. `transit_detail`(승하차 정류장별 상세 JSON)은 답변 길이를 짧게 유지하기 위해 의도적으로 제외(요약 문장인 `transit_summary`만 사용)
 - **`today_day`/`current_slot_order_index` 필드 (2026-07-06 추가)**: "오늘이 며칠째인지"는 원래 시스템 프롬프트 텍스트 힌트로만 전달됐는데, 모델이 그 힌트와 이 도구가 반환하는 전체 일정 덤프를 스스로 연결 짓지 못하고 "며칠째 여행 중이신가요?"라고 되묻는 문제가 실측됨(특히 이런 질문은 `_SONNET_KEYWORDS`에 안 걸려 기본 Haiku로 라우팅돼 문맥 연결이 더 약함). 도구 결과 자체에 `today_day`(현재 위치 추정이 `high`일 때만 값, 아니면 `null`)와 `current_slot_order_index`, 그리고 각 day 객체에 `is_today` 플래그를 직접 포함시켜 모델이 추론 없이 바로 답하도록 수정
 
@@ -188,6 +196,7 @@ Anthropic의 [tool use](https://docs.anthropic.com/) 기능으로 구현. LLM이
 | `places` | `search_nearby_places` 도구의 실제 장소 검색 대상 |
 | `route_slots` | `get_route_status` 도구의 Day별 장소 목록 |
 | `route_day_summaries` | `get_route_status` 도구의 Day별 요약 텍스트 |
+| `accommodations` | `get_route_status`의 숙소 목록 + `search_nearby_places`의 `origin="accommodation"` 검색 기준점 |
 
 ### Redis
 - **키 형식**: `chat:{user_id}:{route_id}`
