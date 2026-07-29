@@ -3,6 +3,7 @@ from datetime import date, datetime, time, timedelta
 from app.services.chat_service import _KST
 from app.services.proactive_service import (
     _RULES_PRE_TRIP,
+    _current_and_next,
     _rule_bookmark_nearby,
     _rule_budget_over,
     _rule_departure_soon,
@@ -440,3 +441,57 @@ def test_free_gap_reports_remaining_not_planned_gap():
     result = _rule_free_gap(_free_gap_snap((11, 30)))
     assert result is not None
     assert result["params"]["gapMinutes"] == 90
+
+
+# ============================================================
+# _current_and_next — T2·T7의 재료를 고르는 함수
+#
+# 이 함수의 동작을 여기 못박아 두는 이유가 있다. proactive의 _load_slots는
+# start_time 필터 없이 전 슬롯을 가져오는데 chat_service의 _estimate_current_slot은
+# start_time IS NOT NULL만 본다. 이 비대칭을 보고 "시간 미입력 슬롯을 건너뛰고
+# 그 다음을 next로 잡아야 한다"고 판단하기 쉽다(2026-07-29 코드 리뷰가 실제로
+# 그렇게 지적했다). 그건 오답이다 — 아래 테스트가 그 이유를 담고 있다.
+# ============================================================
+
+def _slot(order_index: int, start_time: time | None, place_name: str = "장소") -> dict:
+    """_current_and_next는 키 서브스크립트만 쓰므로 asyncpg.Record 대신 dict로 충분하다."""
+    return {
+        "order_index": order_index,
+        "start_time": start_time,
+        "place_name": place_name,
+        "duration_minutes": 60,
+        "transport_to_next": "transit",
+        "transport_minutes": 10,
+    }
+
+
+def test_current_and_next_does_not_skip_untimed_slot():
+    """시간 미입력 슬롯을 건너뛰고 그 다음을 next로 잡으면 안 된다.
+
+    transport_minutes는 '그 슬롯에서 바로 다음 슬롯까지'의 이동시간이다.
+    [10:00 A(→B 10분), (미입력) B, 14:00 C]에서 B를 건너뛰고 C를 next로 잡으면
+    _rule_departure_soon이 leave_by = 14:00 - 10분 = 13:50을 만드는데, 그 10분은
+    A→B 이동시간이라 실제로는 B를 거쳐 가야 하는 시간이 통째로 빠진다.
+    틀린 시각으로 알림을 띄우느니 안 띄우는 게 낫다 — 그래서 next를 그대로 넘기고
+    T2·T7의 FFE #8 가드가 스킵하게 둔다."""
+    today_slots = [_slot(0, time(10, 0), "A"), _slot(1, None, "B"), _slot(2, time(14, 0), "C")]
+    current, next_slot = _current_and_next(today_slots, {"confidence": "high", "order_index": 0})
+
+    assert current["start_time"] == time(10, 0)
+    assert next_slot["place_name"] == "B"      # C로 건너뛰면 안 된다
+    assert next_slot["start_time"] is None     # 시각을 모른 채로 넘어간다
+
+
+def test_current_and_next_none_when_confidence_low():
+    """위치 추정이 불확실하면 T2·T7의 재료를 아예 만들지 않는다."""
+    today_slots = [_slot(0, time(10, 0)), _slot(1, time(14, 0))]
+    assert _current_and_next(today_slots, {"confidence": "low"}) == (None, None)
+
+
+def test_current_and_next_none_for_last_slot():
+    """그날 마지막 슬롯이면 next가 없다."""
+    today_slots = [_slot(0, time(10, 0)), _slot(1, time(14, 0))]
+    current, next_slot = _current_and_next(today_slots, {"confidence": "high", "order_index": 1})
+
+    assert current["start_time"] == time(14, 0)
+    assert next_slot is None

@@ -341,6 +341,11 @@ def _select(candidates: list[dict]) -> dict | None:
 # ============================================================
 
 async def _load_slots(db: asyncpg.Pool, route_id: str) -> list[asyncpg.Record]:
+    # start_time IS NOT NULL 필터를 넣지 말 것. 이 목록은 시각과 무관한 규칙도 함께 쓴다 —
+    # _rule_empty_day의 슬롯 카운트, _rule_weather_alert의 실외 슬롯 카운트, P1의
+    # packed_day/long_walk 진단. 필터를 넣으면 수동 작성 루트(전 슬롯 start_time NULL)에서
+    # EMPTY_DAY가 오발동하고 outdoorCount가 0이 돼 T4가 통째로 스킵된다.
+    # 시각이 필요한 T2·T7은 _current_and_next와 각 규칙의 FFE #8 가드가 알아서 거른다.
     return await db.fetch(
         "SELECT rs.day_number, rs.order_index, rs.start_time, rs.duration_minutes, "
         "rs.transport_to_next, rs.transport_minutes, p.name AS place_name, p.category_tags "
@@ -426,7 +431,17 @@ async def _load_day_weather(
 
 def _current_and_next(today_slots: list[asyncpg.Record], estimated: dict) -> tuple[dict | None, dict | None]:
     """추정 현재 슬롯과 바로 다음 슬롯을 오늘 슬롯 목록에서 찾는다. T2·T7 전용 재료.
-    순수 함수 — DB 접근 없이 이미 로드된 today_slots에서만 찾는다."""
+    순수 함수 — DB 접근 없이 이미 로드된 today_slots에서만 찾는다.
+
+    next는 반드시 **바로 다음** 슬롯이다. start_time이 없어도 건너뛰지 않고 그대로 넘겨,
+    T2·T7의 FFE #8 가드가 스킵하게 둔다. 건너뛰면 안 되는 이유는 transport_minutes가
+    '그 슬롯에서 바로 다음 슬롯까지'의 이동시간이기 때문이다 — [A(→B 10분), B(시각없음),
+    C(14:00)]에서 B를 건너뛰면 leave_by = 14:00 - 10분이 되는데 그 10분은 A→B 값이라
+    B를 거쳐 가는 시간이 통째로 빠진다. 틀린 시각으로 알림을 띄우느니 안 띄우는 게 낫다.
+
+    참고: _estimate_current_slot(chat_service)은 start_time IS NOT NULL인 슬롯만 보는데
+    today_slots는 필터되지 않은 목록이라 두 쪽이 보는 범위가 다르다. current를 order_index
+    '값'으로 매칭하므로(인덱스가 아니라) 이 비대칭이 current 선택은 깨뜨리지 않는다."""
     if estimated["confidence"] != "high":
         return None, None
 

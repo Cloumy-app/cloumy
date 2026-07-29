@@ -164,21 +164,17 @@
 > **묶어서 처리하기 좋은 단위**: 1·2·6은 전부 `ai/app/services/proactive_service.py` 한 파일이고 단위 테스트로 검증 가능하다.
 > 3·5는 프론트 프로액티브 UI 한 덩어리다. 4는 성격이 보안이라 단독으로 다루는 게 맞다.
 
-### (번호추가) start_time이 NULL인 슬롯 하나가 T2·T7을 통째로 죽인다
-- **관련 태스크**: 2026-07-29 코드 리뷰 — 검증된 결함 10건 중 후속 수정 범위에서 제외
-- **파일**: `ai/app/services/proactive_service.py`(`_current_and_next`, `_load_slots`), `ai/app/services/chat_service.py`(`_estimate_current_slot`)
-- **현재 상태**: 두 함수가 **서로 다른 슬롯 목록을 본다**. `proactive_service._load_slots`는 `start_time` 필터 없이 전 슬롯을 가져오는데, `chat_service._estimate_current_slot`은 `WHERE ... AND rs.start_time IS NOT NULL`로 시간 있는 슬롯만 본다. 그래서 `_current_and_next`가 `today_slots[idx+1]`로 고른 "다음 슬롯"이 시간 미입력 슬롯일 수 있다.
-- **증상**: Day가 `[10:00 A, (시간 미입력) B, 14:00 C]`인 사용자가 11:00에 앱을 열면 next_slot이 B로 잡히고, `_rule_departure_soon`이 `next_slot["start_time"] is None`에서 즉시 None을 반환한다. 실제로는 14:00 C로 이동해야 해 13:20에 알림이 떠야 하지만, **시간 미입력 슬롯이 하나만 끼어도 그 사용자는 여행 내내 `DEPARTURE_SOON`(T2)·`FREE_GAP`(T7)을 한 번도 못 받는다.**
-- **해야 할 것**: `_current_and_next`가 다음 슬롯을 고를 때 `start_time`이 있는 것 중 첫 번째를 찾도록 수정. 두 함수가 같은 목록을 보게 통일하는 것이 근본 해법이지만, `_load_slots`는 `_rule_empty_day`의 슬롯 카운트에도 쓰이므로 필터를 그냥 추가하면 안 된다.
-- **우선순위**: 중간 — 기능 손실이고 발생 조건이 흔하다(시간 미입력 슬롯은 정상적인 사용 패턴)
+### ~~start_time이 NULL인 슬롯 하나가 T2·T7을 통째로 죽인다~~ — 확인 결과 **정상 동작**, 코드 변경 없음 (2026-07-29)
+2026-07-29 코드 리뷰가 결함으로 지적했고 이 문서에도 한때 "`_current_and_next`가 `start_time` 있는 첫 슬롯을 찾도록 수정"이라고 적었으나 **둘 다 오답이었다.** 같은 오판이 반복되지 않도록 근거를 남긴다.
 
-### (번호추가) FREE_GAP이 현재 시각을 안 봐서 미래 공백을 "지금 여유"로 안내한다
-- **관련 태스크**: 2026-07-29 코드 리뷰
-- **파일**: `ai/app/services/proactive_service.py`(`_rule_free_gap`)
-- **현재 상태**: `gap_minutes`를 계획상 `current_end`와 `next_start`만으로 계산하고 `snap["now"]`와 비교하지 않는다.
-- **증상**: 09:00 시작(2시간) → 13:00 다음 일정인 Day에 08:30에 앱을 열면, `_estimate_current_slot`이 첫 일정 전이라 `slots[0]`을 current로 잡고 gap=60분이 임계치를 넘어 FREE_GAP이 선택된다. 유저는 **아직 첫 일정도 시작 안 했는데 "다음 일정까지 60분 여유가 있어요"** 를 보게 되고, 정작 실제 공백인 11:00~13:00에는 그날 `dismissToday`가 이미 찍혀 배너가 안 뜬다.
-- **해야 할 것**: `current_end <= now < next_start` 조건을 추가한다. 규칙 함수는 순수 함수이므로 `snap["now"]`만 쓰면 되고 새 의존성은 없다.
-- **우선순위**: 중간 — 틀린 안내가 나가고, 그날의 정상 개입 기회까지 소모한다
+- **지적 내용**: `proactive_service._load_slots`는 `start_time` 필터 없이 전 슬롯을 가져오는데 `chat_service._estimate_current_slot`은 `start_time IS NOT NULL`만 본다. `_current_and_next`가 next를 `today_slots[idx+1]` 위치로 고르므로 그 자리가 시간 미입력 슬롯이면 T2·T7이 스킵된다.
+- **왜 결함이 아닌가 ① — 도달 경로가 없다**: `start_time`이 NULL이 되는 경로는 Java 5곳뿐인데 모두 Day 전체가 NULL이거나 맨 뒤다. 수동 작성 루트(`createManualSlots`)와 그 clone은 Day 전체 NULL → `_estimate_current_slot`이 빈 목록을 받아 `confidence: "low"` 반환 → T2·T6·T7이 애초에 스킵된다. 섞이는 유일한 경로인 미적용 고정 슬롯은 `order_index`가 임시값 `100_000+`이라 항상 그날 맨 뒤로 정렬된다. 지적이 예시로 든 "중간에 NULL이 끼는" 상태를 만드는 코드 경로가 없다.
+- **왜 결함이 아닌가 ② — 건너뛰면 오히려 틀린다**: `transport_minutes`는 '그 슬롯에서 **바로 다음** 슬롯까지'의 이동시간이다. `[10:00 A(→B 10분), (NULL) B, 14:00 C]`에서 B를 건너뛰고 C를 next로 잡으면 `leave_by = 14:00 - 10분 = 13:50`이 되는데 그 10분은 A→B 값이라 B를 거쳐 가는 시간이 통째로 빠진다. **틀린 시각으로 알림을 띄우느니 안 띄우는 게 낫다** — 지금의 FFE #8 가드가 그 판단이다.
+- **`_load_slots`에 필터를 넣으면 안 되는 이유**: 이 목록은 시각과 무관한 규칙도 함께 쓴다 — `_rule_empty_day` 슬롯 카운트, `_rule_weather_alert` 실외 카운트, P1의 `packed_day`/`long_walk`. 필터를 넣으면 수동 루트에서 EMPTY_DAY가 오발동하고 `outdoorCount`가 0이 돼 T4가 스킵된다.
+- **대신 한 것**: `_current_and_next` 회귀 테스트 3종 추가(이 함수는 테스트가 하나도 없었다) + `_current_and_next` 독스트링·`_load_slots` 주석에 위 근거 명시.
+
+### ~~FREE_GAP이 현재 시각을 안 봐서 미래 공백을 "지금 여유"로 안내한다~~ — 해결됨 (2026-07-29, `d241581`)
+`_rule_free_gap`에 `current_end <= now < next_start` 가드를 넣고 `gapMinutes`를 `next_start - now`(남은 여유)로 바꿨다. 가드만 넣으면 공백 한가운데서 이미 지나간 시간까지 세는 문제가 남는데, 문구가 "다음 일정까지 {{gapMinutes}}분 여유가 있어요"라 남은 시간을 말해야 맞다. 회귀 테스트 3종 추가.
 
 ### (번호추가) 챗봇 자동 개입이 한 번 대화하면 그 세션 내내 막힌다
 - **관련 태스크**: 2026-07-29 코드 리뷰
