@@ -41,6 +41,11 @@ TOOLS = [
                     "type": "integer",
                     "description": "검색 반경(미터). 지정 안 하면 1500m.",
                 },
+                "origin": {
+                    "type": "string",
+                    "enum": ["current", "accommodation"],
+                    "description": "검색 기준점. 사용자가 '숙소 근처'/'호텔 주변'처럼 숙소를 기준으로 물으면 'accommodation'. 그 외에는 생략(현재 위치 기준).",
+                },
             },
         },
     },
@@ -69,16 +74,18 @@ SYSTEM_PROMPT_TEMPLATE = """당신은 트리피(Tripy)의 여행 중 실시간 �
 [현재 여행 정보]
 - 목적지: {destination}
 - 기간: {start_date} ~ {end_date} ({nights}박 {nights_plus_1}일)
+- 오늘: {today_label}
 
 [규칙]
 1. 도구 호출 결과에 있는 장소/정보만 답변에 사용하세요. 실제로 존재하지 않는 장소를 지어내지 마세요.
 2. 도구가 필요 없는 단순 대화(인사, 잡담)는 도구 호출 없이 바로 답하세요.
-3. search_nearby_places를 쓸 때, [현재 위치 추정]이 있으면 그걸 기준으로 바로 호출하세요. 추정도 없고 사용자가 위치를 말한 적도 없다면 바로 호출하지 말고 먼저 지금 어디 계신지 물어보세요.
+3. search_nearby_places를 쓸 때, 사용자가 "숙소 근처"처럼 숙소를 기준으로 물으면 origin="accommodation"으로 호출하세요 — 숙소가 어디인지 사용자에게 되묻지 마세요. 그 외에는 [현재 위치 추정]이 있으면 그걸 기준으로 바로 호출하세요. 추정도 없고 사용자가 위치를 말한 적도 없다면 바로 호출하지 말고 먼저 지금 어디 계신지 물어보세요.
 4. 위치를 추정한 것뿐이라면(확답이 아니라면) 마치 정확히 아는 것처럼 말하지 말고 "아마", "~일 수 있어요" 같은 표현을 쓰세요.
 5. 답변은 2~3문장 이내로 간결하게 하세요.
 6. 사용자가 메시지에 쓴 언어로 답변하세요(한국어/영어/일본어/중국어 등 어떤 언어든). 언어가 애매하면(예: 지명만 입력) 사용자의 앱 설정 언어인 {fallback_language}로 답하세요.
 7. 마크다운 문법(**볼드**, - 목록, # 제목 등)을 절대 쓰지 말고 순수 텍스트로만 답하세요 — 이 답변은 마크다운을 렌더링하지 않는 채팅 화면에 그대로 표시됩니다.
-8. get_route_status 결과의 today_day/current_slot_order_index를 확인하면 그게 바로 "오늘"과 "지금 위치"입니다 — 사용자에게 며칠째인지 다시 묻지 말고, current_slot_order_index 바로 다음 순서(order)의 장소를 "다음 일정"으로 바로 답하세요. today_day가 null이면 그때만 언제 여행 중인지 물어보세요."""
+8. get_route_status 결과의 today_day/current_slot_order_index를 확인하면 그게 바로 "오늘"과 "지금 위치"입니다 — 사용자에게 며칠째인지 다시 묻지 말고, current_slot_order_index 바로 다음 순서(order)의 장소를 "다음 일정"으로 바로 답하세요. today_day가 null이어도 위 [현재 여행 정보]의 "오늘"이 며칠차인지 알려주므로, 여행 중인지 아닌지를 사용자에게 되묻지 마세요 — today_day가 null인 건 "지금 어느 장소에 있는지" 모른다는 뜻이지 여행 중이 아니라는 뜻이 아닙니다.
+9. 숙소 정보는 get_route_status의 accommodations와 각 day의 accommodation에 있습니다. 숙소를 사용자에게 되묻기 전에 이 도구를 먼저 호출하세요. 검색 결과의 origin.date_matched가 false면 그 숙소가 오늘 날짜와 맞지 않는다는 뜻이므로 "등록하신 OO 기준으로"처럼 근거를 밝히고 답하세요."""
 
 # 프론트 SupportedLanguage 코드 → 프롬프트에 넣을 자연어 이름 (앱 설정 언어 폴백 힌트용)
 _LANGUAGE_NAMES = {"ko": "한국어", "en": "English", "ja": "日本語", "zh": "中文"}
@@ -250,6 +257,50 @@ async def _estimate_current_slot(db: asyncpg.Pool, route: asyncpg.Record) -> dic
     }
 
 
+async def _load_accommodations(db: asyncpg.Pool, route_id: str) -> list[dict]:
+    """루트의 숙소 전부를 체크인 순으로. 좌표는 검색 기준점으로 바로 쓸 수 있게 (lng, lat)
+    분리해서 담는다. 프로액티브 _load_stay_distances와 같은 테이블을 보지만, 저쪽은
+    '거리'만 필요해 PostGIS 거리 계산을 하고 이쪽은 '어디인지'가 필요해 좌표·이름·날짜를
+    가져온다."""
+    rows = await db.fetch(
+        "SELECT name, check_in_date, check_out_date, "
+        "ST_X(location::geometry) AS lng, ST_Y(location::geometry) AS lat "
+        # id까지 정렬 기준에 넣는 이유: 같은 날짜에 숙소가 중복 등록돼도(검증 없음)
+        # 순서가 요청마다 흔들리지 않고 항상 고정된다 — 답이 매번 바뀌는 게 최악이다.
+        "FROM accommodations WHERE route_id = $1 ORDER BY check_in_date, id",
+        route_id,
+    )
+    return [
+        {
+            "name": r["name"],
+            "check_in_date": r["check_in_date"],
+            "check_out_date": r["check_out_date"],
+            "lng": float(r["lng"]),
+            "lat": float(r["lat"]),
+        }
+        for r in rows
+    ]
+
+
+def _resolve_stay(accommodations: list[dict], today: date) -> dict | None:
+    """오늘 밤 묵는 숙소를 정한다. 순수 함수 — DB 접근 없음.
+
+    날짜로 못 정하면 '숙소가 정확히 1곳뿐일 때만' 그걸 쓰고 date_matched=False로
+    표시한다 — 근거가 약하다는 걸 모델이 알아야 "등록하신 OO 기준으로"처럼 조용히
+    맞는 척하지 않고 근거를 밝힌 표현을 쓴다. 숙소가 여러 곳인데 날짜가 안 맞으면
+    임의로 하나를 고르지 않고 None을 반환한다 — 특정 불가는 특정 불가로 남긴다.
+
+    _estimate_current_slot의 day를 쓰지 않고 오늘 날짜를 직접 쓰는 이유: 슬롯 추정은
+    start_time이 있는 슬롯이 없으면 실패하는데, 숙소는 일정이 비어 있어도 정해져 있다
+    — 불필요한 실패 의존을 만들지 않는다."""
+    for a in accommodations:
+        if a["check_in_date"] <= today < a["check_out_date"]:
+            return {**a, "date_matched": True}
+    if len(accommodations) == 1:
+        return {**accommodations[0], "date_matched": False}
+    return None
+
+
 async def _tool_search_nearby_places(
     db: asyncpg.Pool,
     route: asyncpg.Record,
@@ -257,13 +308,24 @@ async def _tool_search_nearby_places(
     estimated_slot: dict,
     tool_input: dict,
 ) -> dict:
-    center = current_location
-    if center is None and estimated_slot.get("confidence") == "high":
-        center = estimated_slot["coords"]
-    if center is None:
-        center = CITY_CENTERS.get(route["destination"])
-    if center is None:
-        return {"places": [], "error": "위치 정보를 찾을 수 없습니다."}
+    if tool_input.get("origin") == "accommodation":
+        # enum 밖의 값은 이 비교에서 자연히 else로 떨어진다 — 분기 자체가 화이트리스트라
+        # 별도 검증 코드를 넣지 않는다.
+        stay = _resolve_stay(await _load_accommodations(db, route["id"]), datetime.now(_KST).date())
+        if stay is None:
+            # 예외를 던지면 대화가 끊긴다 — 빈 결과 + 안내 문구로 모델이 자연스럽게 대응하게 한다.
+            return {"places": [], "error": "등록된 숙소가 없어 숙소 기준으로 찾을 수 없습니다."}
+        center = (stay["lng"], stay["lat"])
+        origin_info = {"kind": "accommodation", "name": stay["name"], "date_matched": stay["date_matched"]}
+    else:
+        center = current_location
+        if center is None and estimated_slot.get("confidence") == "high":
+            center = estimated_slot["coords"]
+        if center is None:
+            center = CITY_CENTERS.get(route["destination"])
+        if center is None:
+            return {"places": [], "error": "위치 정보를 찾을 수 없습니다."}
+        origin_info = {"kind": "current"}
 
     candidates = await PostgisTagRetriever(
         db=db,
@@ -286,7 +348,9 @@ async def _tool_search_nearby_places(
                 "reason": reasons.get(doc.metadata["id"]) or describe_candidate(doc),
             }
             for doc in top_candidates
-        ]
+        ],
+        # 모델이 "남산힐호텔 근처에서 찾았어요"처럼 기준점을 밝힐 수 있게 함께 반환한다.
+        "origin": origin_info,
     }
 
 
@@ -360,6 +424,7 @@ async def _tool_get_route_status(db: asyncpg.Pool, route: asyncpg.Record, estima
         route["id"],
     )
     summary_by_day = {r["day_number"]: r["summary"] for r in summaries}
+    accommodations = await _load_accommodations(db, route["id"])
 
     days: dict[int, dict] = {}
     for s in slots:
@@ -380,6 +445,13 @@ async def _tool_get_route_status(db: asyncpg.Pool, route: asyncpg.Record, estima
     today_order_index = estimated_slot["order_index"] if estimated_slot["confidence"] == "high" else None
     for day_dict in days.values():
         day_dict["is_today"] = day_dict["day"] == today_day
+        # Day N의 날짜 = start_date + (N-1)일 — _load_stay_distances의 date-range 조인과 동일 기준.
+        # date_matched=True일 때만 이름을 채운다. 여기서 "1곳 폴백"까지 쓰면 "모든 Day의
+        # 숙소가 남산힐호텔"이라는 틀린 단정이 된다 — 폴백은 검색 기준점(_tool_search_nearby_places)
+        # 한정이다. 최상위 accommodations에 전체 목록이 있으니 모델은 무엇이 등록됐는지 항상 본다.
+        day_date = route["start_date"] + timedelta(days=day_dict["day"] - 1)
+        stay = _resolve_stay(accommodations, day_date)
+        day_dict["accommodation"] = stay["name"] if stay and stay["date_matched"] else None
 
     return {
         "destination": route["destination"],
@@ -387,6 +459,14 @@ async def _tool_get_route_status(db: asyncpg.Pool, route: asyncpg.Record, estima
         "end_date": route["end_date"].isoformat(),
         "today_day": today_day,
         "current_slot_order_index": today_order_index,
+        "accommodations": [  # 좌표는 제외 — 모델에 불필요
+            {
+                "name": a["name"],
+                "check_in_date": a["check_in_date"].isoformat(),
+                "check_out_date": a["check_out_date"].isoformat(),
+            }
+            for a in accommodations
+        ],
         "days": [days[k] for k in sorted(days)],
     }
 
@@ -435,16 +515,36 @@ async def handle_chat(
             "근처일 가능성이 높습니다(시간 기반 추정이라 확실친 않음)."
         )
     else:
+        # 숙소 예외를 명시하는 이유: 이 문장이 규칙 3("숙소 기준이면 origin=accommodation")을
+        # 이겨서, 숙소를 이미 알고 있는데도 "지금 어디 계세요?"라고 되묻는 게 실측됐다.
+        # 숙소 기준 질문은 애초에 현재 위치가 필요 없다 — 예외를 여기 같이 적어야 안 진다.
         location_hint = (
             "\n\n[현재 위치 추정] 알 수 없습니다. 위치가 필요한 질문이면 추측하지 말고 "
-            "사용자에게 지금 어디 있는지 먼저 물어보세요."
+            "사용자에게 지금 어디 있는지 먼저 물어보세요. 단 '숙소 근처'처럼 숙소를 기준으로 "
+            "묻는 경우는 예외입니다 — 현재 위치가 필요 없으므로 되묻지 말고 "
+            "search_nearby_places를 origin=\"accommodation\"으로 호출하세요."
         )
+
+    # 오늘이 며칠차인지 프롬프트에 직접 넣는다. 이게 없으면 모델은 여행 기간만 보고
+    # today_day(위치 추정 성공 시에만 채워짐)가 null일 때 "아직 여행 중이 아니시네요"라고
+    # 단정한다 — 마지막 일정이 끝난 밤 시간대에 항상 그렇게 되는데, 숙소 기준 질문이
+    # 가장 많이 나올 시간대가 정확히 거기다(실측). 프로액티브는 now를 알고 판단하는데
+    # 챗봇만 오늘이 언제인지 몰랐던 것도 같은 불일치다.
+    today_kst = datetime.now(_KST).date()
+    day_number = (today_kst - route["start_date"]).days + 1
+    today_label = (
+        f"{today_kst.isoformat()} — 여행 {day_number}일차 (여행 중)"
+        if 1 <= day_number <= route["nights"] + 1
+        else f"{today_kst.isoformat()} — 여행 기간이 아님"
+    )
+
     system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
         destination=route["destination"],
         start_date=route["start_date"].isoformat(),
         end_date=route["end_date"].isoformat(),
         nights=route["nights"],
         nights_plus_1=route["nights"] + 1,
+        today_label=today_label,
         fallback_language=_LANGUAGE_NAMES.get(language, "한국어"),
     ) + location_hint
 
