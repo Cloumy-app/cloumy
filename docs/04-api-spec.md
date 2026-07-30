@@ -164,6 +164,24 @@ AI 루트 생성 (스트리밍 응답)
 #### DELETE /routes/{routeId}/slots/{slotId}
 슬롯 제거 (AI가 빈 슬롯 자동 채우기)
 
+#### POST /routes/{routeId}/slots
+슬롯 삽입 — 챗봇 추천 카드를 일정에 넣을 때 쓴다
+
+```json
+// 요청
+{
+  "afterSlotId": "uuid | null",  // null이면 dayNumber 맨 앞에 삽입
+  "dayNumber": 2,                // 필수 — afterSlotId가 null일 때 어느 Day인지
+  "placeId": "uuid",
+  "reason": "추천 이유 한 줄 (선택, 슬롯 tips에 저장돼 카드에 표시됨)"
+}
+// 응답 200: 해당 루트의 갱신된 전체 슬롯 목록
+```
+
+> **`afterSlotId`가 nullable인 이유 (2026-07-30)**: 사용자가 챗봇에 "경복궁 **가기 전에** 카페 들르고 싶어"라고 했을 때 경복궁이 그날 첫 일정이면 맨 앞에 넣어야 하는데, `@NotNull afterSlotId`로는 표현할 방법이 없었다. 빈 Day도 마찬가지. `dayNumber`는 `afterSlotId` 유무와 관계없이 **항상 필수** — 유무에 따라 필수 필드가 달라지면 클라이언트가 헷갈린다.
+>
+> 삽입 시 그 Day 뒤쪽 슬롯들의 `order_index`가 밀리고 시작 시각이 전부 재계산된다. 앞뒤 이웃의 이동정보도 다시 계산한다.
+
 #### GET /routes
 내 루트 목록 (정렬: display_order ASC — 수동 드래그 정렬 반영)
 
