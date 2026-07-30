@@ -31,7 +31,7 @@ export function ProactiveBanner({ routeId }: { routeId: string }) {
   const handleTap = () => {
     dismissToday(routeId, intervention.type);
     sendProactiveFeedback(routeId, intervention.type, 'tapped');
-    seedFromProactive(intervention.type, asI18nParams(intervention.params), text);
+    seedFromProactive(routeId, intervention.type, asI18nParams(intervention.params), text);
     router.push('/chat' as never);
   };
 

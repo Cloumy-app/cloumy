@@ -5,7 +5,7 @@ import type { TFunction } from 'i18next';
 import { Search, MapPin, Sparkles, Navigation, Calendar } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { getMyRoutes } from '@/lib/api/routes';
+import { getActiveRoute } from '@/lib/api/routes';
 import { getTripStatusLabel } from '@/lib/date';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { ProactiveBanner } from '@/components/route/ProactiveBanner';
@@ -87,13 +87,13 @@ function EmptyTripCard({ t }: { t: TFunction }) {
 export default function HomeScreen() {
   const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['routes', 'list'],
-    queryFn: () => getMyRoutes(0, 5),
+  // display_order 목록 첫 항목 대신 서버가 판정한 활성 루트(진행 중 → 가장 가까운 예정)를 쓴다.
+  // 챗봇과 같은 쿼리 키를 공유해 두 화면이 항상 같은 루트를 가리키게 한다(계획 Step 2-2).
+  const { data: upcomingRoute, isLoading, isError, refetch } = useQuery({
+    queryKey: ['routes', 'active'],
+    queryFn: getActiveRoute,
     staleTime: 1000 * 60 * 2,
   });
-
-  const upcomingRoute = data?.content[0] ?? null;
   const initial = user?.nickname?.charAt(0).toUpperCase() ?? 'C';
 
   return (

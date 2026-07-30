@@ -23,6 +23,7 @@
       "first_slot": "第一个行程是{{time}}的{{placeName}}"
     },
     "FLIGHT_DEPARTURE": "该准备出发了！最好在{{leaveByTime}}前出发。",
+    "RETURN_DEPARTURE": "今天是返程的日子！最好在{{leaveByTime}}前出发前往机场。",
     "DEPARTURE_SOON": "{{minutesLeft}}分钟后需要出发了（距{{nextPlaceName}}还需{{transportMinutes}}分钟）",
     "EMPTY_DAY": "今天（第{{day}}天）还没有安排行程，附近有什么想去的地方吗？",
     "WEATHER_ALERT": {
@@ -155,9 +156,12 @@
     "reorderFailedBody": "未能保存新的行程顺序，请重试。",
     "shareToggleFailedTitle": "共享设置修改失败",
     "shareToggleFailedBody": "请稍后重试。",
-    "departureLabel": "出发日期时间",
+    "departureLabel": "去程日期时间",
     "departureHint": "设置后可以收到出发前的提醒（可选）",
-    "departureClear": "清除出发日期时间"
+    "departureClear": "清除去程日期时间",
+    "returnLabel": "返程日期时间",
+    "returnHint": "设置后可以收到返程前的提醒（可选）",
+    "returnClear": "清除返程日期时间"
   },
   "routeCreateImport": {
     "headerTitle": "从共享路线导入",

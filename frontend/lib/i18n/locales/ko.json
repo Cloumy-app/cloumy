@@ -23,6 +23,7 @@
       "first_slot": "첫 일정은 {{time}} {{placeName}}이에요"
     },
     "FLIGHT_DEPARTURE": "슬슬 나가야 해요! {{leaveByTime}}까지는 출발하는 게 좋아요.",
+    "RETURN_DEPARTURE": "돌아가는 날이에요! {{leaveByTime}}까지는 공항으로 출발하세요.",
     "DEPARTURE_SOON": "{{minutesLeft}}분 뒤엔 나가셔야 해요 ({{nextPlaceName}}까지 {{transportMinutes}}분)",
     "EMPTY_DAY": "오늘(Day {{day}})은 일정이 비어 있어요. 근처 뭘 볼까요?",
     "WEATHER_ALERT": {
@@ -155,9 +156,12 @@
     "reorderFailedBody": "일정 순서를 저장하지 못했어요. 다시 시도해주세요.",
     "shareToggleFailedTitle": "공유 설정 변경 실패",
     "shareToggleFailedBody": "잠시 후 다시 시도해주세요.",
-    "departureLabel": "출국 일시",
-    "departureHint": "설정하면 출국 준비 알림을 받을 수 있어요 (선택)",
-    "departureClear": "출국 일시 지우기"
+    "departureLabel": "가는 편 일시",
+    "departureHint": "설정하면 가는 편 준비 알림을 받을 수 있어요 (선택)",
+    "departureClear": "가는 편 일시 지우기",
+    "returnLabel": "오는 편 일시",
+    "returnHint": "설정하면 귀가 준비 알림을 받을 수 있어요 (선택)",
+    "returnClear": "오는 편 일시 지우기"
   },
   "routeCreateImport": {
     "headerTitle": "공유 루트에서 가져오기",

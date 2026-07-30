@@ -31,9 +31,10 @@ _HEAT_C, _COLD_C = 33.0, -5.0  # P1·T4
 _PACKED_SLOTS, _PACKED_TRANSPORT_MIN = 5, 180  # P1
 _FAR_FROM_STAY_M = 8000  # P1 — 직선거리(이동시간 계산 불가, 근사치로 충분)
 _LONG_WALK_MIN = 40  # P1
-_AIRPORT_MINUTES = {"서울": 90, "부산": 60, "제주": 30}  # T1
-_AIRPORT_MINUTES_DEFAULT = 90  # T1 — 표에 없는 도시
-_CHECKIN_BUFFER_MIN = 120  # T1
+_AIRPORT_MINUTES = {"서울": 90, "부산": 60, "제주": 30}  # T1·RETURN
+_AIRPORT_MINUTES_DEFAULT = 90  # T1·RETURN — 표에 없는 도시
+_CHECKIN_BUFFER_MIN = 120  # T1·RETURN
+_FLIGHT_WINDOW_MIN = 60  # T1·RETURN — leave_by까지 남은 시간이 이 안이면 발동
 
 
 def _trip_phase(route: asyncpg.Record, now: datetime) -> str:
@@ -53,6 +54,16 @@ def _trip_phase(route: asyncpg.Record, now: datetime) -> str:
 def _combine(d: date, t: time) -> datetime:
     """route_slots.start_time(TIME, naive)을 날짜와 합쳐 KST aware datetime으로 만든다."""
     return datetime.combine(d, t, tzinfo=_KST)
+
+
+def _flight_leave_by(snap: dict, at_key: str) -> datetime | None:
+    """항공편 출발 시각(departure_at 또는 return_at)에서 '집을 나서야 하는 시각'을 역산한다.
+    가는 편/오는 편이 같은 계산이라 T1·RETURN_DEPARTURE가 함께 쓰는 헬퍼다. 미입력이면 None."""
+    at = snap["route"][at_key]
+    if at is None:
+        return None  # FFE #5 — 선택 입력이라 미입력이면 해당 규칙만 스킵
+    airport_minutes = _AIRPORT_MINUTES.get(snap["route"]["destination"], _AIRPORT_MINUTES_DEFAULT)
+    return at - timedelta(minutes=airport_minutes + _CHECKIN_BUFFER_MIN)
 
 
 # ============================================================
@@ -138,21 +149,37 @@ def _rule_pre_trip_briefing(snap: dict) -> dict | None:
 
 def _rule_flight_departure(snap: dict) -> dict | None:
     """T1. 출국 준비 — 실패 비용이 가장 큰 규칙이라 우선순위 1위.
-    departure_at − 공항이동(도시별 근사) − 체크인 버퍼 − now 가 0~60분이면 발동."""
-    departure_at = snap["route"]["departure_at"]
-    if departure_at is None:
+    leave_by(_flight_leave_by)까지 남은 시간이 0~_FLIGHT_WINDOW_MIN분이면 발동."""
+    leave_by = _flight_leave_by(snap, "departure_at")
+    if leave_by is None:
         return None  # FFE #5 — 미입력(선택 입력)이면 T1만 스킵
 
-    airport_minutes = _AIRPORT_MINUTES.get(snap["route"]["destination"], _AIRPORT_MINUTES_DEFAULT)
-    leave_by = departure_at - timedelta(minutes=airport_minutes + _CHECKIN_BUFFER_MIN)
     minutes_left = (leave_by - snap["now"]).total_seconds() / 60
-    if not (0 <= minutes_left <= 60):
+    if not (0 <= minutes_left <= _FLIGHT_WINDOW_MIN):
         return None
 
     return {
         "type": "FLIGHT_DEPARTURE",
         "priority": 1,
-        "params": {"departureAt": departure_at.isoformat(), "leaveByTime": leave_by.isoformat()},
+        "params": {"departureAt": snap["route"]["departure_at"].isoformat(), "leaveByTime": leave_by.isoformat()},
+    }
+
+
+def _rule_return_departure(snap: dict) -> dict | None:
+    """RETURN. 귀가 준비 — T1(가는 편)과 대칭인 오는 편 규칙. 우선순위도 T1과 동일하게 1위다
+    (실패 비용이 똑같이 크다 — 비행기를 놓치는 건 가는 편이든 오는 편이든 같은 무게다)."""
+    leave_by = _flight_leave_by(snap, "return_at")
+    if leave_by is None:
+        return None  # FFE #4 — 오는 편은 가는 편과 독립적인 선택 입력이라 미입력이면 이 규칙만 스킵
+
+    minutes_left = (leave_by - snap["now"]).total_seconds() / 60
+    if not (0 <= minutes_left <= _FLIGHT_WINDOW_MIN):
+        return None
+
+    return {
+        "type": "RETURN_DEPARTURE",
+        "priority": 1,
+        "params": {"returnAt": snap["route"]["return_at"].isoformat(), "leaveByTime": leave_by.isoformat()},
     }
 
 
@@ -254,7 +281,7 @@ def _rule_bookmark_nearby(snap: dict) -> dict | None:
 
 
 def _rule_free_gap(snap: dict) -> dict | None:
-    """T7. 현재 슬롯 종료 후 다음 슬롯까지 공백이 크면 개입. 위치 추정에 의존한다."""
+    """T7. 지금 다음 슬롯까지 남은 여유가 크면 개입. 위치 추정에 의존한다."""
     if snap["estimated"]["confidence"] != "high":
         return None
     current, next_slot = snap.get("current_slot"), snap.get("next_slot")
@@ -267,7 +294,15 @@ def _rule_free_gap(snap: dict) -> dict | None:
         minutes=current["duration_minutes"] or 120
     )
     next_start = _combine(snap["today_date"], next_slot["start_time"])
-    gap_minutes = (next_start - current_end).total_seconds() / 60
+
+    # 계획상 공백이 아니라 '지금 남은 여유'를 본다. 계획 시각만 보면 두 가지가 틀어진다 —
+    # _estimate_current_slot이 첫 일정 시작 전에도 slots[0]을 high로 잡아주므로 아침에
+    # 열어도 발동해 그날 dismiss를 소모해버리고(정작 실제 공백엔 안 뜬다), 공백 한가운데선
+    # 이미 지나간 시간까지 여유로 세어 과대 안내가 된다.
+    if not (current_end <= snap["now"] < next_start):
+        return None
+    gap_minutes = (next_start - snap["now"]).total_seconds() / 60
+
     threshold = (current["transport_minutes"] or 0) + _FREE_GAP_EXTRA_MIN
     if gap_minutes < threshold:
         return None
@@ -275,9 +310,14 @@ def _rule_free_gap(snap: dict) -> dict | None:
     return {"type": "FREE_GAP", "priority": 7, "params": {"gapMinutes": round(gap_minutes)}}
 
 
-_RULES_PRE_TRIP = [_rule_pre_trip_briefing]
+# pre_trip에도 T1을 등록한다 — 새벽 항공편은 leave_by가 D-1로 넘어가버려 during 진입 전에
+# 이미 발동 창이 열려 있을 수 있다(리뷰 9번 회귀 방지). T1과 P1(_rule_pre_trip_briefing)은
+# 둘 다 priority=1로 동점인데, _select가 min()이라 동점이면 리스트에서 먼저 나온 쪽이 이긴다.
+# 그래서 T1을 앞에 둔다 — "지금 나가야 해요"가 "짐 싸세요" 브리핑보다 급하다(FFE #5).
+_RULES_PRE_TRIP = [_rule_flight_departure, _rule_pre_trip_briefing]
 _RULES_DURING = [
     _rule_flight_departure,
+    _rule_return_departure,
     _rule_departure_soon,
     _rule_empty_day,
     _rule_weather_alert,
@@ -301,6 +341,11 @@ def _select(candidates: list[dict]) -> dict | None:
 # ============================================================
 
 async def _load_slots(db: asyncpg.Pool, route_id: str) -> list[asyncpg.Record]:
+    # start_time IS NOT NULL 필터를 넣지 말 것. 이 목록은 시각과 무관한 규칙도 함께 쓴다 —
+    # _rule_empty_day의 슬롯 카운트, _rule_weather_alert의 실외 슬롯 카운트, P1의
+    # packed_day/long_walk 진단. 필터를 넣으면 수동 작성 루트(전 슬롯 start_time NULL)에서
+    # EMPTY_DAY가 오발동하고 outdoorCount가 0이 돼 T4가 통째로 스킵된다.
+    # 시각이 필요한 T2·T7은 _current_and_next와 각 규칙의 FFE #8 가드가 알아서 거른다.
     return await db.fetch(
         "SELECT rs.day_number, rs.order_index, rs.start_time, rs.duration_minutes, "
         "rs.transport_to_next, rs.transport_minutes, p.name AS place_name, p.category_tags "
@@ -386,7 +431,17 @@ async def _load_day_weather(
 
 def _current_and_next(today_slots: list[asyncpg.Record], estimated: dict) -> tuple[dict | None, dict | None]:
     """추정 현재 슬롯과 바로 다음 슬롯을 오늘 슬롯 목록에서 찾는다. T2·T7 전용 재료.
-    순수 함수 — DB 접근 없이 이미 로드된 today_slots에서만 찾는다."""
+    순수 함수 — DB 접근 없이 이미 로드된 today_slots에서만 찾는다.
+
+    next는 반드시 **바로 다음** 슬롯이다. start_time이 없어도 건너뛰지 않고 그대로 넘겨,
+    T2·T7의 FFE #8 가드가 스킵하게 둔다. 건너뛰면 안 되는 이유는 transport_minutes가
+    '그 슬롯에서 바로 다음 슬롯까지'의 이동시간이기 때문이다 — [A(→B 10분), B(시각없음),
+    C(14:00)]에서 B를 건너뛰면 leave_by = 14:00 - 10분이 되는데 그 10분은 A→B 값이라
+    B를 거쳐 가는 시간이 통째로 빠진다. 틀린 시각으로 알림을 띄우느니 안 띄우는 게 낫다.
+
+    참고: _estimate_current_slot(chat_service)은 start_time IS NOT NULL인 슬롯만 보는데
+    today_slots는 필터되지 않은 목록이라 두 쪽이 보는 범위가 다르다. current를 order_index
+    '값'으로 매칭하므로(인덱스가 아니라) 이 비대칭이 current 선택은 깨뜨리지 않는다."""
     if estimated["confidence"] != "high":
         return None, None
 

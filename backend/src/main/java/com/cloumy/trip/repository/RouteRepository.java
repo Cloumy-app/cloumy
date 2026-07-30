@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -80,4 +81,16 @@ public interface RouteRepository extends JpaRepository<Route, UUID> {
               AND tags && string_to_array(:themesCsv, ',')
             """, nativeQuery = true)
     long countByUserIdAndThemesOverlap(@Param("userId") UUID userId, @Param("themesCsv") String themesCsv);
+
+    // 활성 루트 판정 — 오늘이 여행 기간에 걸치는 루트. 겹치는 게 여러 개면 먼저 시작한 것이
+    // 진행 중인 여행이다(Pageable(0,1)로 한 건만 가져와 이 순서를 강제).
+    @Query("SELECT r FROM Route r WHERE r.userId = :userId "
+            + "AND r.startDate <= :today AND r.endDate >= :today ORDER BY r.startDate ASC")
+    List<Route> findOngoing(@Param("userId") UUID userId, @Param("today") LocalDate today, Pageable pageable);
+
+    // 활성 루트 판정 — 진행 중인 여행이 없을 때만 호출된다. 아직 시작 안 한 것 중 가장 가까운 것
+    // (D-1 브리핑(P1)이 이 경로로 잡힌다).
+    @Query("SELECT r FROM Route r WHERE r.userId = :userId "
+            + "AND r.startDate > :today ORDER BY r.startDate ASC")
+    List<Route> findUpcoming(@Param("userId") UUID userId, @Param("today") LocalDate today, Pageable pageable);
 }

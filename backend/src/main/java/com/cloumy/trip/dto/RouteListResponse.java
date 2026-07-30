@@ -2,6 +2,7 @@ package com.cloumy.trip.dto;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 public record RouteListResponse(
@@ -13,5 +14,6 @@ public record RouteListResponse(
         int nights,
         LocalDateTime createdAt,
         boolean isPublic,
-        LocalDateTime departureAt
+        OffsetDateTime departureAt,
+        OffsetDateTime returnAt
 ) {}

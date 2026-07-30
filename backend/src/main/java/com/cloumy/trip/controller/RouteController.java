@@ -2,6 +2,7 @@ package com.cloumy.trip.controller;
 
 import com.cloumy.auth.security.CloudmyUserDetails;
 import com.cloumy.common.response.ApiResponse;
+import com.cloumy.trip.dto.ActiveRouteResponse;
 import com.cloumy.trip.dto.DaySummaryResponse;
 import com.cloumy.trip.dto.ManualRouteCreateRequest;
 import com.cloumy.trip.dto.PublicRouteResponse;
@@ -11,6 +12,7 @@ import com.cloumy.trip.dto.RouteGenRequest;
 import com.cloumy.trip.dto.RouteListResponse;
 import com.cloumy.trip.dto.SlotResponse;
 import com.cloumy.trip.dto.UpdateDepartureRequest;
+import com.cloumy.trip.dto.UpdateReturnRequest;
 import com.cloumy.trip.dto.UpdateVisibilityRequest;
 import com.cloumy.trip.entity.Route;
 import com.cloumy.trip.service.AiServiceClient;
@@ -69,6 +71,16 @@ public class RouteController {
         return ApiResponse.ok(routeService.getMyRoutes(userId, pageable));
     }
 
+    // 활성 루트 판정 — 홈·챗봇이 display_order 첫 항목 대신 이 판정을 함께 쓴다.
+    // "/routes/{routeId}"와 경로가 겹치지만 PathPatternParser는 리터럴을 항상 우선한다(선언 순서 무관).
+    @GetMapping("/routes/active")
+    public ApiResponse<ActiveRouteResponse> getActiveRoute(
+            @AuthenticationPrincipal CloudmyUserDetails user
+    ) {
+        UUID userId = UUID.fromString(user.userId());
+        return ApiResponse.ok(routeService.getActiveRoute(userId));
+    }
+
     @GetMapping("/routes/{routeId}")
     public ApiResponse<RouteListResponse> getRoute(
             @PathVariable UUID routeId,
@@ -125,6 +137,18 @@ public class RouteController {
     ) {
         UUID userId = UUID.fromString(user.userId());
         routeService.updateDepartureAt(routeId, userId, req.departureAt());
+        return ApiResponse.ok(null);
+    }
+
+    // RETURN_DEPARTURE 규칙 전제 — 선택 입력. body의 returnAt이 null이면 미입력 상태로 되돌린다.
+    @PatchMapping("/routes/{routeId}/return")
+    public ApiResponse<Void> updateReturn(
+            @PathVariable UUID routeId,
+            @RequestBody @Valid UpdateReturnRequest req,
+            @AuthenticationPrincipal CloudmyUserDetails user
+    ) {
+        UUID userId = UUID.fromString(user.userId());
+        routeService.updateReturnAt(routeId, userId, req.returnAt());
         return ApiResponse.ok(null);
     }
 

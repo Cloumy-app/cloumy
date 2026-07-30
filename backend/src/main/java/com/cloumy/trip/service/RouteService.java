@@ -4,6 +4,7 @@ import com.cloumy.common.exception.BusinessException;
 import com.cloumy.common.response.ErrorCode;
 import com.cloumy.payment.service.PassValidationService;
 import com.cloumy.trip.dto.AccommodationCreateRequest;
+import com.cloumy.trip.dto.ActiveRouteResponse;
 import com.cloumy.trip.dto.ManualRouteCreateRequest;
 import com.cloumy.trip.dto.PublicRouteResponse;
 import com.cloumy.trip.dto.RouteGenRequest;
@@ -15,12 +16,14 @@ import com.cloumy.trip.repository.RouteBookmarkRepository;
 import com.cloumy.trip.repository.RouteRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
@@ -40,35 +43,31 @@ public class RouteService {
 
     public Page<RouteListResponse> getMyRoutes(UUID userId, Pageable pageable) {
         return routeRepository.findByUserIdOrderByDisplayOrderAsc(userId, pageable)
-                .map(r -> new RouteListResponse(
-                        r.getId(), r.getTitle(), r.getDestination(),
-                        r.getStartDate(), r.getEndDate(), r.getNights(),
-                        r.getCreatedAt(), r.isPublic(), r.getDepartureAt()
-                ));
+                .map(this::toListResponse);
     }
 
     public RouteListResponse getRoute(UUID routeId, UUID userId) {
-        Route route = routeRepository.findById(routeId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
-        if (!route.getUserId().equals(userId)) {
-            throw new BusinessException(ErrorCode.ROUTE_ACCESS_DENIED);
-        }
-        return new RouteListResponse(
-                route.getId(), route.getTitle(), route.getDestination(),
-                route.getStartDate(), route.getEndDate(), route.getNights(),
-                route.getCreatedAt(), route.isPublic(), route.getDepartureAt()
-        );
+        Route route = findOwned(routeId, userId);
+        return toListResponse(route);
     }
 
     // 프로액티브 T1(출국 준비) 전제 — 선택 입력, null로 다시 지울 수도 있다(미입력 상태로 되돌림)
     @Transactional
-    public void updateDepartureAt(UUID routeId, UUID userId, LocalDateTime departureAt) {
-        Route route = routeRepository.findById(routeId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
-        if (!route.getUserId().equals(userId)) {
-            throw new BusinessException(ErrorCode.ROUTE_ACCESS_DENIED);
-        }
+    public void updateDepartureAt(UUID routeId, UUID userId, OffsetDateTime departureAt) {
+        Route route = findOwned(routeId, userId);
         route.updateDepartureAt(departureAt);
+    }
+
+    // RETURN_DEPARTURE 규칙 전제 — 선택 입력. 오는 편이 가는 편보다 이르면 사용자 실수다 —
+    // 알림 시각이 과거로 계산돼 영원히 안 뜬다
+    @Transactional
+    public void updateReturnAt(UUID routeId, UUID userId, OffsetDateTime returnAt) {
+        Route route = findOwned(routeId, userId);
+        if (returnAt != null && route.getDepartureAt() != null
+                && returnAt.isBefore(route.getDepartureAt())) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "오는 편은 가는 편보다 늦어야 합니다");
+        }
+        route.updateReturnAt(returnAt);
     }
 
     @Transactional
@@ -116,14 +115,10 @@ public class RouteService {
         return saved;
     }
 
-    // 공유 루트 가져오기 — 공개 토글은 소유자만 가능(deleteRoute와 동일한 인라인 소유자 체크 패턴)
+    // 공유 루트 가져오기 — 공개 토글은 소유자만 가능
     @Transactional
     public void updateVisibility(UUID routeId, UUID userId, boolean isPublic) {
-        Route route = routeRepository.findById(routeId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
-        if (!route.getUserId().equals(userId)) {
-            throw new BusinessException(ErrorCode.ROUTE_ACCESS_DENIED);
-        }
+        Route route = findOwned(routeId, userId);
         route.updateVisibility(isPublic);
     }
 
@@ -181,9 +176,7 @@ public class RouteService {
         routeSlotService.cloneSlots(routeId, saved.getId());
         original.incrementSaveCount();
 
-        return new RouteListResponse(saved.getId(), saved.getTitle(), saved.getDestination(),
-                saved.getStartDate(), saved.getEndDate(), saved.getNights(), saved.getCreatedAt(),
-                saved.isPublic(), saved.getDepartureAt());
+        return toListResponse(saved);
     }
 
     // 루트/커뮤니티 탭 신설 — 수동 작성 폼 제출 시 즉시 공개 루트로 생성
@@ -215,9 +208,7 @@ public class RouteService {
 
         routeSlotService.createManualSlots(saved.getId(), req.slots());
 
-        return new RouteListResponse(saved.getId(), saved.getTitle(), saved.getDestination(),
-                saved.getStartDate(), saved.getEndDate(), saved.getNights(), saved.getCreatedAt(),
-                true, saved.getDepartureAt());
+        return toListResponse(saved);
     }
 
     // 공유 루트 가져오기 — 새 루트 생성 성공 후 가져온 원본 루트들의 save_count 증가.
@@ -233,11 +224,7 @@ public class RouteService {
 
     @Transactional
     public void deleteRoute(UUID routeId, UUID userId) {
-        Route route = routeRepository.findById(routeId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
-        if (!route.getUserId().equals(userId)) {
-            throw new BusinessException(ErrorCode.ROUTE_ACCESS_DENIED);
-        }
+        Route route = findOwned(routeId, userId);
         routeRepository.delete(route);
     }
 
@@ -265,11 +252,41 @@ public class RouteService {
 
         return routeRepository.findByUserIdOrderByDisplayOrderAsc(userId)
                 .stream()
-                .map(r -> new RouteListResponse(
-                        r.getId(), r.getTitle(), r.getDestination(),
-                        r.getStartDate(), r.getEndDate(), r.getNights(),
-                        r.getCreatedAt(), r.isPublic(), r.getDepartureAt()
-                ))
+                .map(this::toListResponse)
                 .toList();
+    }
+
+    // 활성 루트 판정 — "지금 도와줄 여행이 무엇인가"를 목록 정렬(display_order)이 아니라
+    // 날짜 기준으로 직접 고른다. 진행 중이 있으면 그걸 쓰고, 없을 때만 다가올 여행을 조회한다
+    // (진행 중이 있는데도 두 번째 쿼리를 매번 날릴 이유가 없다).
+    public ActiveRouteResponse getActiveRoute(UUID userId) {
+        // AI의 _KST와 같은 이유로 명시 — 도커 컨테이너는 UTC라 LocalDate.now()만 쓰면 자정 근처에 하루 어긋난다
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
+        Pageable one = PageRequest.of(0, 1);
+
+        List<Route> ongoing = routeRepository.findOngoing(userId, today, one);
+        List<Route> found = ongoing.isEmpty() ? routeRepository.findUpcoming(userId, today, one) : ongoing;
+
+        return new ActiveRouteResponse(found.isEmpty() ? null : toListResponse(found.get(0)));
+    }
+
+    // new RouteListResponse(...) 5곳 중복 제거용 헬퍼
+    private RouteListResponse toListResponse(Route r) {
+        return new RouteListResponse(
+                r.getId(), r.getTitle(), r.getDestination(),
+                r.getStartDate(), r.getEndDate(), r.getNights(),
+                r.getCreatedAt(), r.isPublic(), r.getDepartureAt(), r.getReturnAt()
+        );
+    }
+
+    // 소유권 검증(findById + ROUTE_NOT_FOUND + userId 비교 + ROUTE_ACCESS_DENIED) 중복 제거용 헬퍼.
+    // cloneRoute(공개 여부 검사)와 reorderRoutes(루프 안에서 여러 건 검증)는 성격이 달라 대상에서 제외.
+    private Route findOwned(UUID routeId, UUID userId) {
+        Route route = routeRepository.findById(routeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
+        if (!route.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.ROUTE_ACCESS_DENIED);
+        }
+        return route;
     }
 }

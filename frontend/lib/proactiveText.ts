@@ -46,5 +46,13 @@ export function buildProactiveText(
     }));
   }
 
+  if (intervention.type === 'RETURN_DEPARTURE') {
+    // T1(FLIGHT_DEPARTURE)과 동일한 처리 — leaveByTime을 시각 포맷으로 변환한다.
+    return t('proactive.RETURN_DEPARTURE', asI18nParams({
+      ...intervention.params,
+      leaveByTime: formatClockTime(intervention.params.leaveByTime, locale),
+    }));
+  }
+
   return t(`proactive.${intervention.type}`, asI18nParams(intervention.params));
 }

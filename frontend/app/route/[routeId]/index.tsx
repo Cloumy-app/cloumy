@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, Alert, StyleSheet, Platform, Modal } from 'react-native';
 import { useLocalSearchParams, useNavigation, router } from 'expo-router';
-import { ChevronLeft, Sparkles, Wallet, Share2, PlaneTakeoff } from 'lucide-react-native';
+import { ChevronLeft, Sparkles, Wallet, Share2, PlaneTakeoff, PlaneLanding } from 'lucide-react-native';
 import DateTimePicker from '@expo/ui/community/datetime-picker';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useTranslation } from 'react-i18next';
-import { getRoute, getRouteSlots, getRouteDaySummaries, toggleSlotPin as apiToggleSlotPin, deleteRouteSlot, deleteRoute, replaceRouteSlot, reorderRouteSlots, updateRouteVisibility, updateRouteDeparture } from '@/lib/api/routes';
+import { getRoute, getRouteSlots, getRouteDaySummaries, toggleSlotPin as apiToggleSlotPin, deleteRouteSlot, deleteRoute, replaceRouteSlot, reorderRouteSlots, updateRouteVisibility, updateRouteDeparture, updateRouteReturn } from '@/lib/api/routes';
 import { getRouteAccommodations } from '@/lib/api/accommodations';
 import { fetchForecast } from '@/lib/api/weather';
 import { getBudgetSummary } from '@/lib/api/budget';
@@ -17,10 +17,147 @@ import { TripMap } from '@/components/map/TripMap';
 import { DayTabs } from '@/components/route/DayTabs';
 import { SlotCard, DraggableSlotRow } from '@/components/route/SlotCard';
 import { BudgetBanner } from '@/components/route/BudgetBanner';
-import type { BudgetLevel, RouteDaySummary, SlotAlternative, SlotWithCoords } from '@/types';
+import type { BudgetLevel, RouteDaySummary, RouteListItem, SlotAlternative, SlotWithCoords } from '@/types';
 import type { DayWeather, RainBlock } from '@/lib/api/weather';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// Material3 DatePickerState는 initialSelectedDateMillis를 UTC 일자로 해석한다.
+// 새벽 시각(예: 02:00 KST)이 그대로 들어가면 UTC 기준 전날로 잘려 캘린더가 하루 밀린 채 열린다.
+// 정오로 정규화하면 어느 타임존에서도 날짜가 안 밀리는 ±12h 안전마진이 생긴다.
+function atNoon(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(12, 0, 0, 0);
+  return x;
+}
+
+type FlightPickerLabels = {
+  labelKey: string;
+  hintKey: string;
+  clearKey: string;
+};
+
+// 가는 편/오는 편 피커는 완전히 같은 구조라 로컬 컴포넌트로 추출한다(계획 Step 1-6).
+// - Android: mode="datetime"이 날짜 전용으로 폴백되고(@expo/ui 라이브러리 소스로 확인됨),
+//   presentation 기본값이 'dialog'라 <Modal> 안에 두면 Material3 다이얼로그가 겹쳐 뜬다.
+//   그래서 Android는 날짜→시각 2단계 다이얼로그를 <Modal> 밖에서 직접 렌더한다.
+// - iOS: 기존 <Modal> + mode="datetime" spinner + 확인 버튼을 그대로 유지한다.
+function FlightTimePicker({
+  open,
+  value,
+  minimumDate,
+  labels,
+  onClose,
+  onCommit,
+}: {
+  open: boolean;
+  value: Date | null;
+  minimumDate: Date;
+  labels: FlightPickerLabels;
+  onClose: () => void;
+  onCommit: (next: Date | null) => void;
+}) {
+  const { t } = useTranslation();
+  // Android 전용 2단계 상태. iOS는 <Modal visible={open}>을 그대로 쓴다.
+  const [androidStep, setAndroidStep] = useState<'date' | 'time' | null>(null);
+  const [draft, setDraft] = useState<Date>(new Date());
+
+  useEffect(() => {
+    if (!open) {
+      setAndroidStep(null);
+      return;
+    }
+    // 피커를 열 때 저장된 값으로 초기화한다 — new Date()로 두면 재저장 시 현재 시각으로 덮어쓴다.
+    setDraft(value ?? new Date());
+    if (Platform.OS === 'android') setAndroidStep('date');
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (Platform.OS === 'android') {
+    return (
+      <>
+        {androidStep === 'date' && (
+          <DateTimePicker
+            value={atNoon(draft)}
+            mode="date"
+            minimumDate={minimumDate}
+            onDismiss={() => {
+              // onDismiss가 없으면 뒤로가기/바깥 탭으로 다이얼로그가 안 닫힌다(FFE #6)
+              setAndroidStep(null);
+              onClose();
+            }}
+            onValueChange={(_, picked) => {
+              const next = new Date(draft);
+              next.setFullYear(picked.getFullYear(), picked.getMonth(), picked.getDate());
+              setDraft(next);
+              setAndroidStep('time'); // 언마운트 → 재마운트로 단계 전환
+            }}
+          />
+        )}
+        {androidStep === 'time' && (
+          <DateTimePicker
+            value={draft} // 날짜 파트는 이미 확정돼 그대로 보존된다
+            mode="time"
+            is24Hour
+            onDismiss={() => {
+              setAndroidStep(null);
+              onClose();
+            }}
+            onValueChange={(_, picked) => {
+              setAndroidStep(null);
+              onClose();
+              onCommit(picked);
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
+  // iOS — 기존 Modal + spinner + 확인 버튼
+  return (
+    <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
+      <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
+      <View style={{ backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 40 }}>
+        <View style={{ width: 40, height: 4, backgroundColor: '#e2e8f0', borderRadius: 2, alignSelf: 'center', marginBottom: 16 }} />
+        <Text style={{ fontSize: 16, fontWeight: '800', color: '#1e293b', marginBottom: 4 }}>
+          {t(labels.labelKey)}
+        </Text>
+        <Text style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>
+          {t(labels.hintKey)}
+        </Text>
+        <DateTimePicker
+          value={draft}
+          mode="datetime"
+          display="spinner"
+          minimumDate={minimumDate}
+          onValueChange={(_, picked) => setDraft(picked)}
+        />
+        <TouchableOpacity
+          onPress={() => {
+            onClose();
+            onCommit(draft);
+          }}
+          style={{ backgroundColor: '#0ea5e9', paddingVertical: 14, borderRadius: 16, alignItems: 'center', marginTop: 16 }}
+        >
+          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>{t('routeCreateStep1.confirmButton')}</Text>
+        </TouchableOpacity>
+        {value && (
+          <TouchableOpacity
+            onPress={() => {
+              onClose();
+              onCommit(null);
+            }}
+            style={{ paddingVertical: 12, alignItems: 'center', marginTop: 4 }}
+          >
+            <Text style={{ color: '#94a3b8', fontWeight: '600', fontSize: 13 }}>
+              {t(labels.clearKey)}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </Modal>
+  );
+}
 
 function getDateForDay(startDate: string, dayNumber: number): string {
   const date = new Date(startDate);
@@ -57,10 +194,12 @@ export default function RouteResultScreen() {
   const isNewRoute = mode === 'new';
   const [isPublic, setIsPublic] = useState(false);
 
-  // 출국 일시(선택 입력) — 프로액티브 T1(출국 준비) 전제. 미입력이 기본
+  // 가는 편 출발 일시(선택 입력) — 프로액티브 T1(가는 편 준비) 전제. 미입력이 기본
   const [departureAt, setDepartureAt] = useState<Date | null>(null);
   const [showDeparturePicker, setShowDeparturePicker] = useState(false);
-  const [tempDepartureAt, setTempDepartureAt] = useState(new Date());
+  // 오는 편 출발 일시(선택 입력) — RETURN_DEPARTURE 규칙 전제. 미입력이 기본
+  const [returnAt, setReturnAt] = useState<Date | null>(null);
+  const [showReturnPicker, setShowReturnPicker] = useState(false);
 
   // 스냅 포인트
   const SNAP_TOP = insets.top + 60;
@@ -126,18 +265,44 @@ export default function RouteResultScreen() {
     }
     if (routeMeta) setIsPublic(routeMeta.isPublic);
     if (routeMeta) setDepartureAt(routeMeta.departureAt ? new Date(routeMeta.departureAt) : null);
+    if (routeMeta) setReturnAt(routeMeta.returnAt ? new Date(routeMeta.returnAt) : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeMeta]);
 
-  const handleDepartureConfirm = async () => {
+  // 확정·지우기 두 경로를 next: Date | null 하나로 통합한다 — 지우기 경로에서
+  // setQueryData를 빼면 지운 뒤 재진입 시 값이 되살아난다(FFE #11).
+  // ['route', routeId] 쿼리는 currentRoute?.id !== routeId일 때만 enabled라 확정 후
+  // 캐시를 직접 옮기지 않으면 재조회가 안 돼 stale 캐시가 로컬 상태를 덮어쓴다.
+  const commitDeparture = async (next: Date | null) => {
     if (!routeId) return;
     const prev = departureAt;
-    setDepartureAt(tempDepartureAt); // 낙관적 업데이트 — 실패 시 롤백
-    setShowDeparturePicker(false);
+    setDepartureAt(next); // 낙관적 업데이트 — 실패 시 롤백
+    const iso = next ? next.toISOString() : null;
+    queryClient.setQueryData(['route', routeId], (old: RouteListItem | undefined) =>
+      old ? { ...old, departureAt: iso } : old);
     try {
-      await updateRouteDeparture(routeId, tempDepartureAt.toISOString());
+      await updateRouteDeparture(routeId, iso);
+      queryClient.invalidateQueries({ queryKey: ['routes'] });
     } catch {
       setDepartureAt(prev);
+      queryClient.invalidateQueries({ queryKey: ['route', routeId] });
+    }
+  };
+
+  // 오는 편 — 가는 편과 완전히 같은 캐시 반영 구조
+  const commitReturn = async (next: Date | null) => {
+    if (!routeId) return;
+    const prev = returnAt;
+    setReturnAt(next);
+    const iso = next ? next.toISOString() : null;
+    queryClient.setQueryData(['route', routeId], (old: RouteListItem | undefined) =>
+      old ? { ...old, returnAt: iso } : old);
+    try {
+      await updateRouteReturn(routeId, iso);
+      queryClient.invalidateQueries({ queryKey: ['routes'] });
+    } catch {
+      setReturnAt(prev);
+      queryClient.invalidateQueries({ queryKey: ['route', routeId] });
     }
   };
 
@@ -469,10 +634,7 @@ export default function RouteResultScreen() {
 
           {!isNewRoute && (
             <TouchableOpacity
-              onPress={() => {
-                setTempDepartureAt(departureAt ?? new Date());
-                setShowDeparturePicker(true);
-              }}
+              onPress={() => setShowDeparturePicker(true)}
               style={{
                 width: 40,
                 height: 40,
@@ -487,6 +649,26 @@ export default function RouteResultScreen() {
               }}
             >
               <PlaneTakeoff size={20} color={departureAt ? '#0ea5e9' : '#334155'} />
+            </TouchableOpacity>
+          )}
+
+          {!isNewRoute && (
+            <TouchableOpacity
+              onPress={() => setShowReturnPicker(true)}
+              style={{
+                width: 40,
+                height: 40,
+                backgroundColor: 'rgba(255,255,255,0.92)',
+                borderRadius: 20,
+                alignItems: 'center',
+                justifyContent: 'center',
+                shadowColor: '#000',
+                shadowOpacity: 0.12,
+                shadowRadius: 8,
+                elevation: 4,
+              }}
+            >
+              <PlaneLanding size={20} color={returnAt ? '#0ea5e9' : '#334155'} />
             </TouchableOpacity>
           )}
 
@@ -510,57 +692,33 @@ export default function RouteResultScreen() {
         </View>
       </View>
 
-      {/* 출국 일시 피커 모달 — 선택 입력, 프로액티브 T1(출국 준비) 전제 */}
-      <Modal visible={showDeparturePicker} transparent animationType="slide">
-        <TouchableOpacity
-          style={{ flex: 1 }}
-          activeOpacity={1}
-          onPress={() => setShowDeparturePicker(false)}
-        />
-        <View style={{ backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 40 }}>
-          <View style={{ width: 40, height: 4, backgroundColor: '#e2e8f0', borderRadius: 2, alignSelf: 'center', marginBottom: 16 }} />
-          <Text style={{ fontSize: 16, fontWeight: '800', color: '#1e293b', marginBottom: 4 }}>
-            {t('routeResult.departureLabel')}
-          </Text>
-          <Text style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>
-            {t('routeResult.departureHint')}
-          </Text>
-          <DateTimePicker
-            value={tempDepartureAt}
-            mode="datetime"
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            minimumDate={new Date()}
-            onValueChange={(_, date) => {
-              if (date) setTempDepartureAt(date);
-            }}
-          />
-          <TouchableOpacity
-            onPress={handleDepartureConfirm}
-            style={{ backgroundColor: '#0ea5e9', paddingVertical: 14, borderRadius: 16, alignItems: 'center', marginTop: 16 }}
-          >
-            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>{t('routeCreateStep1.confirmButton')}</Text>
-          </TouchableOpacity>
-          {departureAt && (
-            <TouchableOpacity
-              onPress={async () => {
-                setShowDeparturePicker(false);
-                const prev = departureAt;
-                setDepartureAt(null);
-                try {
-                  await updateRouteDeparture(routeId!, null);
-                } catch {
-                  setDepartureAt(prev);
-                }
-              }}
-              style={{ paddingVertical: 12, alignItems: 'center', marginTop: 4 }}
-            >
-              <Text style={{ color: '#94a3b8', fontWeight: '600', fontSize: 13 }}>
-                {t('routeResult.departureClear')}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </Modal>
+      {/* 가는 편 일시 피커 — 선택 입력, 프로액티브 T1(가는 편 준비) 전제 */}
+      <FlightTimePicker
+        open={showDeparturePicker}
+        value={departureAt}
+        minimumDate={new Date()}
+        labels={{
+          labelKey: 'routeResult.departureLabel',
+          hintKey: 'routeResult.departureHint',
+          clearKey: 'routeResult.departureClear',
+        }}
+        onClose={() => setShowDeparturePicker(false)}
+        onCommit={commitDeparture}
+      />
+
+      {/* 오는 편 일시 피커 — 선택 입력, RETURN_DEPARTURE 규칙 전제. 가는 편보다 늦어야 하므로 minimumDate로 서버 검증을 UI에서도 선반영 */}
+      <FlightTimePicker
+        open={showReturnPicker}
+        value={returnAt}
+        minimumDate={departureAt ?? new Date()}
+        labels={{
+          labelKey: 'routeResult.returnLabel',
+          hintKey: 'routeResult.returnHint',
+          clearKey: 'routeResult.returnClear',
+        }}
+        onClose={() => setShowReturnPicker(false)}
+        onCommit={commitReturn}
+      />
 
       {/* Reanimated 드래그 바텀시트 */}
       <Animated.View

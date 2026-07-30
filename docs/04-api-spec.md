@@ -167,9 +167,39 @@ AI 루트 생성 (스트리밍 응답)
 #### GET /routes
 내 루트 목록 (정렬: display_order ASC — 수동 드래그 정렬 반영)
 
+> ⚠️ 이 정렬은 여행 날짜와 무관하다. "지금 진행 중인 여행"이 필요하면 `GET /routes/active`를 쓸 것.
+
 ```
 GET /routes?page=0&size=20
 ```
+
+```json
+// 응답 — Spring Page 봉투
+{
+  "success": true,
+  "data": {
+    "content": [
+      {
+        "id": "uuid",
+        "title": "서울 2박 3일",
+        "destination": "서울",
+        "startDate": "2026-08-01",
+        "endDate": "2026-08-03",
+        "nights": 2,
+        "createdAt": "2026-07-29T14:20:00",
+        "isPublic": false,
+        "departureAt": "2026-08-01T10:00:00+09:00",
+        "returnAt": "2026-08-03T11:00:00+09:00"
+      }
+    ],
+    "totalElements": 1, "totalPages": 1, "last": true
+  }
+}
+```
+
+> ⚠️ `departureAt` / `returnAt`은 **미입력이면 키 자체가 응답에서 빠진다** (전역 `default-property-inclusion: non_null`). `null`로 내려오지 않으므로 클라이언트는 `undefined`도 미입력으로 다뤄야 한다 — 프론트는 `routeMeta.departureAt ? new Date(...) : null` 형태로 처리 중.
+
+단건 조회(`GET /routes/{routeId}`)도 같은 객체 형태를 반환한다.
 
 #### PATCH /routes/reorder
 내 루트 목록 수동 드래그 정렬 — 전체 순서를 담은 route ID 배열을 받아 display_order를 0..N-1로 일괄 재할당. 다른 유저 소유 route ID가 섞여 있으면 403.
@@ -182,12 +212,40 @@ GET /routes?page=0&size=20
 { "success": true, "data": [ { "id": "uuid1", "title": "...", ... }, ... ] }
 ```
 
+#### GET /routes/active
+지금 도와줄 여행 하나를 서버가 판정해 반환한다 — **오늘이 기간에 걸치는 루트 → 없으면 가장 가까운 예정 루트 → 없으면 null**. 홈 배너와 챗봇 자동 개입이 이 값을 공유한다.
+
+목록(`GET /routes`)의 첫 항목을 쓰면 안 된다. 목록 정렬 기준은 `display_order`(사용자 드래그 순서)라 여행 날짜와 무관하고, 페이지 크기 밖의 루트는 아예 보이지 않는다.
+
+```json
+// 응답 — 활성 루트가 있을 때
+{ "success": true, "data": { "route": { "id": "uuid", "title": "...", "startDate": "2026-08-01", ... } } }
+
+// 응답 — 없을 때 (route 키는 항상 존재한다)
+{ "success": true, "data": { "route": null } }
+```
+
 #### PATCH /routes/{routeId}/departure
-출국 일시 설정(선택 입력) — 프로액티브 FLIGHT_DEPARTURE 규칙의 전제 조건(아래 프로액티브 섹션 참고). `departureAt`이 null이면 미입력 상태로 되돌린다.
+가는 편 출발 일시 설정(선택 입력) — 프로액티브 FLIGHT_DEPARTURE 규칙의 전제 조건(아래 프로액티브 섹션 참고). `departureAt`이 null이면 미입력 상태로 되돌린다.
+
+**오프셋을 포함한 ISO 8601로 주고받는다.** 컬럼이 `TIMESTAMPTZ`이고 Java가 `OffsetDateTime`으로 매핑하므로, 오프셋 없는 문자열을 보내면 서버 타임존 해석에 의존하게 된다.
+
+```json
+// 요청 — UTC로 보내도 되고 KST 오프셋으로 보내도 된다 (같은 instant)
+{ "departureAt": "2026-08-01T01:00:00.000Z" }
+
+// 응답에 실릴 때는 항상 KST 오프셋으로 나온다
+{ "departureAt": "2026-08-01T10:00:00+09:00" }
+```
+
+#### PATCH /routes/{routeId}/return
+오는 편 출발 일시 설정(선택 입력) — 프로액티브 RETURN_DEPARTURE 규칙의 전제 조건. `departure`와 대칭이며 `returnAt`이 null이면 미입력 상태로 되돌린다.
+
+`departureAt`이 이미 설정돼 있는데 그보다 이른 값을 보내면 400(`INVALID_INPUT`)이다.
 
 ```json
 // 요청
-{ "departureAt": "2026-07-28T09:30:00" }
+{ "returnAt": "2026-08-03T11:00:00+09:00" }
 ```
 
 ---
@@ -257,7 +315,8 @@ GET /routes?page=0&size=20
 | type | priority | 뜨는 조건 | params |
 |---|---|---|---|
 | `PRE_TRIP_BRIEFING` | 1 | 여행 전날(D-1) | `nights`, `destination`, `flags`(아래 표) |
-| `FLIGHT_DEPARTURE` | 1 | 출국 준비 — 출발 시각 기준 공항 이동시간+체크인 버퍼를 뺀 "지금 나가야 할 시각"까지 0~60분 (`departureAt` 미설정이면 평가 자체를 스킵) | `departureAt`, `leaveByTime` |
+| `FLIGHT_DEPARTURE` | 1 | 가는 편 준비 — 출발 시각 기준 공항 이동시간+체크인 버퍼를 뺀 "지금 나가야 할 시각"까지 0~60분 (`departureAt` 미설정이면 평가 자체를 스킵). **여행 중뿐 아니라 여행 전날(D-1)에도 평가된다** — 새벽 항공편은 나서야 할 시각이 전날로 넘어가기 때문. D-1에 `PRE_TRIP_BRIEFING`과 동시에 후보가 되면 이쪽이 이긴다 | `departureAt`, `leaveByTime` |
+| `RETURN_DEPARTURE` | 1 | 오는 편 준비 — `FLIGHT_DEPARTURE`와 같은 계산을 `returnAt`에 적용 (미설정이면 스킵) | `returnAt`, `leaveByTime` |
 | `DEPARTURE_SOON` | 2 | 다음 일정 출발까지 0~15분 (위치 추정 confidence가 high일 때만) | `nextPlaceName`, `minutesLeft`, `transportMinutes` |
 | `EMPTY_DAY` | 3 | 오늘 슬롯이 1개 이하 (정오 이전에만) | `day`, `slotCount` |
 | `WEATHER_ALERT` | 4 | 오늘 실외 슬롯이 있고 비/폭염/한파 예보 | `day`, `kind`(`rain`\|`heat`\|`cold`), `outdoorCount` |

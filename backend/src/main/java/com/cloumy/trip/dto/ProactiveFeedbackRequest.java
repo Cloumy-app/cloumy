@@ -7,6 +7,7 @@ import jakarta.validation.constraints.Pattern;
 // action: tapped(배너 탭) / dismissed(배너 닫음) / auto_shown(홈 배너를 거치지 않고
 // 챗봇에 직접 진입해 자동으로 말을 건 경우 — tapped와 섞으면 배너 탭률이 왜곡된다)
 public record ProactiveFeedbackRequest(
-        @NotBlank String type,
+        // ChatRequest.ProactiveContext.type과 같은 화이트리스트 공유 — type 검증을 한 곳(ProactiveIntervention)으로 모은다.
+        @NotBlank @Pattern(regexp = ProactiveIntervention.TYPE_PATTERN) String type,
         @NotBlank @Pattern(regexp = "tapped|dismissed|auto_shown") String action
 ) {}

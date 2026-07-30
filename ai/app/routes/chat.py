@@ -3,6 +3,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from app.models.schemas import ProactiveContext
 from app.services.chat_service import RouteNotFoundError, handle_chat
 
 logger = logging.getLogger(__name__)
@@ -20,8 +21,10 @@ class ChatRequest(BaseModel):
     message: str
     current_location: ChatLocation | None = None
     language: str | None = None  # ko/en/ja/zh — 앱 설정 언어(사용자 메시지 언어가 애매할 때 폴백)
-    # 프로액티브 배너 탭 직후 첫 메시지에만 실려온다 — 시스템 프롬프트에 "[방금 먼저 안내한 내용]"으로 덧붙인다
-    proactive_context: str | None = None
+    # 프로액티브 배너 탭 직후 첫 메시지에만 실려온다. 앱은 type+params만 보내고 문장은
+    # 서버가 조립한다(app.models.schemas.ProactiveContext) — 완성 문장을 그대로 받아 붙이면
+    # 시스템 프롬프트에 임의 지시를 주입하는 통로가 된다(결함 4).
+    proactive: ProactiveContext | None = None
 
 
 class PlaceCard(BaseModel):
@@ -65,7 +68,7 @@ async def chat(req: ChatRequest, request: Request):
             user_message=req.message,
             current_location=location,
             language=req.language,
-            proactive_context=req.proactive_context,
+            proactive=req.proactive,
         )
     except RouteNotFoundError:
         logger.warning("챗봇 요청 — 존재하지 않거나 소유하지 않은 route_id: %s", req.route_id)
