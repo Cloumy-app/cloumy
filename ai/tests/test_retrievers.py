@@ -2,7 +2,9 @@ import asyncpg
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from app.services.retrievers import PostgisTagRetriever, PgvectorRetriever
+from langchain_core.documents import Document
+
+from app.services.retrievers import PostgisTagRetriever, PgvectorRetriever, describe_candidate
 
 
 def _db_mock() -> MagicMock:
@@ -12,7 +14,7 @@ def _db_mock() -> MagicMock:
     return db
 
 
-def _row(is_hidden_gem: bool) -> dict:
+def _row(is_hidden_gem: bool, distance_m: float = 1200.0) -> dict:
     return {
         "id": "11111111-1111-1111-1111-111111111111",
         "name": "테스트장소",
@@ -22,6 +24,7 @@ def _row(is_hidden_gem: bool) -> dict:
         "is_hidden_gem": is_hidden_gem,
         "lng": 127.0,
         "lat": 37.0,
+        "distance_m": distance_m,
     }
 
 
@@ -88,6 +91,86 @@ async def test_postgis_tag_retriever_filters_uncurated_places_without_tags():
 
     query = db.fetch.call_args[0][0]
     assert "is_curated = true" in query
+
+
+@pytest.mark.asyncio
+async def test_default_sort_stays_random():
+    # 기본값이 random이어야 루트 생성 폴백(route_service)이 회귀하지 않는다 —
+    # 거리순으로 바뀌면 도시 중심 30km 후보가 매번 도심 근처만 올라온다.
+    db = _db_mock()
+    db.fetch = AsyncMock(return_value=[_row(False)])
+    retriever = PostgisTagRetriever(db=db, city_coords=(127.0, 37.0), tags=["#맛집"])
+
+    await retriever._aget_relevant_documents("")
+
+    query = db.fetch.call_args[0][0]
+    assert "ORDER BY RANDOM()" in query
+    assert "ORDER BY distance_m" not in query
+
+
+@pytest.mark.asyncio
+async def test_sort_distance_orders_by_distance_with_tags():
+    db = _db_mock()
+    db.fetch = AsyncMock(return_value=[_row(False)])
+    retriever = PostgisTagRetriever(
+        db=db, city_coords=(127.0, 37.0), tags=["#맛집"], sort="distance"
+    )
+
+    await retriever._aget_relevant_documents("")
+
+    query = db.fetch.call_args[0][0]
+    assert "ORDER BY distance_m" in query
+    assert "RANDOM()" not in query
+
+
+@pytest.mark.asyncio
+async def test_sort_distance_orders_by_distance_without_tags():
+    # 태그 없는 쿼리도 같은 정렬을 타야 한다 — 태그 제거 폴백이 걸린 뒤에도
+    # 거리순이 유지돼야 "인천 27km가 근처로 나오는" 증상이 재발하지 않는다.
+    db = _db_mock()
+    db.fetch = AsyncMock(return_value=[_row(False)])
+    retriever = PostgisTagRetriever(
+        db=db, city_coords=(127.0, 37.0), tags=[], sort="distance"
+    )
+
+    await retriever._aget_relevant_documents("")
+
+    query = db.fetch.call_args[0][0]
+    assert "ORDER BY distance_m" in query
+
+
+@pytest.mark.asyncio
+async def test_distance_is_selected_and_exposed_in_metadata():
+    db = _db_mock()
+    db.fetch = AsyncMock(return_value=[_row(False, distance_m=5432.1)])
+    retriever = PostgisTagRetriever(db=db, city_coords=(127.0, 37.0), tags=["#맛집"])
+
+    docs = await retriever._aget_relevant_documents("")
+
+    # 정렬에 쓰지 않을 때도(기본 random) 거리는 항상 뽑아야 한다 — 호출부가
+    # "근처"라고 단정하지 않으려면 거리를 알아야 한다.
+    assert "ST_Distance" in db.fetch.call_args[0][0]
+    assert docs[0].metadata["distance_m"] == pytest.approx(5432.1)
+
+
+def test_describe_candidate_uses_distance_when_available():
+    doc = Document(
+        page_content="테스트장소 | 서울시 어딘가 | 태그: #카페",
+        metadata={"distance_m": 5432.1},
+    )
+
+    assert "5.4km" in describe_candidate(doc)
+    assert "동선상 가까운 위치" not in describe_candidate(doc)
+
+
+def test_describe_candidate_falls_back_without_distance():
+    # PgvectorRetriever 등 거리를 싣지 않는 경로가 있어 폴백이 필요하다 (FFE #5).
+    doc = Document(
+        page_content="테스트장소 | 서울시 어딘가 | 태그: #카페",
+        metadata={},
+    )
+
+    assert "동선상 가까운 위치" in describe_candidate(doc)
 
 
 class _AsyncCM:

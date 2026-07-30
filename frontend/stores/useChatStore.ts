@@ -75,7 +75,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set((s) => ({ messages: [...s.messages, userMessage], isSending: true }));
 
     try {
-      const { reply, places, estimatedSlot } = await sendChatMessage(
+      const { reply, places, estimatedSlot, insertion } = await sendChatMessage(
         activeRouteId,
         trimmed,
         proactive,
@@ -87,6 +87,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         createdAt: new Date(),
         places: places.length > 0 ? places : undefined,
         estimatedSlot: estimatedSlot ?? undefined,
+        insertion: insertion ?? undefined,
       };
       set((s) => ({ messages: [...s.messages, assistantMessage], isSending: false }));
     } catch (e) {

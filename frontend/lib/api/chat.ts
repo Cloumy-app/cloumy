@@ -1,11 +1,13 @@
 import { apiFetch } from './client';
 import { useLanguageStore } from '@/stores/useLanguageStore';
-import type { ChatEstimatedSlot, ChatPlaceCard } from '@/types';
+import type { ChatEstimatedSlot, ChatInsertion, ChatPlaceCard } from '@/types';
 
 interface ChatApiResponse {
   reply: string;
   places: ChatPlaceCard[] | null;
   estimatedSlot: ChatEstimatedSlot | null;
+  // 구버전 서버는 이 필드를 아예 안 내려줄 수 있다(FFE #11) — undefined도 함께 허용한다.
+  insertion?: ChatInsertion | null;
 }
 
 // 프로액티브 배너 탭 직후 첫 메시지에만 실어 보내는 맥락. 완성 문장이 아니라 type+params만
@@ -20,7 +22,12 @@ export async function sendChatMessage(
   routeId: string,
   message: string,
   proactive?: ProactivePayload,
-): Promise<{ reply: string; places: ChatPlaceCard[]; estimatedSlot: ChatEstimatedSlot | null }> {
+): Promise<{
+  reply: string;
+  places: ChatPlaceCard[];
+  estimatedSlot: ChatEstimatedSlot | null;
+  insertion: ChatInsertion | null;
+}> {
   const language = useLanguageStore.getState().language;
   const res = await apiFetch('/v1/chat', {
     method: 'POST',
@@ -32,5 +39,6 @@ export async function sendChatMessage(
     reply: body.data.reply,
     places: body.data.places ?? [],
     estimatedSlot: body.data.estimatedSlot ?? null,
+    insertion: body.data.insertion ?? null,
   };
 }

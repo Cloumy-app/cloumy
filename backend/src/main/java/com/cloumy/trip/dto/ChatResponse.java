@@ -7,5 +7,6 @@ import java.util.List;
 public record ChatResponse(
         String reply,
         List<ChatPlaceCard> places,
-        @JsonAlias("estimated_slot") ChatEstimatedSlot estimatedSlot
+        @JsonAlias("estimated_slot") ChatEstimatedSlot estimatedSlot,
+        ChatInsertion insertion
 ) {}

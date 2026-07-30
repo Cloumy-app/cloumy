@@ -473,21 +473,45 @@ public class RouteSlotService {
     }
 
     // 챗봇이 추천한 장소를 afterSlot과 그 다음 슬롯 사이에 새 슬롯으로 끼워 넣는다.
+    // afterSlotId가 null이면 "그 Day 맨 앞"을 의미한다 — 대화에서 "OO 가기 전에"라고 했는데
+    // OO가 그날 첫 일정이거나, 아예 빈 Day에 넣는 경우를 표현할 방법이 없어 nullable로 열었다.
     @Transactional
     public List<SlotResponse> insertSlotAfter(
-            UUID routeId, UUID userId, UUID afterSlotId, UUID placeId, String reason) {
+            UUID routeId, UUID userId, UUID afterSlotId, Integer dayNumber, UUID placeId, String reason) {
         verifyOwner(routeId, userId);
-        RouteSlot afterSlot = routeSlotRepository.findById(afterSlotId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.SLOT_NOT_FOUND));
+
+        Optional<RouteSlot> afterSlot = afterSlotId == null
+                ? Optional.empty()
+                : Optional.of(routeSlotRepository.findById(afterSlotId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.SLOT_NOT_FOUND)));
+
+        // 다른 루트(남의 것 포함) slotId를 기준점으로 보내면 그 슬롯의 dayNumber로 내 루트에
+        // 꽂혀버린다 — verifyOwner는 routeId 소유만 확인할 뿐 afterSlot이 이 루트 소속인지는
+        // 확인하지 않으므로 여기서 별도로 막는다. 데이터가 새는 건 아니지만 엉뚱한 Day에 삽입된다.
+        if (afterSlot.isPresent() && !afterSlot.get().getRouteId().equals(routeId)) {
+            throw new BusinessException(ErrorCode.SLOT_NOT_FOUND);
+        }
+
         PlaceProjection newPlace = placeRepository.findPlaceDetailById(placeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PLACE_NOT_FOUND));
 
-        int dayNumber = afterSlot.getDayNumber();
-        int insertOrderIndex = afterSlot.getOrderIndex() + 1;
+        int day = afterSlot.map(RouteSlot::getDayNumber).orElse(dayNumber);
+
+        Route route = routeRepository.findById(routeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
+        if (day < 1 || day > route.getNights() + 1) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "여행 기간을 벗어난 day입니다");
+        }
+
+        int insertOrderIndex = afterSlot.map(s -> s.getOrderIndex() + 1).orElse(0);
+        // 맨 앞 삽입(afterSlot 없음)이면 -1을 기준으로 삼아 그 Day 전체가 밀림 대상이 된다 —
+        // 아래 findByRouteIdAndDayNumberAndOrderIndexGreaterThanOrderByOrderIndexDesc가
+        // orderIndex > -1 조건이 되어 0번부터 전부 걸린다.
+        int shiftFrom = afterSlot.map(RouteSlot::getOrderIndex).orElse(-1);
 
         // "원래 다음 슬롯"은 order_index를 밀기 전에 먼저 확보해야 한다 — 밀고 나면 값이 바뀐다.
         Optional<RouteSlot> next = routeSlotRepository.findByRouteIdAndDayNumberAndOrderIndex(
-                routeId, dayNumber, insertOrderIndex);
+                routeId, day, insertOrderIndex);
 
         // 뒤 슬롯들을 order_index 큰 값부터 내림차순으로 +1씩 밀어 삽입 자리를 비운다.
         // 오름차순으로 밀면 (route_id, day_number, order_index) UNIQUE 제약과 중간에 충돌한다.
@@ -496,7 +520,7 @@ public class RouteSlotService {
         // uk_route_slots_day_order 위반 발생) — 한 건씩 flush해 실행 순서를 강제한다.
         List<RouteSlot> shifting = routeSlotRepository
                 .findByRouteIdAndDayNumberAndOrderIndexGreaterThanOrderByOrderIndexDesc(
-                        routeId, dayNumber, afterSlot.getOrderIndex());
+                        routeId, day, shiftFrom);
         for (RouteSlot s : shifting) {
             s.shiftOrderIndex(1);
             routeSlotRepository.flush();
@@ -509,7 +533,7 @@ public class RouteSlotService {
         RouteSlot newSlot = RouteSlot.builder()
                 .routeId(routeId)
                 .placeId(placeId)
-                .dayNumber(dayNumber)
+                .dayNumber(day)
                 .orderIndex(insertOrderIndex)
                 .durationMinutes(newPlace.getAvgDurationMinutes())
                 .tips(reason)
@@ -517,11 +541,13 @@ public class RouteSlotService {
         routeSlotRepository.save(newSlot);
 
         // replaceSlot과 동일한 이웃 이동정보 재계산 재사용: afterSlot(prev)→newSlot(target)→next.
+        // 맨 앞 삽입이면 prev가 없으므로 afterSlot(Optional.empty())을 그대로 넘긴다 —
+        // recalculateNeighborTransport는 이미 Optional<RouteSlot> prev를 받으므로 시그니처 변경 불필요.
         // 이제 enrich_transport가 거리 기반으로 자동 판단하므로 이동수단 인자 자체가 불필요.
-        recalculateNeighborTransport(placeId, newPlace, newSlot, Optional.of(afterSlot), next);
+        recalculateNeighborTransport(placeId, newPlace, newSlot, afterSlot, next);
 
         // 새 슬롯이 끼어들면서 그 뒤 모든 슬롯의 시작 시각이 밀리므로 day 전체 재계산
-        recomputeStartTimesForDay(routeId, dayNumber);
+        recomputeStartTimesForDay(routeId, day);
         routeSlotRepository.flush();
 
         return routeSlotRepository.findSlotsByRouteId(routeId).stream()

@@ -64,15 +64,18 @@ export async function replaceRouteSlot(
   return resBody.data;
 }
 
+// afterSlotId가 null이면 dayNumber 맨 앞에 삽입한다(FFE #4·#5 — 빈 Day, 그날 첫 일정 앞).
+// dayNumber는 afterSlotId가 null일 때 서버가 어느 Day에 넣을지 알아야 해서 항상 함께 보낸다.
 export async function insertRouteSlot(
   routeId: string,
-  afterSlotId: string,
+  afterSlotId: string | null,
+  dayNumber: number,
   placeId: string,
   reason?: string,
 ): Promise<SlotWithCoords[]> {
   const res = await apiFetch(`/v1/routes/${routeId}/slots`, {
     method: 'POST',
-    body: JSON.stringify({ afterSlotId, placeId, reason }),
+    body: JSON.stringify({ afterSlotId, dayNumber, placeId, reason }),
   });
   if (!res.ok) throw new Error(`${res.status}`);
   const resBody: { data: SlotWithCoords[] } = await res.json();
