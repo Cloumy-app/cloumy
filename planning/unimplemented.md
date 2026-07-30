@@ -321,28 +321,12 @@
 
 **미완**: 실기기 확인 5항목 — 특히 배너 탭 → 챗 진입 시 말풍선이 정확히 1개인지.
 
-### (참고) 원래 기록 — 챗봇 자동 개입 결함
-- **관련 태스크**: 2026-07-29 코드 리뷰
-- **파일**: `frontend/app/(tabs)/chat.tsx`, `frontend/stores/useChatStore.ts`
-- **현재 상태**: 자동 개입 가드가 전역 `useChatStore.messages` 길이만 본다. 이 배열은 **루트별로 분리되지도, 화면 이탈 시 초기화되지도 않는다** — `useChatStore.reset()`은 저장소 어디에서도 호출되지 않는다(grep 0건).
-- **증상**: ① 챗봇에서 아무 질문이나 한 번 하면 그 앱 세션 동안 "먼저 말 걸기"가 영구히 안 된다. ② 반대로 홈 배너를 탭하면 무관한 어제 대화 끝에 맥락 없는 개입 말풍선이 붙고, 다음 메시지에 그 문구가 `proactive_context`로 실린다.
-- **해야 할 것(논의 필요)**: 가드를 "이 세션에 이 루트로 개입을 이미 넣었는가"로 바꾸는 것이 정확하다. `messages`를 루트별로 스코프하거나, 개입 주입 여부를 별도 플래그로 두는 안. 후자가 변경 범위가 작다.
-- **우선순위**: 중간 — 2026-07-28 후속 작업에서 추가한 "챗봇 직접 진입 자동 개입" 기능이 사실상 첫 대화 이후 동작하지 않는다
-
 ### ~~proactiveContext가 검증 없이 시스템 프롬프트에 삽입된다~~ — 해결됨 (2026-07-29)
 클라이언트가 완성된 문장을 보내던 것을 폐기하고 `type` + `params`만 받아 **서버가 AI용 서술을 조립**하도록 바꿨다(`chat_service._build_proactive_descriptor`). 검증은 FastAPI의 태그드 유니온(`schemas.ProactiveContext`, 9종)이 맡고 Spring은 `type` 화이트리스트만 보는 얇은 가드다 — `params` 스키마를 Java에 복제하면 규칙 추가 시 변경 지점이 3배가 된다.
 
 핵심은 **자유 문자열(`placeName`/`destination`/`nextPlaceName`)을 서술에서 아예 제외**한 것이다. `type`+`params`로 바꾸기만 하면 그 필드들이 여전히 주입 통로로 남는다(길이를 25자로 제한해도 지시문이 들어간다). 숫자·열거·시각만 넣어 통로 자체를 없앴다. 검증: `placeName`에 지시문을 넣어도 챗봇이 따르지 않고 응답·로그 어디에도 나타나지 않음.
 
 사용자에게 보이는 4개 언어 문구는 여전히 앱 `proactiveText.ts`가 만든다("판단은 규칙이, 표현은 앱이" 유지).
-
-### (참고) 원래 기록 — proactiveContext 신뢰 경계
-- **관련 태스크**: 2026-07-29 코드 리뷰 — 보안 성격이라 항공편·루트선택 수정과 분리
-- **파일**: `backend/src/main/java/com/cloumy/trip/dto/ChatRequest.java`, `ai/app/services/chat_service.py`(`handle_chat`)
-- **현재 상태**: `ChatRequest.proactiveContext`에 `@Size`도 화이트리스트 검증도 없다. `AiServiceClient`가 그대로 FastAPI로 넘기고 `system_prompt += f"\n\n[방금 먼저 안내한 내용]\n{proactive_context}"`로 **system 역할에 삽입**된다. "시스템 프롬프트는 서버가 만든다"는 불변식이 깨져 있다.
-- **위험**: ① 인증된 사용자가 `proactiveContext`에 지시문을 실어 보내면 유저 메시지가 아니라 시스템 지시로 해석돼 프롬프트 유출·도구 제약 우회가 가능하다. ② 길이 상한이 없어 수십 KB를 분당 10회(챗봇 레이트리밋) 보내면 입력 토큰 비용이 그대로 곱해진다.
-- **해야 할 것**: 클라이언트가 임의 문자열을 보내는 구조 자체를 바꾸는 것이 근본이다 — 개입 `type` + `params`만 받고 **문구는 서버가 재조립**하면 신뢰 경계가 복원된다(이미 `type`/`params` 스키마가 양쪽에 있다). 그게 크면 최소 조치로 `@Size(max=500)` + 개입 타입 화이트리스트 검증.
-- **우선순위**: 중간 — 인증 사용자만 가능하고 자기 세션에 한정되지만, 신뢰 경계가 깨진 것 자체가 구조적 문제다
 
 ### (번호추가) 배너 X가 같은 화면에 머무는 동안 사라지지 않는다
 - **관련 태스크**: 2026-07-29 코드 리뷰
@@ -362,8 +346,8 @@
 
 ### (번호추가) `createdAt`이 TIMESTAMPTZ인데 Java는 LocalDateTime으로 매핑
 - **관련 태스크**: 프로액티브 후속 수정 (2026-07-29) — `departureAt`을 `OffsetDateTime`으로 고치면서 발견
-- **파일**: `backend/src/main/java/com/cloumy/trip/dto/RouteListResponse.java`, `backend/src/main/java/com/cloumy/common/entity/BaseEntity.java`
-- **현재 상태**: `created_at`/`updated_at` 컬럼은 `TIMESTAMPTZ`인데 Java는 오프셋 없는 `LocalDateTime`으로 받는다. `departureAt`과 정확히 같은 구조의 불일치다.
+- **파일**: `backend/.../dto/RouteListResponse.java:15`, `backend/.../common/entity/BaseEntity.java`, **그리고 `BaseEntity`를 상속하지 않고 직접 선언한 곳** — `trip/entity/Bookmark.java:38`, `trip/entity/Expense.java:58`, `trip/dto/ExpenseResponse.java:13` (2026-07-30 전수 확인)
+- **현재 상태**: `created_at`/`updated_at` 컬럼은 `TIMESTAMPTZ`인데 Java는 오프셋 없는 `LocalDateTime`으로 받는다. `departureAt`과 정확히 같은 구조의 불일치다. `Route` 엔티티는 이미 `OffsetDateTime`이라 해당 없음.
 - **위험**: 낮다. `createdAt`은 표시 전용이고 프론트가 이 값을 서버로 되돌려 보내지 않아 왕복 누적 오차가 없다. 또 `LocalDateTimeSerializer`는 `InstantSerializerBase`를 상속하지 않아 `spring.jackson.time-zone` 영향도 안 받는다.
 - **해야 할 것**: `OffsetDateTime`으로 통일. 다만 `RouteListResponse`는 목록·커뮤니티·탐색·클론·수동생성 5개 경로가 공유하므로 회귀 범위가 넓다.
 - **우선순위**: 낮음 — 체감 버그가 없다. 다른 이유로 `RouteListResponse`를 손댈 때 함께 처리하는 게 합리적이다.
