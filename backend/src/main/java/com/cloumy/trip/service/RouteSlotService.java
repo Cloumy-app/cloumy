@@ -488,8 +488,9 @@ public class RouteSlotService {
         // 다른 루트(남의 것 포함) slotId를 기준점으로 보내면 그 슬롯의 dayNumber로 내 루트에
         // 꽂혀버린다 — verifyOwner는 routeId 소유만 확인할 뿐 afterSlot이 이 루트 소속인지는
         // 확인하지 않으므로 여기서 별도로 막는다. 데이터가 새는 건 아니지만 엉뚱한 Day에 삽입된다.
-        afterSlot.filter(s -> !s.getRouteId().equals(routeId))
-                .ifPresent(s -> { throw new BusinessException(ErrorCode.SLOT_NOT_FOUND); });
+        if (afterSlot.isPresent() && !afterSlot.get().getRouteId().equals(routeId)) {
+            throw new BusinessException(ErrorCode.SLOT_NOT_FOUND);
+        }
 
         PlaceProjection newPlace = placeRepository.findPlaceDetailById(placeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PLACE_NOT_FOUND));
