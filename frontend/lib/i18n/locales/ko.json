@@ -9,7 +9,21 @@
     "addFailedTitle": "추가 실패",
     "addFailedBody": "일정에 추가하지 못했어요. 잠시 후 다시 시도해주세요.",
     "recommendedPlaces": "추천 장소",
-    "insertHint": "탭하면 다음 일정 사이에 추가돼요"
+    "insertHint": "탭하면 다음 일정 사이에 추가돼요",
+    "insertDirectHint": "탭하면 「{{day}}일차 · {{name}}」 다음에 바로 추가돼요",
+    "insertDirectHintFront": "탭하면 「{{day}}일차」 맨 앞에 바로 추가돼요",
+    "insertSheet": {
+      "pickDayPrompt": "{{name}}, 며칠차에 추가할까요?",
+      "conversationAfter": "말씀하신 대로 {{name}} 다음에 추가할까요?",
+      "estimatedAfter": "지금 계신 {{name}} 다음에 추가할까요?",
+      "defaultEnd": "{{day}}일차 마지막에 추가할까요?",
+      "dayFront": "{{day}}일차 맨 앞에 추가할까요?",
+      "dayChip": "{{day}}일차",
+      "confirmButton": "추가",
+      "cancelButton": "취소",
+      "slotGoneTitle": "일정이 바뀌었어요",
+      "slotGoneBody": "기준이 된 일정이 삭제됐어요. 최신 일정으로 다시 골라주세요."
+    }
   },
   "proactive": {
     "PRE_TRIP_BRIEFING": "{{destination}} 여행이 하루 남았어요! {{nights}}박 일정 미리 확인해보세요.",

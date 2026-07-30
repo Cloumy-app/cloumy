@@ -9,7 +9,21 @@
     "addFailedTitle": "Couldn't add it",
     "addFailedBody": "We couldn't add this to your itinerary. Please try again in a moment.",
     "recommendedPlaces": "Recommended places",
-    "insertHint": "Tap to add it between your next two stops"
+    "insertHint": "Tap to add it between your next two stops",
+    "insertDirectHint": "Tap to add it right after {{name}} on Day {{day}}",
+    "insertDirectHintFront": "Tap to add it to the start of Day {{day}}",
+    "insertSheet": {
+      "pickDayPrompt": "Which day should {{name}} go on?",
+      "conversationAfter": "Add it right after {{name}}, as you mentioned?",
+      "estimatedAfter": "Add it right after {{name}}, where you are now?",
+      "defaultEnd": "Add it to the end of Day {{day}}?",
+      "dayFront": "Add it to the start of Day {{day}}?",
+      "dayChip": "Day {{day}}",
+      "confirmButton": "Add",
+      "cancelButton": "Cancel",
+      "slotGoneTitle": "The itinerary changed",
+      "slotGoneBody": "That stop was removed. Please pick again from the latest itinerary."
+    }
   },
   "proactive": {
     "PRE_TRIP_BRIEFING": "Your trip to {{destination}} starts in a day! Here's a quick look at your {{nights}}-night itinerary.",

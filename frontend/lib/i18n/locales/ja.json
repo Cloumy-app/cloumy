@@ -9,7 +9,21 @@
     "addFailedTitle": "追加に失敗しました",
     "addFailedBody": "日程に追加できませんでした。しばらくしてからもう一度お試しください。",
     "recommendedPlaces": "おすすめスポット",
-    "insertHint": "タップすると次の予定の間に追加されます"
+    "insertHint": "タップすると次の予定の間に追加されます",
+    "insertDirectHint": "タップすると「{{day}}日目・{{name}}」の次にすぐ追加されます",
+    "insertDirectHintFront": "タップすると「{{day}}日目」の先頭にすぐ追加されます",
+    "insertSheet": {
+      "pickDayPrompt": "{{name}}を何日目に追加しますか？",
+      "conversationAfter": "おっしゃった通り{{name}}の次に追加しますか？",
+      "estimatedAfter": "今いる{{name}}の次に追加しますか？",
+      "defaultEnd": "{{day}}日目の最後に追加しますか？",
+      "dayFront": "{{day}}日目の最初に追加しますか？",
+      "dayChip": "{{day}}日目",
+      "confirmButton": "追加",
+      "cancelButton": "キャンセル",
+      "slotGoneTitle": "日程が変更されました",
+      "slotGoneBody": "基準になっていた予定が削除されました。最新の日程からもう一度選んでください。"
+    }
   },
   "proactive": {
     "PRE_TRIP_BRIEFING": "{{destination}}への旅行まであと1日！{{nights}}泊の日程を事前にチェックしましょう。",

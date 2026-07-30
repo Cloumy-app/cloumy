@@ -221,6 +221,18 @@ export interface ChatEstimatedSlot {
   orderIndex: number;
 }
 
+// 챗봇이 추천한 장소를 어디에 넣을지 서버가 정한 자리 — "판단은 서버 규칙이, 문구는 앱이"
+// 원칙(프로액티브와 동일)이라 한국어가 없다. source별 문구는 앱 i18n이 조립하고, 장소명은
+// afterSlotId로 슬롯 캐시(['route-slots', routeId])에서 앱이 직접 찾아 붙인다.
+export interface ChatInsertion {
+  day: number;
+  afterSlotId: string | null; // null이면 그 Day 맨 앞에 삽입
+  // 'conversation'만 자리가 하나로 확정된 신호다("경복궁 가기 전에") — 이때만 확인 시트를
+  // 생략하고 바로 삽입한다. 'conversation_day'는 Day만 말한 경우로, 자리(그 Day 맨 뒤)는
+  // 서버가 고른 것이라 사용자 확인이 필요하다.
+  source: 'conversation' | 'conversation_day' | 'estimated' | 'default';
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -228,6 +240,7 @@ export interface ChatMessage {
   createdAt: Date;
   places?: ChatPlaceCard[];
   estimatedSlot?: ChatEstimatedSlot;
+  insertion?: ChatInsertion;
 }
 
 // 프로액티브 개입 엔진 — 판단은 서버 규칙이, 문구는 앱이 조립한다(서버 응답엔 한국어가 없음).

@@ -9,7 +9,21 @@
     "addFailedTitle": "添加失败",
     "addFailedBody": "未能添加到行程中，请稍后再试。",
     "recommendedPlaces": "推荐地点",
-    "insertHint": "点击即可添加到下一个行程之间"
+    "insertHint": "点击即可添加到下一个行程之间",
+    "insertDirectHint": "点击即可直接添加到「第{{day}}天 · {{name}}」之后",
+    "insertDirectHintFront": "点击即可直接添加到「第{{day}}天」的开头",
+    "insertSheet": {
+      "pickDayPrompt": "要把{{name}}添加到第几天？",
+      "conversationAfter": "按照您说的，添加到{{name}}之后吗？",
+      "estimatedAfter": "添加到您现在所在的{{name}}之后吗？",
+      "defaultEnd": "添加到第{{day}}天的最后吗？",
+      "dayFront": "添加到第{{day}}天的最前面吗？",
+      "dayChip": "第{{day}}天",
+      "confirmButton": "添加",
+      "cancelButton": "取消",
+      "slotGoneTitle": "行程已变更",
+      "slotGoneBody": "作为基准的行程已被删除，请根据最新行程重新选择。"
+    }
   },
   "proactive": {
     "PRE_TRIP_BRIEFING": "距离{{destination}}之旅还有一天！提前看看{{nights}}晚的行程吧。",
