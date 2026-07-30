@@ -33,6 +33,10 @@ class PlaceCard(BaseModel):
     tags: str
     is_hidden_gem: bool
     avg_duration_minutes: int | None = None
+    # 기준점(현재 위치·숙소·일정 장소)에서의 거리. 반경 안에 후보가 없어 더 멀리까지 찾은
+    # 경우를 앱이 판별할 수 있게 내려준다 — 지금은 Spring·앱이 쓰지 않지만, 답변 문장에만
+    # 있으면 카드 목록과 문장이 어긋난다.
+    distance_m: int | None = None
     reason: str
 
 
@@ -42,10 +46,17 @@ class EstimatedSlot(BaseModel):
     order_index: int
 
 
+class Insertion(BaseModel):
+    day: int
+    after_slot_id: str | None = None
+    source: str  # "conversation" | "estimated" | "default"
+
+
 class ChatResponse(BaseModel):
     reply: str
     places: list[PlaceCard] | None = None
     estimated_slot: EstimatedSlot | None = None
+    insertion: Insertion | None = None
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -60,7 +71,7 @@ async def chat(req: ChatRequest, request: Request):
     )
 
     try:
-        reply, places, estimated_slot = await handle_chat(
+        reply, places, estimated_slot, insertion = await handle_chat(
             db=db,
             redis=redis,
             user_id=req.user_id,
@@ -74,4 +85,4 @@ async def chat(req: ChatRequest, request: Request):
         logger.warning("챗봇 요청 — 존재하지 않거나 소유하지 않은 route_id: %s", req.route_id)
         raise HTTPException(status_code=404, detail="여행 일정을 찾을 수 없습니다.")
 
-    return ChatResponse(reply=reply, places=places, estimated_slot=estimated_slot)
+    return ChatResponse(reply=reply, places=places, estimated_slot=estimated_slot, insertion=insertion)

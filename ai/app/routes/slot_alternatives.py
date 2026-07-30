@@ -83,6 +83,9 @@ async def get_slot_alternatives(req: SlotAlternativesRequest, request: Request):
         city_coords=center,
         tags=req.tags,
         radius_m=ALTERNATIVES_RADIUS_M,
+        # 대안은 인접 슬롯 주변에서 골라야 동선이 안 깨진다 — 반경 안 무작위면 5km 끝과
+        # 100m 옆이 같은 확률로 올라온다.
+        sort="distance",
     ).ainvoke("")
 
     if not candidates:
