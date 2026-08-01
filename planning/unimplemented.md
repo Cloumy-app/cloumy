@@ -21,6 +21,31 @@
 - **해야 할 것(논의 필요)**: 블랙리스트 조회를 try-catch로 감싸고 Redis 장애 시 정책 결정 필요 — "차단된 토큰인지 확인 불가 시 통과시킬지(로그아웃 처리가 늦게 반영되는 정도의 리스크)" vs "명시적으로 503 반환할지"(현재처럼 이유 불명확한 500보다는 나음)
 - **우선순위**: 중간 — Redis 자체가 자주 죽는 컴포넌트는 아니지만, 장애 시 파급 범위가 이 기능 하나가 아니라 전체 인증이라 영향도가 큼
 
+### ~~3. V17이 bookmarks 테이블을 중복 생성 — 빈 DB 초기화가 깨진다~~ — 해결됨 (2026-08-01)
+- **해결**: V17의 `CREATE TABLE`·`CREATE INDEX`에 `IF NOT EXISTS` 추가로 멱등화. 임시 컨테이너에서 빈 DB → `init.sql` → V1~V21 순차 적용으로 **재현 후 수정 확인**(원본은 `relation "bookmarks" already exists`로 실패, 수정본은 전체 통과).
+- **함께 발견된 더 큰 결함**: 아래 "Flyway baseline이 V1을 통째로 건너뛴다" 참조 — 사실 이쪽이 먼저 터진다.
+- 기존 DB는 checksum이 바뀌므로 `./gradlew flywayRepair` 필요.
+
+<details>
+<summary>원본 기록</summary>
+
+### 3. V17이 bookmarks 테이블을 중복 생성 — 빈 DB 초기화가 깨진다
+- **파일**: `backend/src/main/resources/db/migration/V3__create_routes.sql`(bookmarks 최초 생성), `V17__create_bookmarks.sql`(같은 테이블 재생성)
+- **관련 태스크**: 프로액티브 확장 계획 수립 중 스키마 점검에서 발견 (2026-08-01)
+- **현재 상태**: V3(2026-06-21, `9b4cabf`)에 이미 `CREATE TABLE bookmarks`가 있는데, V17(2026-07-10, `d6af51f` "bookmarks 마이그레이션 누락 수정")이 `IF NOT EXISTS` 없이 같은 테이블을 또 만든다. 인덱스 이름(`idx_bookmarks_user`, `idx_bookmarks_place`)도 동일해 함께 충돌한다.
+- **위험**: 기존 개발 DB는 V3 시점에 이미 테이블이 있어 문제가 드러나지 않았지만, **빈 DB에서 V1부터 마이그레이션하면 V17에서 `relation "bookmarks" already exists`로 실패한다.** 신규 개발 환경 셋업·CI에서 DB를 새로 올리는 경로가 전부 막힌다.
+- **해야 할 것**: V17의 `CREATE TABLE`·`CREATE INDEX`에 `IF NOT EXISTS` 추가. 이미 적용된 DB는 checksum이 바뀌므로 `./gradlew flywayRepair` 동반 필요.
+- **우선순위**: 🔴 높음 — **신규 마이그레이션(V21 이후) 추가 전에 먼저 잡아야 한다.** 지금 상태로 V21을 올리면 clean DB 검증 자체가 불가능하다.
+
+</details>
+
+### 4. ~~Flyway baseline이 V1을 건너뛴다~~ — **오진이었음, 해당 없음** (2026-08-01)
+- **처음 세운 가설**: `db/init.sql`의 PostGIS가 public에 `spatial_ref_sys`를 만들므로 Flyway가 "비어있지 않은 스키마"로 판정 → `baseline-on-migrate: true`가 발동 → `baseline-version` 기본값(1) 때문에 V1이 스킵 → `users` 없어 V3에서 죽는다.
+- **실제**: **틀렸다.** Spring을 실제로 기동해 확인하니 Flyway는 `spatial_ref_sys`가 있어도 `Current version of schema "public": << Empty Schema >>`로 판정하고 **baseline을 발동시키지 않는다.** `SPRING_FLYWAY_BASELINE_VERSION=1`(옛 기본값)로 빈 DB에 붙여도 **V1부터 V21까지 정상 적용**되고 `users` 테이블도 생긴다.
+- **왜 오진했나**: 처음 "재현"이라고 한 것은 **V1을 손으로 빼고 V2부터 psql로 적용해 V3가 죽는 걸 본 것**이었다. 그건 Flyway가 그렇게 동작한다는 증거가 아니라 내가 만든 시나리오였다. **Flyway 내부 판정 로직은 SQL 재생으로 대신 검증할 수 없다** — 실제로 기동해서 관찰해야 한다.
+- **되돌림**: `application-dev.yml`의 `baseline-version: 0` 원복. `docker-compose.yml`은 `"0"` 유지하되 근거를 정정 — 평소엔 무해하지만, 스키마에 진짜 테이블이 남은 상태로 붙으면 baseline이 발동해 V1~V5가 스킵되므로 0이 더 안전하다.
+- **남는 교훈**: 위 3번(V17 중복)은 진짜 버그였고 실제로 재현됐다. 같은 세션에서 나온 두 진단 중 하나만 맞았다.
+
 ---
 
 ## 🟠 테스트 미완료
@@ -355,6 +380,23 @@
 ---
 
 ## 🔵 이동시간 기능 후속 (Tmap 대중교통 연동 후속 — 2026-07-04)
+
+### (번호추가) Tmap `searchDttm`(타임머신)을 안 쓰고 있다 — 막차 계산의 열쇠
+- **파일**: `ai/app/services/transport_service.py:76-85` (`_tmap_transit_route`)
+- **관련 태스크**: 프로액티브 막차 시나리오 설계 중 발견 (2026-08-01)
+- **현재 상태**: 요청 바디에 `startX/startY/endX/endY/count/lang/format`만 보낸다. **Tmap 대중교통 API는 `searchDttm`(yyyymmddhhmi) 옵션 파라미터로 "타임머신" 미래 시각 조회를 지원**하는데 쓰지 않고 있어, 항상 "지금 기준" 경로만 나온다.
+- **왜 중요한가**: 이게 있으면 **막차를 별도 API 없이 계산할 수 있다.** 23:00→23:30→00:00으로 미래 시각을 이분 탐색해 경로가 사라지는 시점을 찾으면 **환승 연결까지 성립하는 마지막 경로**가 나온다. 노선별 막차 시각(ODsay `searchSubwaySchedule`의 `firstLastFlag`, 서울교통공사 시간표)은 역 단위 값이라 환승 성립 여부를 우리가 다시 계산해야 하고 지하철만 커버한다.
+- **해야 할 것**: `_tmap_transit_route()`에 `search_dttm` 인자 추가 + `find_last_departure()` 신규(이분 탐색 5~6회). 프로액티브 `LAST_TRANSIT` 규칙이 이걸 쓴다.
+- **참고**: 이 발견으로 ODsay 재도입 필요성이 사라졌다. ODsay가 여전히 유리한 영역은 **도시 간 이동**(`trainServiceTime` KTX 첫차·막차, `searchInterBusSchedule` 고속·시외버스)뿐 — 멀티시티를 제대로 할 때 재검토.
+- **우선순위**: 중간 — 프로액티브 막차 규칙의 선행 조건
+
+### (번호추가) Tmap 응답의 `fare`·`transferCount`를 버리고 있다
+- **파일**: `ai/app/services/transport_service.py:86-92` (`_tmap_transit_route`), `_build_transit_summary`(L36)
+- **관련 태스크**: 위와 동일 (2026-08-01)
+- **현재 상태**: Tmap 응답에 `fare`(요금)·`transferCount`(환승 횟수)·`totalWalkTime`이 오는데 `totalTime`만 꺼내 쓴다. `_build_transit_summary`가 legs에서 노선명을 조립하긴 하지만 **요금은 어디에도 안 들어간다.**
+- **위험**: 노션 04 Feature 명세의 이동 카드 문구가 "🚇 34분 ₩1,450 환승1"인데 **요금이 빠진 채로 나가고 있을 것.** 예산 기능(지출 추정)에서도 대중교통비를 못 잡는다.
+- **해야 할 것**: `_tmap_transit_route` 반환에 `fare`·`transfer_count` 추가 → `route_slots.transit_summary`/`transit_detail` 저장 포맷 확장 → 프론트 카드 표기.
+- **우선순위**: 낮음~중간 — 이미 받고 있는 데이터라 추가 비용 0, 표기만 붙이면 됨
 
 ### (번호추가) 탭하면 상세 노선 + 실시간 도착정보
 - **관련 태스크**: 이동수단별 이동시간 반영 (2026-07-04 완료)
