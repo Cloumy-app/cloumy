@@ -405,13 +405,12 @@
 
 사용자에게 보이는 4개 언어 문구는 여전히 앱 `proactiveText.ts`가 만든다("판단은 규칙이, 표현은 앱이" 유지).
 
-### (번호추가) 배너 X가 같은 화면에 머무는 동안 사라지지 않는다
+### ~~(번호추가) 배너 X가 같은 화면에 머무는 동안 사라지지 않는다~~ — 해결됨 (2026-08-27, Phase B P2)
 - **관련 태스크**: 2026-07-29 코드 리뷰
 - **파일**: `frontend/components/route/ProactiveBanner.tsx`
 - **현재 상태**: `handleDismiss`가 `dismissToday`(MMKV 쓰기)와 `sendProactiveFeedback`(fire-and-forget)만 호출한다. 둘 다 React 상태나 쿼리 캐시를 안 건드려 리렌더가 발생하지 않는데, `isDismissedToday` 검사는 렌더 시점에만 수행된다.
 - **증상**: X를 눌러도 배너가 남아 있고, 다시 탭하면 같은 말풍선이 챗봇에 중복으로 쌓인다. 화면을 벗어났다 오면(언마운트/리마운트) 정상 동작하므로 **재노출 방지 자체는 정상**이다(2026-07-27 실기기 검증 기록 참고).
-- **해야 할 것**: 로컬 `dismissed` 상태를 두거나 `queryClient.setQueryData(['proactive', routeId], null)`로 리렌더를 유발한다.
-- **우선순위**: 낮음 — 기능 손실이 아닌 UX 결함
+- **해결(2026-08-27)**: `handleDismiss`에 `queryClient.setQueryData(['proactive', routeId], null)` 추가. 배너와 챗봇이 같은 쿼리 키를 공유하므로 양쪽이 함께 정리된다. dismiss 구조 개편(placeId + 서버 필터링)과 같은 파일을 여는 김에 처리했다.
 
 ### (번호추가) 오는 편이 여행 종료일 다음날 새벽이면 RETURN_DEPARTURE가 안 뜬다
 - **관련 태스크**: 프로액티브 후속 수정 (2026-07-29)
