@@ -53,8 +53,6 @@
     "subtitle": "AIが設計するあなただけの旅行ルート",
     "googleButton": "Googleで始める",
     "devLoginButton": "開発者ログイン",
-    "comingSoonTitle": "準備中",
-    "googleComingSoonBody": "Googleログインは準備中です。",
     "connectFailedTitle": "接続に失敗しました",
     "devProfileHint": "Springを --spring.profiles.active=dev で実行してください。",
     "serverErrorTitle": "サーバーエラー",
