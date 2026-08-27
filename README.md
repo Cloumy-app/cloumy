@@ -117,7 +117,7 @@ flowchart TB
 
 **해결** — Lettuce 기본 커맨드 타임아웃이 60초인데 `application.yml`에 타임아웃 설정이 아예 없었다. **try-catch만으로는 fail-open이 아니다** — 요청이 1분씩 매달리는 건 500과 다를 바 없다. `timeout: 1s` / `connect-timeout: 1s`를 추가했다.
 
-또 하나 — `catch (BusinessException e) { throw e; }`를 `catch (Exception e)`보다 **먼저** 둬야 한다. `JWT_REVOKED`를 던지는 `throw`가 try 블록 안에 있어서, 순서가 뒤바뀌면 블랙리스트가 통째로 무력화된다.
+또 하나 — `JWT_REVOKED`를 던지는 `throw`가 try 블록 **안**에 있다. `catch (BusinessException e) { throw e; }`를 빼먹고 `catch (Exception e) { log.warn }`만 두면 **로그아웃한 토큰이 조용히 통과한다** — 겉으로는 아무 증상이 없다. 테스트 두 개를 나란히 뒀다(블랙리스트 차단 / Redis 장애 fail-open). 하나만으론 반쪽이다 — fail-open 테스트만 있으면 재던지기를 지워도 통과하고, 차단 테스트만 있으면 try-catch를 통째로 지워도 통과한다.
 
 **결과** — **60.14초 → 1.03초.** Redis 정상 시 로그아웃 토큰 차단은 그대로 동작한다(401 `TOKEN_REVOKED`). 이 설정은 레이트리밋·AI 캐시의 fail-open에도 함께 적용된다 — 셋 다 같은 병을 앓고 있었다.
 
