@@ -1,13 +1,13 @@
 import { View, Text, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import { devLogin, socialLogin } from '@/lib/api/auth';
 import { API_BASE } from '@/lib/api/client';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { GoogleLoginButton, GOOGLE_LOGIN_AVAILABLE } from '@/components/auth/GoogleLoginButton';
 import type { User } from '@/types';
 
 // 구글 동의창이 브라우저에서 앱으로 돌아온 뒤 잔여 세션을 정리한다 — 컴포넌트 안이 아니라 모듈 최상단에서 호출해야 한다
@@ -18,12 +18,6 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const setTokens = useAuthStore((s) => s.setTokens);
   const setUser = useAuthStore((s) => s.setUser);
-
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-  });
 
   // 개발자 로그인과 구글 로그인 모두 여기서 성공 처리를 공유한다 (중복 로직 방지)
   const handleAuthSuccess = (data: {
@@ -50,8 +44,7 @@ export default function LoginScreen() {
   const handleDevLogin = async () => {
     setLoading(true);
     try {
-      const data = await devLogin();
-      handleAuthSuccess(data);
+      handleAuthSuccess(await devLogin());
     } catch (e: unknown) {
       handleAuthError(e);
     } finally {
@@ -59,26 +52,16 @@ export default function LoginScreen() {
     }
   };
 
-  useEffect(() => {
-    // 사용자가 동의창을 취소한 경우는 에러가 아니므로 조용히 무시한다
-    if (response?.type !== 'success') return;
-    const accessToken = response.authentication?.accessToken;
-    if (!accessToken) return;
-
-    const run = async () => {
-      setLoading(true);
-      try {
-        const data = await socialLogin('google', accessToken);
-        handleAuthSuccess(data);
-      } catch (e: unknown) {
-        handleAuthError(e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    run();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [response]);
+  const handleGoogleToken = async (accessToken: string) => {
+    setLoading(true);
+    try {
+      handleAuthSuccess(await socialLogin('google', accessToken));
+    } catch (e: unknown) {
+      handleAuthError(e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -91,17 +74,20 @@ export default function LoginScreen() {
 
         {/* 소셜 로그인 버튼 */}
         <View className="w-full gap-3">
-          <TouchableOpacity
-            className="w-full bg-white border border-slate-200 rounded-xl py-4 items-center"
-            onPress={() => promptAsync()}
-            disabled={!request || loading}
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color="#334155" />
-            ) : (
-              <Text className="text-slate-700 font-semibold text-base">{t('login.googleButton')}</Text>
-            )}
-          </TouchableOpacity>
+          {GOOGLE_LOGIN_AVAILABLE ? (
+            <GoogleLoginButton loading={loading} onToken={handleGoogleToken} />
+          ) : (
+            // OAuth 클라이언트 ID가 없으면 GoogleLoginButton을 아예 렌더하지 않는다 —
+            // useAuthRequest가 훅 안에서 throw해 로그인 화면이 통째로 크래시하기 때문이다.
+            <View className="w-full bg-slate-50 border border-slate-200 rounded-xl py-4 items-center">
+              <Text className="text-slate-400 font-medium text-base">{t('login.googleButton')}</Text>
+              {__DEV__ && (
+                <Text className="text-slate-400 text-xs mt-1">
+                  EXPO_PUBLIC_GOOGLE_*_CLIENT_ID 미설정
+                </Text>
+              )}
+            </View>
+          )}
 
           {/* 개발자 전용 */}
           {__DEV__ && (
