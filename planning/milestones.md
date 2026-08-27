@@ -403,16 +403,17 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 
 ### Phase B — 프로액티브 선행 (규칙보다 먼저)
 
-- [ ] B-1. dismiss 구조 개편 — placeId + 서버 필터링. **나중에 하면 params 계약을 전부 뒤집어야 한다**
+- [x] B-1. dismiss 구조 개편 — placeId + 서버 필터링 — 2026-08-27
   - `_select`가 `min(priority)` 1개만 반환하는데 상태형 규칙은 하루 종일 참 → 그날 개입 전멸
-- [ ] B-2. `V23__create_place_closures.sql` — 휴관 날짜 직접 적재
-- [ ] B-3. 큐레이션 서울 30~50곳 시드 (`business_hours` 포함 — `last_entry_minutes`가 상대값이라 필수)
+- [x] B-2. `V23__create_place_closures.sql` — 휴관 날짜 직접 적재 — 2026-08-27
+- [ ] B-3. 큐레이션 서울 30~50곳 시드 — 스크립트·CSV 양식 완료(2026-08-27), **데이터 입력 대기**
 
 ### Phase C — 프로액티브 규칙 6종
 
-- [ ] C-1. `transport_service.py` — Tmap `searchDttm` 이분 탐색 + `fare` 추출 (DB 무관, 병렬 가능)
-- [ ] C-2. 규칙 6종 — `LAST_TRANSIT`·`CLOSED_DAY`(P1) / `BREAK_TIME`·`RESERVATION_WALL`·`PAYMENT_WALL`(P2) / `LAST_ENTRY`(P3)
-- [ ] C-3. 계약 확장 — AI 스키마 · `TYPE_PATTERN` · 프론트 타입/문구 · i18n 4개 언어
+- [x] C-1. `transport_service.py` — Tmap `searchDttm` 이분 탐색 + `fare` 추출 — 2026-08-27
+- [x] C-2. 규칙 6종 — `LAST_TRANSIT`·`CLOSED_DAY`(P1) / `BREAK_TIME`·`RESERVATION_WALL`·`PAYMENT_WALL`(P2) / `LAST_ENTRY`(P3) — 2026-08-27
+- [x] C-3. 계약 확장 — AI 스키마 · `TYPE_PATTERN` · 프론트 타입/문구 · i18n 4개 언어 — 2026-08-27
+  - 신규 params의 `placeId`를 `UUID`로, `reservationPlatform`을 `Literal`로 좁혀 프롬프트 주입 통로를 닫았다(앱이 되돌려 보내는 값이라 DB CHECK가 안 지켜준다)
 
 ### 확정된 축소 판단
 
