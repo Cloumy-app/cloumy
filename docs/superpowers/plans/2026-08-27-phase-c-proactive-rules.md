@@ -104,7 +104,7 @@ _LAST_TRANSIT_PRECISION_MIN: int = 15   # 이분 탐색 정밀도(분) → 호�
 | `CLOSED_DAY` | `placeId: str` · `placeName: str` · `day: int` |
 | `BREAK_TIME` | `placeId: str` · `placeName: str` · `breakStart: time` · `breakEnd: time` |
 | `LAST_ENTRY` | `placeId: str` · `placeName: str` · `lastEntryTime: time` · `closeTime: time` |
-| `RESERVATION_WALL` | `placeId: str` · `placeName: str` · `reservationPlatform: Literal[...]` |
+| `RESERVATION_WALL` | `placeId: str` · `placeName: str` · `reservationPlatform: str \| null` |
 | `PAYMENT_WALL` | `placeId: str` · `placeName: str` · `kind: Literal["cash_only","no_foreign_card"]` |
 
 **시각 타입 규약** — 아무렇게나 고르지 않는다:
@@ -282,11 +282,11 @@ async def _load_last_transit(
 
 | type | priority | 위치 가드 | 대상 슬롯 | 데이터 |
 |---|---|---|---|---|
-| `LAST_TRANSIT` | **1** | 필요 | 오늘 마지막 슬롯 → 숙소 | `snap["last_transit"]` |
+| `LAST_TRANSIT` | **1** | ~~필요~~ **불필요** | 오늘 마지막 슬롯 → 숙소 | `snap["last_transit"]` |
 | `CLOSED_DAY` | 1 | 불필요 | 오늘 슬롯 중 첫 휴관 장소 | `closed_weekdays` OR `place_closures` |
 | `BREAK_TIME` | 2 | 필요 | 다음 슬롯 | `break_time`, `last_order_minutes` |
 | `RESERVATION_WALL` | 2 | 불필요 | 오늘 남은 슬롯 중 첫 예약필수 | `reservation_required`, `walk_in_allowed`, `reservation_platform` |
-| `PAYMENT_WALL` | **2** | 불필요 | 다음 슬롯 | `cash_only`, `friendly_foreign_card` |
+| `PAYMENT_WALL` | **2** | 불필요 | ~~다음 슬롯~~ **오늘 슬롯 순회** | `cash_only`, `friendly_foreign_card` |
 | `LAST_ENTRY` | **3** | 필요 | 다음 슬롯 | `last_entry_minutes` + `business_hours` |
 
 **priority는 실패 비용 기준으로 재배열했다**(Notion 재점검 #3):
@@ -422,6 +422,17 @@ curl localhost:8080/v1/routes/$ROUTE_ID/proactive -H "Authorization: Bearer $TOK
 그 밖에 `find_last_departure`가 `leave_by`(snake)를 주고 params는 `leaveByTime`(camel)을 쓰는
 불일치는 **의도된 것**이며 Interfaces 절에 근거를 남겼다(params는 i18next 보간용이라 camelCase가 규약).
 
+**5. Q2 계획 수립 중 드러난 정정 2건 (2026-08-27)** — 상위 표에 자기모순이 있었다:
+
+- `PAYMENT_WALL`을 「다음 슬롯 + 위치 가드 불필요」로 적었으나 **둘은 양립 불가**다.
+  "다음 슬롯"은 `_current_and_next`가 주는데 그 함수 첫 줄이 `confidence != "high"` 가드다.
+  → `today_slots` 순회로 변경(`RESERVATION_WALL`과 같은 형태)
+- `LAST_TRANSIT`의 위치 가드를 **뺀다**. `leave_by`는 마지막 슬롯→숙소 구간에서 계산하지
+  유저 현재 위치와 무관하고, 정작 필요한 밤 시간대엔 `_estimate_current_slot`의 confidence가
+  낮아 **규칙이 필요한 순간에 죽는다**(챗봇 장소 추가가 "밤에 통째로 비활성"이던 것과 같은 실패 형태)
+
+상세는 `2026-08-27-phase-c-q2-rules-impl.md`의 「상위 계획서 정정 2건」.
+
 **4. 이 패스에서 함께 잡힌 것** — `proactiveText.ts` 분기가 원래 계획엔 **2개**로 적혀 있었으나
 `PAYMENT_WALL`의 `kind` 서브키와 벽시계 시각 2종을 세면 실제로는 **4개**다. i18n 키도 6개가 아니라 7개다.
 Q3 표를 정정했다.
@@ -441,7 +452,7 @@ Q3 표를 정정했다.
 - [ ] 규칙 함수 안에서 `await`·DB·`datetime.now()`를 부르지 않았다 (순수 함수 원칙)
 - [ ] 6종 전부 **`is None` 가드와 falsy 검사를 분리**했다 (FFE #1)
 - [ ] `params["placeId"]`가 `str` (FFE #5)
-- [ ] 위치 가드가 `BREAK_TIME`·`LAST_ENTRY`·`LAST_TRANSIT` 3종에만 있다
+- [ ] 위치 가드가 `BREAK_TIME`·`LAST_ENTRY` **2종에만** 있다 (LAST_TRANSIT엔 없다 — Q2 계획서 정정 2)
 - [ ] `_RULES_DURING` 순서가 계획서대로
 - [ ] `_load_slots`의 `start_time IS NOT NULL` 금지 주석을 어기지 않았다
 - [ ] Tmap 3중 가드 — phase·시간·Redis 캐시
