@@ -1,16 +1,17 @@
 import { Text, TouchableOpacity, View } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Sparkles, X } from 'lucide-react-native';
 import { getProactive, sendProactiveFeedback } from '@/lib/api/proactive';
 import { useChatStore } from '@/stores/useChatStore';
-import { isDismissedToday, dismissToday } from '@/lib/proactiveDismissal';
+import { isDismissedToday, dismissToday, interventionPlaceId } from '@/lib/proactiveDismissal';
 import { buildProactiveText, asI18nParams } from '@/lib/proactiveText';
 
 export function ProactiveBanner({ routeId }: { routeId: string }) {
   const { t, i18n } = useTranslation();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const seedFromProactive = useChatStore((s) => s.seedFromProactive);
 
   // 배너는 실패해도 없는 채로 넘어가면 그만이다(FFE #11) — retry: false, 에러 시 무렌더
@@ -22,22 +23,26 @@ export function ProactiveBanner({ routeId }: { routeId: string }) {
   });
 
   const intervention = data ?? null;
-  if (isError || !intervention || isDismissedToday(routeId, intervention.type)) {
+  const placeId = intervention ? interventionPlaceId(intervention) : undefined;
+  if (isError || !intervention || isDismissedToday(routeId, intervention.type, placeId)) {
     return null;
   }
 
   const text = buildProactiveText(t, i18n.language, intervention);
 
   const handleTap = () => {
-    dismissToday(routeId, intervention.type);
-    sendProactiveFeedback(routeId, intervention.type, 'tapped');
+    dismissToday(routeId, intervention.type, placeId);
+    sendProactiveFeedback(routeId, intervention.type, 'tapped', placeId);
     seedFromProactive(routeId, intervention.type, asI18nParams(intervention.params), text);
     router.push('/chat' as never);
   };
 
   const handleDismiss = () => {
-    dismissToday(routeId, intervention.type);
-    sendProactiveFeedback(routeId, intervention.type, 'dismissed');
+    dismissToday(routeId, intervention.type, placeId);
+    sendProactiveFeedback(routeId, intervention.type, 'dismissed', placeId);
+    // MMKV 쓰기만으론 리렌더가 안 나 배너가 화면에 남는다. 배너와 챗봇이 같은 쿼리 키를
+    // 공유하므로 캐시를 비우면 양쪽이 함께 정리되고, 이 컴포넌트도 즉시 null을 렌더한다.
+    queryClient.setQueryData(['proactive', routeId], null);
   };
 
   return (

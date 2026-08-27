@@ -35,6 +35,7 @@ _AIRPORT_MINUTES = {"서울": 90, "부산": 60, "제주": 30}  # T1·RETURN
 _AIRPORT_MINUTES_DEFAULT = 90  # T1·RETURN — 표에 없는 도시
 _CHECKIN_BUFFER_MIN = 120  # T1·RETURN
 _FLIGHT_WINDOW_MIN = 60  # T1·RETURN — leave_by까지 남은 시간이 이 안이면 발동
+_DISMISS_TTL_HOURS = 48  # Spring ProactiveController와 맞춘 값(기록은 Spring이 한다)
 
 
 def _trip_phase(route: asyncpg.Record, now: datetime) -> str:
@@ -337,6 +338,28 @@ def _select(candidates: list[dict]) -> dict | None:
 
 
 # ============================================================
+# dismiss 필터링 — 기록은 Spring이 하고(ProactiveController), 여기서는 조회·판정만 한다.
+# 반드시 _select 호출 "전"에 candidates에서 걸러야 한다 — _select는 min(priority)로
+# 후보 1개만 반환하므로 뒤에서 거르면 그날 아무것도 안 뜨는 버그가 된다(FFE #4).
+# ============================================================
+
+async def _load_dismissed(redis, user_id: str, route_id: str, now: datetime) -> set[str]:
+    """오늘 유저가 닫은 개입 목록. Redis 장애 시 빈 set — 개입을 막지 않는다(FFE #3)."""
+    key = f"proactive:dismissed:{user_id}:{route_id}:{now.date().isoformat()}"
+    try:
+        return set(await redis.smembers(key))
+    except Exception as e:
+        logger.warning("[proactive] dismissed 조회 실패 — 빈 목록으로 진행: %s", e)
+        return set()
+
+
+def _dismiss_member(candidate: dict) -> str:
+    """Spring이 기록하는 멤버 형식과 1:1로 맞춘다 — 장소 무관 규칙은 '-'."""
+    place_id = candidate["params"].get("placeId")
+    return f"{candidate['type']}:{place_id or '-'}"
+
+
+# ============================================================
 # 스냅샷 수집 — 규칙이 볼 재료를 단계적으로 모은다
 # ============================================================
 
@@ -348,7 +371,8 @@ async def _load_slots(db: asyncpg.Pool, route_id: str) -> list[asyncpg.Record]:
     # 시각이 필요한 T2·T7은 _current_and_next와 각 규칙의 FFE #8 가드가 알아서 거른다.
     return await db.fetch(
         "SELECT rs.day_number, rs.order_index, rs.start_time, rs.duration_minutes, "
-        "rs.transport_to_next, rs.transport_minutes, p.name AS place_name, p.category_tags "
+        "rs.transport_to_next, rs.transport_minutes, p.id AS place_id, p.name AS place_name, "
+        "p.category_tags "
         "FROM route_slots rs JOIN places p ON p.id = rs.place_id "
         "WHERE rs.route_id = $1 ORDER BY rs.day_number, rs.order_index",
         route_id,
@@ -520,4 +544,6 @@ async def get_intervention(db: asyncpg.Pool, redis, user_id: str, route_id: str)
     snap = await _build_snapshot(db, redis, route, phase, now, user_id)
     rules = _RULES_PRE_TRIP if phase == "pre_trip" else _RULES_DURING
     candidates = [c for c in (rule(snap) for rule in rules) if c is not None]
+    dismissed = await _load_dismissed(redis, user_id, route_id, now)
+    candidates = [c for c in candidates if _dismiss_member(c) not in dismissed]  # ← _select 앞!
     return _select(candidates)

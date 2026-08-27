@@ -16,7 +16,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { getActiveRoute, getRouteSlots, insertRouteSlot } from '@/lib/api/routes';
 import { getProactive, sendProactiveFeedback } from '@/lib/api/proactive';
-import { isDismissedToday, dismissToday } from '@/lib/proactiveDismissal';
+import { isDismissedToday, dismissToday, interventionPlaceId } from '@/lib/proactiveDismissal';
 import { buildProactiveText, asI18nParams } from '@/lib/proactiveText';
 import { useChatStore } from '@/stores/useChatStore';
 import { InsertPlaceSheet } from '@/components/route/InsertPlaceSheet';
@@ -243,11 +243,13 @@ export default function ChatScreen() {
     // 루트 전환 때 비우므로 '전역 대화'가 아니라 '이 루트의 대화'를 뜻한다.
     if (messages.length > 0) return;
     // 배너를 탭해 들어온 경우는 여기서 걸린다 — 배너가 seedFromProactive보다 먼저
-    // dismissToday를 찍기 때문이다(ProactiveBanner.handleTap).
-    if (isDismissedToday(activeRouteId, intervention.type)) return;
+    // dismissToday를 찍기 때문이다(ProactiveBanner.handleTap). 배너와 같은 키를 써야
+    // 하므로 placeId도 반드시 함께 넘긴다.
+    const placeId = interventionPlaceId(intervention);
+    if (isDismissedToday(activeRouteId, intervention.type, placeId)) return;
 
-    dismissToday(activeRouteId, intervention.type);
-    sendProactiveFeedback(activeRouteId, intervention.type, 'auto_shown');
+    dismissToday(activeRouteId, intervention.type, placeId);
+    sendProactiveFeedback(activeRouteId, intervention.type, 'auto_shown', placeId);
     seedFromProactive(
       activeRouteId,
       intervention.type,

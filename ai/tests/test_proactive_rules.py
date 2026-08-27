@@ -4,6 +4,7 @@ from app.services.chat_service import _KST
 from app.services.proactive_service import (
     _RULES_PRE_TRIP,
     _current_and_next,
+    _dismiss_member,
     _rule_bookmark_nearby,
     _rule_budget_over,
     _rule_departure_soon,
@@ -495,3 +496,25 @@ def test_current_and_next_none_for_last_slot():
 
     assert current["start_time"] == time(14, 0)
     assert next_slot is None
+
+
+# ============================================================
+# _dismiss_member — Spring ProactiveController가 Redis에 기록하는 멤버 형식과
+# 1:1로 맞춰야 한다. 문자열 "None"/"null"이 새어들어가면 필터링이 깨진다(고정 계약 위반).
+# ============================================================
+
+def test_dismiss_member_with_place_id():
+    candidate = {"type": "CLOSED_DAY", "params": {"placeId": "11111111-1111-1111-1111-111111111111"}}
+    assert _dismiss_member(candidate) == "CLOSED_DAY:11111111-1111-1111-1111-111111111111"
+
+
+def test_dismiss_member_without_place_id_key():
+    # params에 placeId 키 자체가 없는 경우 — 장소 무관 규칙(기존 9종)
+    candidate = {"type": "WEATHER_ALERT", "params": {"day": 1, "kind": "rain"}}
+    assert _dismiss_member(candidate) == "WEATHER_ALERT:-"
+
+
+def test_dismiss_member_with_place_id_none():
+    # params에 placeId: None이 명시돼도 문자열 "None"이 아니라 "-"여야 한다
+    candidate = {"type": "PAYMENT_WALL", "params": {"placeId": None}}
+    assert _dismiss_member(candidate) == "PAYMENT_WALL:-"
