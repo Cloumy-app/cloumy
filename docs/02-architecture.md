@@ -1,206 +1,258 @@
 # 시스템 아키텍처
 
-> ⚠️ **2026-07-06 타겟 전환** 반영: 지도 내비(ADR-4)·결제(ADR-6) 관련 부분만 갱신함. 나머지 아키텍처 결정은 타겟 전환과 무관하게 유효.
+> 기준일 **2026-08-06**. 이 문서는 **결정(ADR)과 그 결정이 코드에 반영된 상태**를 함께 적는다.
+> "쓸 예정"과 "쓰고 있다"를 섞어 적었던 이전 버전을 실제 코드 기준으로 정정했다.
 
-## 전체 구조 다이어그램
+---
+
+## 전체 구조 — 지금 돌아가는 것
 
 ```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[클라이언트]
-  React Native + Expo (iOS / Android)
-  - 지도: react-native-maps (Google Maps SDK)
-  - 내비: Naver(대중교통)/Google(도보)/카카오T(택시) 3-way 딥링크 분기 (계획, 현재 Google만 구현) → Phase 2: 인앱 내비
-  - 실시간: socket.io-client (챗봇 스트리밍, 그룹 동기화)
-  - 결제: ⚠️ PG 미확정 (react-native-webview 예정, Stripe 등 국제결제 검토)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[API Gateway — Spring Cloud Gateway]
-  - JWT 인증 필터
-  - 서비스별 요청 라우팅
-  - Rate Limiting (LLM 과호출 방지)
-  - HTTPS 종단
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[백엔드 — Spring Boot 3.x]
-  MVP 초반(0~3개월): 모놀리식
-  MVP 후반(3~6개월): Auth / Trip / Community 서비스 분리 시작
-
-  ┌──────────┬──────────┬──────────┬──────────┐
-  │ Auth     │ Trip     │Community │ Budget   │
-  │ - 소셜   │ - 루트   │ - Hidden │ - 예산   │
-  │   로그인  │   CRUD   │   Gems   │   설정   │
-  │ - JWT    │ - 일정   │ - 태그   │ - 지출   │
-  │   발급   │   관리   │   피드   │   추적   │
-  └──────────┴──────────┴──────────┴──────────┘
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[AI 서비스 — Python FastAPI + LangChain]
-  처음부터 Spring과 분리된 마이크로서비스
-  - 모델 라우팅 (Haiku ↔ Sonnet)
-  - RAG 파이프라인 (pgvector 검색)
-  - OR-Tools TSP 동선 최적화
-  - Function Calling (챗봇 도구 호출)
-  - 예산 자연어 파싱
-  - 희소성 점수 계산
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[데이터 레이어]
-  PostgreSQL + PostGIS   pgvector        Redis
-  - 장소 DB              - 장소 임베딩    - 챗봇 세션
-  - 루트·일정            - 유사 장소 검색 - 장소 캐시 (TTL 24h)
-  - 사용자·결제          - RAG 검색       - JWT 블랙리스트
-
-  AWS S3
-  - Hidden Gems 사진, 방문 인증 이미지, 여행 일지
-
-  ── Phase 1 후반 ~ 단계적 전환 ──
-  Elasticsearch (MAU 증가 후)
-  - 장소 전문 검색 (Nori 한국어 형태소)
-
-  Kafka (Phase 2~, 데이터 규모 커진 후)
-  - 임베딩 생성 큐, 비동기 파이프라인
-  MVP 초반은 Spring @Async로 대체
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[외부 API]
-  Google Maps Platform    카카오 로컬 API    TourAPI (무료)
-  Claude API (Anthropic)  Naver/카카오T 딥링크(계획)  국제결제 PG(미정)
-  구글 OAuth              애플 Sign In       (카카오 OAuth 보류)
-  FCM                     OpenWeatherMap     Serper API(계획)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[인프라]
-  AWS EC2 (MVP 초반) → ECS Fargate + Auto Scaling (Phase 2)
-  Docker + GitHub Actions CI/CD
+┌───────────────────────────────────────────────────────────┐
+│  앱  Expo SDK 56 / React Native                           │
+│      expo-router · Zustand · TanStack Query · NativeWind  │
+│      지도 react-native-maps (Google Maps SDK)             │
+└──────────────────────────┬────────────────────────────────┘
+                           │  HTTPS · Authorization: Bearer
+                           ▼
+┌───────────────────────────────────────────────────────────┐
+│  Spring Boot 3.3.5 / Java 21              :8080           │
+│  ─ 단일 모놀리식. 별도 게이트웨이 없음 ─                   │
+│  JWT 인증 · 레이트리밋 · 소유권 검증 · 과금 가드           │
+│  DB 영속화 · FastAPI 프록시 및 SSE 중계                    │
+└───────┬───────────────────────────────────┬───────────────┘
+        │  X-Internal-Key                   │
+        │  ※ HTTP/1.1 only                  │
+        ▼                                   │
+┌────────────────────────────────┐          │
+│  FastAPI 0.115 / Python 3.11   │          │
+│                        :8000   │          │
+│  RAG(pgvector) · TSP(OR-Tools) │          │
+│  LLM 호출 · 프로액티브 규칙 판단│          │
+└───────┬───────────────┬────────┘          │
+        │               │                   │
+        ▼               ▼                   ▼
+┌───────────────┐  ┌─────────────────────────────────┐
+│ Claude        │  │  PostgreSQL 16                  │
+│ Sonnet/Haiku  │  │  PostGIS(좌표) + pgvector(임베딩)│
+│ OpenAI embed  │  └─────────────────────────────────┘
+└───────────────┘  ┌─────────────────────────────────┐
+                   │  Redis  캐시·챗봇 세션·레이트리밋│
+                   └─────────────────────────────────┘
+        ↑ Spring·FastAPI 둘 다 DB·Redis에 직접 붙는다
 ```
 
-## MVP 아키텍처 진화 전략
+### 이전 문서에 있었지만 실제로는 없는 것
 
-| 단계 | 아키텍처 | 이유 |
-|------|----------|------|
-| MVP 초반 (0~3개월) | Spring Boot 모놀리식 + FastAPI AI 분리 | AI 서비스만 분리, 나머지는 빠르게 개발 |
-| MVP 후반 (3~6개월) | Spring Auth/Trip/Community 서비스 분리 시작 | MAU·트래픽 패턴 파악 후 병목만 분리 |
-| Phase 2 (6개월~) | 완전한 마이크로서비스 + ECS Fargate + Kafka | 검증된 구조 기반 확장 |
+| 적혀 있던 것 | 실제 |
+|---|---|
+| **Spring Cloud Gateway** | 없다. 인증·레이트리밋은 Spring Boot **서블릿 필터 체인**에서 한다 |
+| **socket.io / WebSocket** | 없다. 스트리밍은 **SSE 하나**(루트 생성)뿐이고 챗봇은 일반 POST다 |
+| **Elasticsearch** | 없다. 검색은 PostGIS + GIN 인덱스로 처리 |
+| **Kafka / Spring @Async 임베딩 큐** | 없다. 임베딩은 별도 스크립트 배치 |
+| **AWS S3** | 코드 흔적 0. 업로드 기능 자체가 없다 |
+| **FCM 푸시** | 코드 흔적 0. 프로액티브는 푸시가 아니라 **앱 진입 시 배너(폴 방식)** |
+| **`@Scheduled` 배치** | **0개.** 주기 작업이 하나도 없다 |
+| Auth/Trip/Community/Budget **서비스 분리** | 분리 안 됨. 같은 이름의 **패키지**로만 나뉜 모놀리식 |
+
+### 경계 — 어디에 뭐가 사는가
+
+| | 책임 |
+|---|---|
+| **앱** | 화면 · **문구 조립(4개국어)** · 클라이언트 상태 |
+| **Spring** | 인증 · 소유권 검증 · 과금 가드 · DB 영속화 · FastAPI 프록시 및 SSE 중계 |
+| **FastAPI** | RAG · TSP · LLM 호출 · **규칙 판단** |
+
+> 🔑 **핵심 원칙 — "판단은 규칙이, 표현은 앱이"**
+> 서버는 `{type, params}`(숫자·열거·시각)만 준다. 문장은 앱이 만든다.
+> 이유 두 가지: ① 4개국어를 서버가 만들면 언어마다 프롬프트가 필요하다 ② 자유 문자열을 왕복시키면 **프롬프트 주입 통로**가 된다.
+
+---
 
 ## 주요 기술 결정 (ADR)
 
+각 ADR에 **실제 반영 상태**를 붙였다.
+
 ### ADR-1: 모바일 — React Native + Expo
-- **결정**: Flutter 대신 React Native + Expo 선택
-- **이유**: TypeScript 생태계 활용, OTA 업데이트로 앱스토어 심사 없이 핫픽스, react-native-maps Google Maps SDK 안정적
-- **트레이드오프**: 네이티브 성능은 Flutter 대비 다소 낮으나 MVP 속도 우선
+
+- **결정**: Flutter 대신 React Native + Expo
+- **이유**: TypeScript 생태계, OTA 업데이트로 심사 없이 핫픽스, react-native-maps의 Google Maps SDK 연동이 안정적
+- **트레이드오프**: 네이티브 성능은 Flutter보다 낮으나 MVP 속도 우선
+- **반영**: ✅ Expo SDK 56 + expo-router. 상태는 Zustand, 서버 상태는 TanStack Query, 스타일은 NativeWind
 
 ### ADR-2: 백엔드 — Spring Boot
-- **결정**: Node.js 대신 Spring Boot 3.x 선택
-- **이유**: 복잡한 여행 데이터 쿼리(JPA + QueryDSL), 한국 개발자 풀 풍부, PostGIS 연동 안정적
-- **트레이드오프**: 초기 보일러플레이트 많으나 확장성 확보
+
+- **결정**: Node.js 대신 Spring Boot 3.x
+- **이유**: 복잡한 여행 데이터 쿼리(JPA + QueryDSL), 한국 개발자 풀, PostGIS 연동
+- **반영**: ⚠️ **QueryDSL은 의존성·애노테이션 프로세서만 걸려 있고 코드에서 한 번도 안 쓴다**(`com.querydsl` import 0건). 복잡한 쿼리는 **네이티브 SQL `@Query` 13개**로 처리 중이다 — PostGIS 함수(`ST_DWithin` 등)는 어차피 JPQL로 표현이 안 되기 때문이다.
+  → 쓰지 않을 거면 빌드에서 빼는 게 맞다. 결정 자체를 되돌릴지는 별도 판단이 필요하다.
 
 ### ADR-3: AI 서비스 — Python FastAPI 분리
-- **결정**: Spring 내부가 아닌 FastAPI 별도 서비스로 분리
-- **이유**: AI 파이프라인(LangChain, OR-Tools, pgvector)이 Python 생태계에 최적화. Spring과 독립적으로 AI 스택 고도화 가능
-- **트레이드오프**: 서비스 간 HTTP 통신 오버헤드 발생 (내부 gRPC 전환 고려)
 
-### ADR-4: 지도 — Google Maps 렌더링 + 3-way 내비 딥링크 분기
-- **결정**: 앱 내 지도 렌더링은 Google Maps SDK로 통일. 내비는 이동 수단별로 provider 분기: 지하철·버스 → Naver Maps, 도보 → Google Maps, 택시 → 카카오T
-- **이유**: 외국인 관광객에게 Google Maps가 가장 친숙한 영어 UI 제공. 단, 한국 대중교통 정확도는 Naver Maps가 압도적이고(영어 모드도 지원), 택시는 카카오T가 해외 카드 결제를 지원해 3-way 분기 채택 (기존에는 카카오맵 단일 딥링크였으나 국내 전용 UX라 외국인 이탈 위험이 커 변경)
-- **트레이드오프**: Google Maps 2025년 신요금 적용, MAU 1만 기준 월 $100~200 예상. 3-way 분기는 딥링크 URL scheme 3종 관리 필요 (현재 Google 딥링크만 구현됨, Naver/카카오T는 계획)
+- **결정**: Spring 내부가 아닌 별도 서비스
+- **이유**: AI 스택(LangChain, OR-Tools, pgvector)이 Python 생태계에 있고, Spring과 독립적으로 고도화할 수 있다
+- **트레이드오프**: 서비스 간 HTTP 오버헤드
+- **반영**: ✅ 다만 **완전한 마이크로서비스는 아니다** — 두 서비스가 **같은 PostgreSQL을 직접 공유한다.** DB가 사실상의 결합점이라, 스키마를 바꾸면 양쪽을 같이 봐야 한다.
+- ⚠️ **호출은 HTTP/1.1로 고정이다.** HTTP/2로 붙이면 깨진다. gRPC 전환은 검토만 된 상태.
+
+### ADR-4: 지도 — Google Maps 렌더링 + 내비 딥링크 분기
+
+- **결정**: 앱 내 렌더링은 Google Maps SDK로 통일. 내비는 이동수단별 분기 — 대중교통 → Naver, 도보 → Google, 택시 → 카카오T
+- **이유**: 외국인에게 Google Maps의 영어 UI가 가장 친숙하지만, 한국 대중교통 정확도는 Naver가 압도적이다(영어 모드 지원). 택시는 카카오T가 해외 카드 결제를 지원한다
+- **반영**: ⚠️ **walk / transit 2-way만 구현.** 택시 딥링크는 **보류** — 현지에서 우버가 실제로 쓸 만한지 확인한 뒤 판단하기로 했다
+- **트레이드오프**: Google Maps 2025 신요금, MAU 1만 기준 월 $100~200 예상
 
 ### ADR-5: 임베딩 — OpenAI text-embedding-3-small
-- **결정**: LLM은 Anthropic Claude, 임베딩은 OpenAI API 분리 사용
-- **이유**: Anthropic 임베딩 API 미출시. text-embedding-3-small 비용 효율 최적
-- **트레이드오프**: API 키 이중 관리 필요 (ANTHROPIC_API_KEY, OPENAI_API_KEY)
-- **추후**: Anthropic 임베딩 API 출시 시 단일화 검토
+
+- **결정**: LLM은 Anthropic Claude, 임베딩은 OpenAI
+- **이유**: Anthropic 임베딩 API 미출시. 비용 효율
+- **트레이드오프**: API 키 이중 관리
+- **반영**: ✅ 1536차원, `places.embedding`. ivfflat 인덱스 `lists=100`
 
 ### ADR-6: 결제 — ⚠️ 재검토 필요 (PG 미확정)
-- **기존 결정**: 인앱결제(IAP) 대신 토스페이먼츠 웹뷰 결제로 30% 수수료 우회
-- **재검토 사유**: 토스페이먼츠는 국내 전용 PG라 외국인 관광객의 해외 발급 카드 결제를 지원하지 않음 — 타겟 전환 후 그대로 쓸 수 없음
-- **후보**: Stripe 등 국제결제 PG (웹뷰 방식 유지 시 인앱결제 수수료 우회 이점도 유지 가능). 결제 기능 자체가 아직 미구현이라 PG 선택 후 착수 (별도 논의 필요)
 
-## 서비스 간 통신
+- **기존 결정**: IAP 대신 토스페이먼츠 웹뷰로 30% 수수료 우회
+- **재검토 사유**: 토스페이먼츠는 **국내 전용 PG**라 외국인의 해외 발급 카드를 지원하지 않는다 — 타겟 전환 후 그대로 쓸 수 없다
+- **후보**: Stripe 등 국제결제 PG (웹뷰 방식을 유지하면 수수료 우회 이점도 유지된다)
+- **반영**: ❌ 미구현. `PassValidationService` 33줄이 전부고 `payments` 테이블도 없다. **PG를 고르는 게 선행 과제다**
 
-| 통신 유형 | 구간 | 프로토콜 |
-|-----------|------|----------|
-| 일반 API 요청 | 클라이언트 ↔ API Gateway | HTTPS REST |
-| 챗봇 스트리밍 | 클라이언트 ↔ AI Service | WebSocket |
-| 그룹 여행 동기화 | 클라이언트 ↔ Trip 서비스 | WebSocket + Redis Pub/Sub |
-| 루트 생성·챗봇 요청 | Spring ↔ AI Service | HTTP (내부 gRPC 고려) |
-| 비동기 임베딩 생성 | MVP: Spring @Async / Phase 2: Kafka | - |
+---
 
-## 프로젝트 폴더 구조
+## 서비스 간 통신 — 실제
+
+| 구간 | 프로토콜 | 인증 |
+|---|---|---|
+| 앱 ↔ Spring | HTTPS REST | `Authorization: Bearer {JWT}` |
+| 앱 ↔ Spring (루트 생성) | **SSE** (`text/event-stream`) | 동일 |
+| Spring → FastAPI | **HTTP/1.1** (내부 6개 엔드포인트) | `X-Internal-Key` 헤더 |
+| Spring·FastAPI → PostgreSQL / Redis | 직접 연결 | — |
+
+**앱은 FastAPI에 직접 붙지 않는다.** 전부 Spring을 거친다.
+
+### 요청 1건이 지나는 필터 체인
+
+```
+JwtAuthenticationFilter → RateLimitFilter → AuthorizationFilter → Controller
+                                                                → GlobalExceptionHandler
+```
+
+**설계에서 짚을 것 3가지**
+
+1. **`RateLimitFilter`는 일부러 `@Component`가 아니다.** `SecurityConfig:38`에서 직접 `new` 한다. `@Component`면 Spring Boot가 서블릿 필터로도 자동 등록해 **요청당 2번 실행**되어 실제 허용량이 반토막 난다.
+2. **`DispatcherType.ASYNC`를 permitAll 해뒀다**(`SecurityConfig:45`). SSE 완료 시 Tomcat이 재디스패치하는데 그때 SecurityContext가 비어 인증 재검사에 걸린다 — **SSE 때문에 생긴 라인이다.**
+3. **에러 JSON을 3곳에서 각자 만든다.** 필터 체인은 `@RestControllerAdvice`보다 앞이라 `GlobalExceptionHandler`가 못 잡는다. 형태(`ApiResponse.error`)만 통일돼 있다.
+
+상세는 `docs/04-api-spec.md`.
+
+---
+
+## 프로젝트 구조 — 모노레포
+
+계획은 `cloumy-app` / `cloumy-backend` / `cloumy-ai` **3개 저장소 분리**였으나, 실제로는 **단일 모노레포**로 갔다. 세 서비스를 한 커밋에서 같이 고쳐야 하는 변경이 잦아 분리 비용이 이득보다 컸다.
 
 ```
 cloumy/
-├── cloumy-app/                  # React Native (Expo)
-│   ├── src/
-│   │   ├── app/                # Expo Router 기반 라우팅
-│   │   ├── components/         # 공통 컴포넌트
-│   │   ├── features/           # 기능별 모듈 (route, chat, budget, community)
-│   │   ├── stores/             # Zustand 상태 관리
-│   │   ├── hooks/              # 커스텀 훅
-│   │   ├── services/           # API 클라이언트 (TanStack Query)
-│   │   └── types/              # TypeScript 타입 정의
-│   └── package.json
+├── frontend/                    # React Native (Expo)
+│   ├── app/                    # expo-router 파일 기반 라우팅
+│   ├── components/             # 화면 단위 컴포넌트
+│   ├── lib/                    # api 클라이언트 · i18n(ko/en/ja/zh) · 유틸
+│   ├── stores/                 # Zustand
+│   └── types/index.ts          # 앱 타입의 단일 출처
 │
-├── cloumy-backend/              # Spring Boot
-│   ├── src/main/java/com/cloumy/
-│   │   ├── auth/               # 인증 모듈
-│   │   ├── trip/               # 루트·일정 모듈
-│   │   ├── community/          # Hidden Gems, 태그 모듈
-│   │   ├── budget/             # 예산·지출 모듈
-│   │   ├── payment/            # 결제 모듈
-│   │   └── common/             # 공통 유틸, 예외 처리
-│   └── build.gradle
+├── backend/                     # Spring Boot 3.3.5 / Java 21
+│   └── src/main/
+│       ├── java/com/cloumy/
+│       │   ├── auth/           # OAuth · JWT · SecurityConfig
+│       │   ├── trip/           # 루트 · 슬롯 · 숙소 · 챗봇 프록시
+│       │   ├── budget/         # 예산 · 지출
+│       │   ├── place/          # 장소 · 탐색 · 북마크
+│       │   └── common/         # ApiResponse · ErrorCode · 필터
+│       └── resources/db/migration/   # ⭐ Flyway V1~V21 — DB의 진실
 │
-├── cloumy-ai/                   # Python FastAPI
-│   ├── app/
-│   │   ├── routes/             # 엔드포인트 (route_gen, chatbot, embedding)
-│   │   ├── services/           # 비즈니스 로직 (rag, tsp, scoring)
-│   │   ├── models/             # Pydantic 모델
-│   │   └── config/             # 환경 설정, API 키
-│   └── requirements.txt
+├── ai/                          # FastAPI / Python 3.11
+│   ├── app/routes/             # 내부 엔드포인트 6개
+│   ├── app/services/           # route_gen · chat · proactive · tsp · retrievers
+│   └── tests/                  # 12파일 2,712줄 — 사실상 최신 명세
 │
-├── docker-compose.yml          # 로컬 개발 환경
-├── .github/workflows/          # GitHub Actions CI/CD
-└── docs/                       # 지금 읽는 문서들
+├── db/init.sql                  # postgis · vector 확장 설치 (Flyway 밖)
+├── docker-compose.yml
+├── .github/workflows/           # ci.yml · deploy.yml
+├── docs/                        # 지금 읽는 문서들
+└── planning/                    # milestones · unimplemented · strategy
 ```
+
+> `CLAUDE.md`가 루트 포함 4곳에 있다(총 131줄). 각 서비스의 컨벤션과 함정을 짧게 적어둔 것이라 **레포에서 가장 정확한 조감도**다.
+
+---
 
 ## 환경 설정
 
-### 환경 변수 (주요)
+### 환경 변수
 
 ```bash
-# Anthropic
+# LLM / 임베딩
 ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...            # 임베딩 전용
 
-# OpenAI (임베딩 전용)
-OPENAI_API_KEY=sk-...
-
-# Google Maps
+# 지도 · 장소
 GOOGLE_MAPS_API_KEY=...
+KAKAO_REST_API_KEY=...           # 로컬 검색(숙소·장소)에 실제 사용 중
+TOUR_API_KEY=...                 # 큐레이션 데이터 수집
+OPENWEATHER_API_KEY=...
 
-# 카카오 (로컬 API는 유지, OAuth/맵 딥링크는 계획·보류 상태)
-KAKAO_REST_API_KEY=...
-KAKAO_OAUTH_CLIENT_ID=...  # 국내 전용 서비스라 보류 — 재검토 필요
+# 서비스 간
+INTERNAL_API_KEY=...             # Spring → FastAPI
 
 # DB
-POSTGRES_URL=jdbc:postgresql://localhost:5432/cloumy
+POSTGRES_URL=...
 REDIS_URL=redis://localhost:6379
-
-# AWS
-AWS_S3_BUCKET=cloumy-uploads
-AWS_REGION=ap-northeast-2
-
-# 결제 — PG 미확정, 토스페이먼츠는 국내 전용이라 재검토 필요 (ADR-6 참고)
-TOSS_PAYMENTS_SECRET_KEY=...
-
-# FCM
-FCM_SERVER_KEY=...
 ```
 
-### 로컬 개발 환경
-- Docker Compose로 PostgreSQL + PostGIS + pgvector, Redis, Elasticsearch 실행
-- Spring Boot: `./gradlew bootRun`
-- FastAPI: `uvicorn app.main:app --reload`
-- React Native: `npx expo start`
+**미발급 상태라 코드도 없는 것들** — `KOPIS_API_KEY`(공연 정보) · 네이버 블로그 검색(`trend_score`가 비어 있는 원인) · `AWS_S3_*` · `FCM_SERVER_KEY` · 결제 PG 키. `planning/milestones.md` Phase 0 참고.
 
-## 배포 전략
+> ⚠️ **`.env`는 절대 커밋하지 않는다.**
 
-| 단계 | 인프라 | 비고 |
-|------|--------|------|
-| MVP 초반 | AWS EC2 단일 서버 | t3.medium, 비용 절감 |
-| MVP 후반 | EC2 + RDS (PostgreSQL 관리형) | DB 분리 |
-| Phase 2 | ECS Fargate + Auto Scaling | 트래픽 증가 대응 |
-| CI/CD | GitHub Actions | 처음부터 적용 |
+### 로컬 개발
+
+```bash
+make db-only                                   # PostgreSQL + Redis만
+cd backend && ./gradlew bootRun --args='--spring.profiles.active=dev'
+cd ai      && uvicorn app.main:app --reload --port 8000
+cd frontend && npx expo run:ios
+```
+
+- **호스트 포트가 5433이다** (`docker-compose.yml`의 `"5433:5432"`). 컨테이너 안에서는 5432. 다른 프로젝트와 충돌해 임시로 옮긴 것이라 **되돌릴 예정**이다(`planning/unimplemented.md` 🟡).
+- **postgres는 공식 이미지가 아니라 `db/Dockerfile`로 빌드한다** — `postgis/postgis:16-3.4`에 pgvector를 얹은 것이라 둘 다 필요해서다. 확장 설치(`CREATE EXTENSION`)는 Flyway가 아니라 `db/init.sql`이 한다 — 마이그레이션보다 먼저 있어야 하기 때문.
+- `docker-compose.yml`의 서비스는 **spring · fastapi · postgres · redis 4개뿐**이다.
+- Expo에서 `EXPO_PUBLIC_*`는 **번들 시점에 값이 박힌다** — `.env`를 고치면 Metro를 재시작해야 한다.
+
+---
+
+## CI/CD — 실제 워크플로
+
+| 워크플로 | 하는 일 |
+|---|---|
+| `ci.yml` | Spring: `checkstyleMain checkstyleTest` → `test` / FastAPI: `flake8 --max-line-length=120` → `pytest` |
+| `deploy.yml` | backend·ai 이미지 빌드 → **GHCR 푸시** → **EC2에 SSH 배포** |
+
+> 🔑 **로컬에서 `./gradlew compileJava`만 돌리면 CI에서 깨진다.** Checkstyle이 CI에만 있어서다 — `./gradlew checkstyleMain checkstyleTest test`를 그대로 돌려야 한다. (`LeftCurly` 위반으로 실제로 CI가 깨진 적이 있다.)
+
+### 배포 진화 계획
+
+| 단계 | 인프라 |
+|---|---|
+| **현재** | AWS EC2 단일 서버 + Docker Compose (GHCR 이미지) |
+| 다음 | EC2 + RDS (PostgreSQL 관리형)로 DB 분리 |
+| Phase 2 | ECS Fargate + Auto Scaling |
+
+---
+
+## 다음에 볼 것
+
+| 알고 싶은 것 | 어디로 |
+|---|---|
+| 코드가 실제로 어떻게 도는가 (흐름 3개) | `docs/08-codebase-guide.md` |
+| API 계약 52개 | `docs/04-api-spec.md` |
+| DB 스키마 | `docs/03-data-model.md` |
+| AI 파이프라인 내부 | `docs/05-ai-service-architecture.md` |
+| 챗봇 | `docs/06-ai-chatbot.md` |
