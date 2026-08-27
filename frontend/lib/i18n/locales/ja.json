@@ -47,7 +47,16 @@
     },
     "BUDGET_OVER": "今日の支出が1日の予算（{{dailyBudget}}ウォン）を超えました。本日の支出は{{spentToday}}ウォンです。",
     "BOOKMARK_NEARBY": "近くにブックマークした{{placeName}}があります！{{distanceM}}mの距離です。",
-    "FREE_GAP": "次の予定まで{{gapMinutes}}分の余裕があります。近くのカフェはいかがですか？"
+    "FREE_GAP": "次の予定まで{{gapMinutes}}分の余裕があります。近くのカフェはいかがですか？",
+    "LAST_TRANSIT": "帰りの最終便が近づいています！{{placeName}}を{{leaveByTime}}までに出発すれば、宿泊先まで約{{minutes}}分です。",
+    "CLOSED_DAY": "{{day}}日目の{{placeName}}は本日休業です。近くの他のスポットを探しますか？",
+    "BREAK_TIME": "{{placeName}}は只今休憩時間です（{{breakStart}}〜{{breakEnd}}）。",
+    "RESERVATION_WALL": "{{placeName}}は予約が必要な場所です。事前予約をおすすめします。",
+    "LAST_ENTRY": "{{placeName}}はまもなく入場締め切りかもしれません（最終入場{{lastEntryTime}}、営業終了{{closeTime}}）。",
+    "PAYMENT_WALL": {
+      "cash_only": "{{placeName}}は現金払いのみです。現金をご用意ください。",
+      "no_foreign_card": "{{placeName}}は海外発行カードが使えない場合があります。念のため現金も準備しましょう。"
+    }
   },
   "login": {
     "subtitle": "AIが設計するあなただけの旅行ルート",

@@ -181,6 +181,30 @@ Redis ZSet 슬라이딩 윈도우, 키는 `userId` 기준. **걸린 경로는 3�
 `GET /v1/routes/{routeId}/proactive`의 응답에는 문구가 없다 — `type` + `params`만 내려주고
 실제 문구는 앱이 조립한다(판단은 규칙, 표현은 앱). 후보가 여러 개면 priority 최솟값 하나만 반환한다.
 
+같은 날 닫은 개입은 서버가 걸러낸다 — Redis `proactive:dismissed:{userId}:{routeId}:{yyyy-MM-dd}`
+SET에 `{TYPE}:{placeId}`(장소 무관 규칙은 `{TYPE}:-`)로 기록하고 `_select` **전에** 후보에서 제외한다.
+장소 단위 규칙 6종은 같은 type이어도 장소가 다르면 별개로 닫힌다.
+
+**개입 type 15종**:
+
+| type | priority | params |
+|---|---|---|
+| `PRE_TRIP_BRIEFING` | 1 | `nights` `destination` `flags[]` |
+| `FLIGHT_DEPARTURE` | 1 | `departureAt` `leaveByTime` |
+| `RETURN_DEPARTURE` | 1 | `returnAt` `leaveByTime` |
+| `LAST_TRANSIT` | 1 | `placeId` `placeName` `leaveByTime`(ISO datetime) `minutes` `fare`(nullable) |
+| `CLOSED_DAY` | 1 | `placeId` `placeName` `day` |
+| `DEPARTURE_SOON` | 2 | `nextPlaceName` `minutesLeft` `transportMinutes` |
+| `BREAK_TIME` | 2 | `placeId` `placeName` `breakStart` `breakEnd`(`HH:MM:SS`) |
+| `RESERVATION_WALL` | 2 | `placeId` `placeName` `reservationPlatform`(nullable) |
+| `PAYMENT_WALL` | 2 | `placeId` `placeName` `kind`(`cash_only`\|`no_foreign_card`) |
+| `EMPTY_DAY` | 3 | `day` `slotCount` |
+| `LAST_ENTRY` | 3 | `placeId` `placeName` `lastEntryTime` `closeTime`(`HH:MM:SS`) |
+| `WEATHER_ALERT` | 4 | `day` `kind`(`rain`\|`heat`\|`cold`) `outdoorCount` |
+| `BUDGET_OVER` | 5 | `spentToday` `dailyBudget` |
+| `BOOKMARK_NEARBY` | 6 | `placeName` `distanceM` |
+| `FREE_GAP` | 7 | `gapMinutes` |
+
 ---
 
 ## 상세가 필요한 계약 2개

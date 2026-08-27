@@ -54,5 +54,36 @@ export function buildProactiveText(
     }));
   }
 
+  if (intervention.type === 'LAST_TRANSIT') {
+    // FLIGHT_DEPARTURE·RETURN_DEPARTURE와 동일 처리 — leaveByTime이 자정을 넘길 수 있는
+    // ISO datetime이라 formatClockTime으로 시각만 뽑는다.
+    return t('proactive.LAST_TRANSIT', asI18nParams({
+      ...intervention.params,
+      leaveByTime: formatClockTime(intervention.params.leaveByTime, locale),
+    }));
+  }
+
+  if (intervention.type === 'BREAK_TIME') {
+    // PRE_TRIP_BRIEFING.flags.first_slot과 동일 처리 — 벽시계 "HH:MM:SS"에서 "HH:MM"만 쓴다.
+    return t('proactive.BREAK_TIME', asI18nParams({
+      ...intervention.params,
+      breakStart: intervention.params.breakStart.slice(0, 5),
+      breakEnd: intervention.params.breakEnd.slice(0, 5),
+    }));
+  }
+
+  if (intervention.type === 'LAST_ENTRY') {
+    return t('proactive.LAST_ENTRY', asI18nParams({
+      ...intervention.params,
+      lastEntryTime: intervention.params.lastEntryTime.slice(0, 5),
+      closeTime: intervention.params.closeTime.slice(0, 5),
+    }));
+  }
+
+  if (intervention.type === 'PAYMENT_WALL') {
+    // WEATHER_ALERT와 동일 형태 — kind 서브키로 갈라진다.
+    return t(`proactive.PAYMENT_WALL.${intervention.params.kind}`, asI18nParams(intervention.params));
+  }
+
   return t(`proactive.${intervention.type}`, asI18nParams(intervention.params));
 }

@@ -47,7 +47,16 @@
     },
     "BUDGET_OVER": "오늘 지출이 하루 예산({{dailyBudget}}원)을 넘었어요. 오늘 쓴 금액은 {{spentToday}}원이에요.",
     "BOOKMARK_NEARBY": "근처에 북마크한 {{placeName}}이 있어요! {{distanceM}}m 거리예요.",
-    "FREE_GAP": "다음 일정까지 {{gapMinutes}}분 여유가 있어요. 근처 카페 어때요?"
+    "FREE_GAP": "다음 일정까지 {{gapMinutes}}분 여유가 있어요. 근처 카페 어때요?",
+    "LAST_TRANSIT": "숙소로 가는 막차 시간이 다가와요! {{placeName}}에서 {{leaveByTime}}까지는 출발해야 약 {{minutes}}분 만에 도착해요.",
+    "CLOSED_DAY": "Day {{day}}의 {{placeName}}은(는) 오늘 휴무예요. 근처 다른 곳을 찾아볼까요?",
+    "BREAK_TIME": "{{placeName}}은(는) 지금 브레이크타임이에요 ({{breakStart}}~{{breakEnd}}).",
+    "RESERVATION_WALL": "{{placeName}}은(는) 예약이 필요한 곳이에요. 미리 예약해두세요.",
+    "LAST_ENTRY": "{{placeName}}은(는) 곧 입장 마감일 수 있어요 (마지막 입장 {{lastEntryTime}}, 영업 종료 {{closeTime}}).",
+    "PAYMENT_WALL": {
+      "cash_only": "{{placeName}}은(는) 현금 결제만 가능해요. 현금을 준비하세요.",
+      "no_foreign_card": "{{placeName}}은(는) 해외 발급 카드가 안 될 수 있어요. 현금도 챙겨두세요."
+    }
   },
   "login": {
     "subtitle": "AI가 설계하는 나만의 여행 루트",

@@ -7,12 +7,18 @@ from app.models.schemas import ProactiveContext
 from app.services.chat_service import _KST, _INTERVENTION_GLOSS, _build_proactive_descriptor
 from app.services.proactive_service import (
     _rule_bookmark_nearby,
+    _rule_break_time,
     _rule_budget_over,
+    _rule_closed_day,
     _rule_departure_soon,
     _rule_empty_day,
     _rule_flight_departure,
     _rule_free_gap,
+    _rule_last_entry,
+    _rule_last_transit,
+    _rule_payment_wall,
     _rule_pre_trip_briefing,
+    _rule_reservation_wall,
     _rule_return_departure,
     _rule_weather_alert,
 )
@@ -87,7 +93,7 @@ def test_schema_rejects_unknown_type_and_mismatched_params():
 # ============================================================
 
 def _all_rule_types() -> set[str]:
-    """proactive_service의 규칙 9종을 각각 발동시켜 실제로 내보내는 type 집합을 모은다."""
+    """proactive_service의 규칙 15종을 각각 발동시켜 실제로 내보내는 type 집합을 모은다."""
     now = datetime(2026, 7, 29, 10, 0, tzinfo=_KST)
     today = date(2026, 7, 29)
 
@@ -124,6 +130,50 @@ def _all_rule_types() -> set[str]:
             "current_slot": {"start_time": time(10, 0), "duration_minutes": 60, "transport_minutes": 10},
             "next_slot": {"start_time": time(13, 0)},
             "today_date": today, "now": datetime(2026, 7, 29, 11, 0, tzinfo=_KST),
+        }),
+        (_rule_last_transit, {
+            "now": datetime(2026, 7, 29, 22, 30, tzinfo=_KST),
+            "last_transit": {
+                "placeId": "p", "placeName": "정류장",
+                "leaveBy": datetime(2026, 7, 29, 23, 0, tzinfo=_KST),
+                "minutes": 25, "fare": 1500,
+            },
+        }),
+        (_rule_closed_day, {
+            "closures_today": {"p1"},
+            "today_day_number": 2,
+            "today_date": today,
+            "today_slots": [{"place_id": "p1", "place_name": "국립중앙박물관", "closed_weekdays": None}],
+        }),
+        (_rule_break_time, {
+            "estimated": {"confidence": "high"},
+            "today_date": today,
+            "now": datetime(2026, 7, 29, 15, 0, tzinfo=_KST),
+            "next_slot": {
+                "place_id": "p1", "place_name": "장소", "start_time": time(15, 30),
+                "break_time": {"start": "15:00", "end": "17:00"}, "last_order_minutes": None,
+            },
+        }),
+        (_rule_reservation_wall, {
+            "today_slots": [{
+                "place_id": "p1", "place_name": "파인다이닝",
+                "reservation_required": True, "walk_in_allowed": False,
+                "reservation_platform": "catchtable",
+            }],
+        }),
+        (_rule_payment_wall, {
+            "today_slots": [
+                {"place_id": "p1", "place_name": "노포", "cash_only": True, "friendly_foreign_card": None},
+            ],
+        }),
+        (_rule_last_entry, {
+            "estimated": {"confidence": "high"},
+            "today_date": today,
+            "now": datetime(2026, 7, 29, 17, 40, tzinfo=_KST),
+            "next_slot": {
+                "place_id": "p1", "place_name": "장소", "start_time": time(17, 40),
+                "business_hours": {"open": "09:00", "close": "18:00"}, "last_entry_minutes": 30,
+            },
         }),
     ]
     types: set[str] = set()

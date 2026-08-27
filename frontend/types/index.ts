@@ -302,6 +302,52 @@ export interface FreeGapParams {
   gapMinutes: number;
 }
 
+// LAST_TRANSIT — 오늘 마지막 슬롯 → 숙소 막차. leaveByTime은 자정을 넘길 수 있는 ISO datetime.
+export interface LastTransitParams {
+  placeId: string;
+  placeName: string;
+  leaveByTime: string;
+  minutes: number;
+  fare: number | null;
+}
+
+// CLOSED_DAY — 오늘 휴관(날짜 예외 또는 요일 규칙).
+export interface ClosedDayParams {
+  placeId: string;
+  placeName: string;
+  day: number;
+}
+
+// BREAK_TIME — breakStart/breakEnd는 벽시계 "HH:MM:SS"(라스트오더 반영된 값 아님, 구간 안내용).
+export interface BreakTimeParams {
+  placeId: string;
+  placeName: string;
+  breakStart: string;
+  breakEnd: string;
+}
+
+// RESERVATION_WALL — reservationPlatform은 nullable. 예약 필수는 알지만 플랫폼 미조사인 경우가 있다.
+export interface ReservationWallParams {
+  placeId: string;
+  placeName: string;
+  reservationPlatform: string | null;
+}
+
+// PAYMENT_WALL — kind로 현금전용/해외카드 미대응을 구분한다(WEATHER_ALERT와 동일한 서브키 형태).
+export interface PaymentWallParams {
+  placeId: string;
+  placeName: string;
+  kind: 'cash_only' | 'no_foreign_card';
+}
+
+// LAST_ENTRY — lastEntryTime/closeTime은 "HH:MM:SS".
+export interface LastEntryParams {
+  placeId: string;
+  placeName: string;
+  lastEntryTime: string;
+  closeTime: string;
+}
+
 export type ProactiveIntervention =
   | { type: 'PRE_TRIP_BRIEFING'; params: PreTripBriefingParams }
   | { type: 'FLIGHT_DEPARTURE'; params: FlightDepartureParams }
@@ -311,7 +357,13 @@ export type ProactiveIntervention =
   | { type: 'WEATHER_ALERT'; params: WeatherAlertParams }
   | { type: 'BUDGET_OVER'; params: BudgetOverParams }
   | { type: 'BOOKMARK_NEARBY'; params: BookmarkNearbyParams }
-  | { type: 'FREE_GAP'; params: FreeGapParams };
+  | { type: 'FREE_GAP'; params: FreeGapParams }
+  | { type: 'LAST_TRANSIT'; params: LastTransitParams }
+  | { type: 'CLOSED_DAY'; params: ClosedDayParams }
+  | { type: 'BREAK_TIME'; params: BreakTimeParams }
+  | { type: 'RESERVATION_WALL'; params: ReservationWallParams }
+  | { type: 'PAYMENT_WALL'; params: PaymentWallParams }
+  | { type: 'LAST_ENTRY'; params: LastEntryParams };
 
 // totalBudget이 null이면 이 루트에 예산이 설정되지 않은 것(에러 아님)
 export interface BudgetSummary {

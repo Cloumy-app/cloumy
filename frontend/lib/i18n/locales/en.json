@@ -47,7 +47,16 @@
     },
     "BUDGET_OVER": "Today's spending passed your daily budget (₩{{dailyBudget}}). You've spent ₩{{spentToday}} so far.",
     "BOOKMARK_NEARBY": "You bookmarked {{placeName}} nearby! It's {{distanceM}}m away.",
-    "FREE_GAP": "You have {{gapMinutes}} min free before your next stop. How about a nearby cafe?"
+    "FREE_GAP": "You have {{gapMinutes}} min free before your next stop. How about a nearby cafe?",
+    "LAST_TRANSIT": "Last transit home is coming up! Leave {{placeName}} by {{leaveByTime}} — it's about {{minutes}} min to your stay.",
+    "CLOSED_DAY": "{{placeName}} (Day {{day}}) is closed today. Want to check other spots nearby?",
+    "BREAK_TIME": "{{placeName}} is on a break right now ({{breakStart}}–{{breakEnd}}).",
+    "RESERVATION_WALL": "{{placeName}} requires a reservation — best to book ahead.",
+    "LAST_ENTRY": "Last entry at {{placeName}} may already be closing — last entry {{lastEntryTime}}, closes {{closeTime}}.",
+    "PAYMENT_WALL": {
+      "cash_only": "{{placeName}} is cash only — make sure you have some on hand.",
+      "no_foreign_card": "{{placeName}} may not accept foreign-issued cards — bring some cash just in case."
+    }
   },
   "login": {
     "subtitle": "Your AI-planned travel route",
