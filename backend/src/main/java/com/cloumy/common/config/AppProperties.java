@@ -42,7 +42,6 @@ public class AppProperties {
     public record OAuth(
             OAuthProvider kakao,
             OAuthProvider google,
-            Apple apple,
             OAuthProvider naver
     ) {}
 
@@ -51,13 +50,5 @@ public class AppProperties {
             String clientId,
             String clientSecret,
             String redirectUri
-    ) {}
-
-    // 애플은 client-secret 대신 p8 키 기반 서명 방식 사용
-    public record Apple(
-            String clientId,
-            String teamId,
-            String keyId,
-            String privateKey
     ) {}
 }

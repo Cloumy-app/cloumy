@@ -5,7 +5,6 @@ import com.cloumy.auth.dto.RefreshRequest;
 import com.cloumy.auth.dto.SocialLoginRequest;
 import com.cloumy.auth.dto.SocialLoginResponse;
 import com.cloumy.auth.entity.User;
-import com.cloumy.auth.oauth.AppleOAuthClient;
 import com.cloumy.auth.oauth.GoogleOAuthClient;
 import com.cloumy.auth.oauth.KakaoOAuthClient;
 import com.cloumy.auth.oauth.NaverOAuthClient;
@@ -35,7 +34,6 @@ public class AuthService {
 
     private final KakaoOAuthClient kakaoOAuthClient;
     private final GoogleOAuthClient googleOAuthClient;
-    private final AppleOAuthClient appleOAuthClient;
     private final NaverOAuthClient naverOAuthClient;
 
     @Transactional
@@ -103,7 +101,6 @@ public class AuthService {
         return switch (provider.toLowerCase()) {
             case "kakao"  -> kakaoOAuthClient.fetchUserInfo(oauthToken);
             case "google" -> googleOAuthClient.fetchUserInfo(oauthToken);
-            case "apple"  -> appleOAuthClient.fetchUserInfo(oauthToken);
             case "naver"  -> naverOAuthClient.fetchUserInfo(oauthToken);
             default -> throw new BusinessException(
                     ErrorCode.INVALID_INPUT, "지원하지 않는 소셜 로그인입니다: " + provider);
