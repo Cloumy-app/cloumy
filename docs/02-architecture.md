@@ -7,40 +7,87 @@
 
 ## 전체 구조 — 지금 돌아가는 것
 
+> 이 그림은 **코드에서 확인한 것만** 그린다. `docs/architecture.svg`(2026-06-09)는 실제로 쓰지 않는
+> Elasticsearch·토스페이먼츠를 그리고 있어 폐기했다 — 틀린 그림은 없는 그림보다 나쁘다.
+> Mermaid로 옮긴 이유는 GitHub이 바로 렌더하고 **diff가 되기 때문**이다. SVG는 한 번 굳으면 아무도 안 고친다.
+
+```mermaid
+flowchart TB
+    App["📱 앱 · Expo SDK 56 / React Native<br/>expo-router · Zustand · TanStack Query · NativeWind<br/>문구 조립 4개국어"]
+
+    subgraph Server["서버 — 모놀리식, 별도 게이트웨이 없음"]
+        Spring["☕ Spring Boot 3.3.5 / Java 21 · :8080<br/>JWT 인증 · 레이트리밋 · 소유권 검증 · 과금 가드<br/>DB 영속화 · FastAPI 프록시 및 SSE 중계"]
+        FastAPI["🐍 FastAPI 0.115 / Python 3.11 · :8000<br/>RAG · TSP · LLM 호출 · 프로액티브 규칙 판단"]
+    end
+
+    subgraph Data["데이터 — Spring·FastAPI 둘 다 직접 붙는다"]
+        PG[("PostgreSQL 16<br/>PostGIS 좌표 · pgvector 임베딩")]
+        Redis[("Redis<br/>캐시 · 챗봇 세션 · 레이트리밋 · dismiss")]
+    end
+
+    subgraph AI["LLM · 임베딩"]
+        Claude["Claude<br/>Sonnet 4.6 · Haiku 4.5"]
+        Embed["OpenAI<br/>text-embedding-3-small"]
+    end
+
+    subgraph Ext["외부 API"]
+        OAuth["구글 · 카카오 · 네이버 OAuth"]
+        KakaoLocal["카카오 로컬<br/>장소·숙소 검색"]
+        Tmap["Tmap 대중교통<br/>이동시간 · 막차"]
+        OWM["OpenWeatherMap"]
+    end
+
+    App -->|"HTTPS · Authorization: Bearer"| Spring
+    Spring -.->|"SSE — FastAPI NDJSON 중계"| App
+    Spring -->|"X-Internal-Key · HTTP/1.1 only"| FastAPI
+
+    Spring --> PG
+    Spring --> Redis
+    FastAPI --> PG
+    FastAPI --> Redis
+
+    FastAPI --> Claude
+    FastAPI --> Embed
+    FastAPI --> Tmap
+    FastAPI --> OWM
+    Spring --> OAuth
+    Spring --> KakaoLocal
 ```
-┌───────────────────────────────────────────────────────────┐
-│  앱  Expo SDK 56 / React Native                           │
-│      expo-router · Zustand · TanStack Query · NativeWind  │
-│      지도 react-native-maps (Google Maps SDK)             │
-└──────────────────────────┬────────────────────────────────┘
-                           │  HTTPS · Authorization: Bearer
-                           ▼
-┌───────────────────────────────────────────────────────────┐
-│  Spring Boot 3.3.5 / Java 21              :8080           │
-│  ─ 단일 모놀리식. 별도 게이트웨이 없음 ─                   │
-│  JWT 인증 · 레이트리밋 · 소유권 검증 · 과금 가드           │
-│  DB 영속화 · FastAPI 프록시 및 SSE 중계                    │
-└───────┬───────────────────────────────────┬───────────────┘
-        │  X-Internal-Key                   │
-        │  ※ HTTP/1.1 only                  │
-        ▼                                   │
-┌────────────────────────────────┐          │
-│  FastAPI 0.115 / Python 3.11   │          │
-│                        :8000   │          │
-│  RAG(pgvector) · TSP(OR-Tools) │          │
-│  LLM 호출 · 프로액티브 규칙 판단│          │
-└───────┬───────────────┬────────┘          │
-        │               │                   │
-        ▼               ▼                   ▼
-┌───────────────┐  ┌─────────────────────────────────┐
-│ Claude        │  │  PostgreSQL 16                  │
-│ Sonnet/Haiku  │  │  PostGIS(좌표) + pgvector(임베딩)│
-│ OpenAI embed  │  └─────────────────────────────────┘
-└───────────────┘  ┌─────────────────────────────────┐
-                   │  Redis  캐시·챗봇 세션·레이트리밋│
-                   └─────────────────────────────────┘
-        ↑ Spring·FastAPI 둘 다 DB·Redis에 직접 붙는다
+
+### 루트 생성 — 유일한 스트리밍 경로
+
+Spring이 FastAPI의 **NDJSON을 SSE로 바꿔 중계**한다. 앱이 FastAPI에 직접 붙지 않는 이유는
+인증·소유권 검증·과금 가드가 전부 Spring에 있기 때문이다.
+
+```mermaid
+sequenceDiagram
+    participant App as 📱 앱
+    participant S as ☕ Spring
+    participant F as 🐍 FastAPI
+    participant DB as PostgreSQL
+    participant C as Claude
+
+    App->>S: POST /v1/routes/generate
+    Note over S: JWT 검증 · 패스 확인<br/>routes INSERT
+    S-->>App: event: route_id
+    S->>F: POST /ai/routes/generate<br/>X-Internal-Key
+    Note over F: Haiku — 태그 추출
+    F->>DB: PostGIS 반경 + 태그 후보 조회
+    F->>C: Sonnet — 루트 생성 스트리밍
+    loop 슬롯이 나올 때마다
+        C-->>F: 부분 JSON
+        F->>DB: place_id 재검증<br/>없으면 pgvector 유사도로 대체
+        F-->>S: NDJSON 1줄
+        S-->>App: SSE event: slot
+    end
+    Note over F: OR-Tools TSP — 숙소를 앵커로 동선 최적화<br/>Tmap — 구간 이동시간
+    F-->>S: NDJSON 완료
+    S->>DB: route_slots 저장
+    S-->>App: SSE event: done
 ```
+
+> ⚠️ `DispatcherType.ASYNC`를 permitAll 해둔 이유가 여기 있다 — SSE 완료 시 Tomcat이
+> 재디스패치하는데 그때 SecurityContext가 비어 인증 재검사에 걸린다.
 
 ### 이전 문서에 있었지만 실제로는 없는 것
 

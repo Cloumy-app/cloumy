@@ -144,13 +144,14 @@
   - `.env.example` → `localhost:5433` → `localhost:5432`
 - **복원 후**: `docker compose down && docker compose up -d` 실행
 
-### (번호추가) `docs/architecture.svg`가 폐기된 결정을 그리고 있다
+### ~~(번호추가) `docs/architecture.svg`가 폐기된 결정을 그리고 있다~~ — 해결됨 (2026-08-27, 삭제 후 Mermaid로 대체)
 - **파일**: `docs/architecture.svg` (2026-06-09자, 이후 한 번도 안 고침)
 - **틀린 내용**: **Elasticsearch**·**socket.io**·**토스페이먼츠** — 셋 다 안 쓰기로 결론난 것들이다. Spring Cloud Gateway도 실제로는 없다
 - **왜 남았나**: 2026-08-06에 `02`·`03`·`04`·`05`를 코드 기준으로 재작성했지만 SVG는 텍스트 편집으로 고칠 수 없어 제외했다. `docs/08-codebase-guide.md`의 문서 판정표에서 **유일하게 남은 ❌**다
 - **선택지**:
   1. 삭제하고 `02-architecture.md`의 ASCII 도해로 일원화 — 도해가 하나뿐이면 어긋날 일이 없다 **(권장)**
   2. 현재 구조로 다시 그림
+- **해결(2026-08-27)**: SVG를 삭제하고 `docs/02-architecture.md`·`README.md`에 **Mermaid**로 다시 그렸다. 선택지 1(ASCII 일원화)이 아니라 Mermaid를 고른 이유는 GitHub이 바로 렌더하면서 **diff가 되기 때문**이다 — SVG가 6월 9일자로 굳어버린 근본 원인이 '고치려면 편집기를 열어야 한다'는 것이었다. 루트 생성 SSE 시퀀스 다이어그램도 함께 추가했다.
 - **우선순위**: 낮음 — 다만 **틀린 그림은 없는 그림보다 나쁘다.** 신규 합류자가 가장 먼저 여는 게 다이어그램이다
 
 ---

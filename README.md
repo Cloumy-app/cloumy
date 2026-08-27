@@ -94,7 +94,36 @@
 
 ### 전체 흐름
 
-![Architecture](./docs/architecture.svg)
+```mermaid
+flowchart TB
+    App["📱 앱 · Expo SDK 56 / React Native"]
+
+    subgraph Server["서버 — 모놀리식, 별도 게이트웨이 없음"]
+        Spring["☕ Spring Boot 3.3.5 / Java 21 · :8080<br/>인증 · 레이트리밋 · 소유권 검증 · SSE 중계"]
+        FastAPI["🐍 FastAPI / Python 3.11 · :8000<br/>RAG · TSP · LLM · 프로액티브 규칙 판단"]
+    end
+
+    subgraph Data["데이터"]
+        PG[("PostgreSQL 16<br/>PostGIS · pgvector")]
+        Redis[("Redis")]
+    end
+
+    Claude["Claude Sonnet 4.6 · Haiku 4.5"]
+    Ext["Tmap · 카카오 로컬 · OpenWeatherMap · OAuth 3종"]
+
+    App -->|"Bearer JWT"| Spring
+    Spring -.->|"SSE — NDJSON 중계"| App
+    Spring -->|"X-Internal-Key"| FastAPI
+    Spring --> PG
+    Spring --> Redis
+    FastAPI --> PG
+    FastAPI --> Redis
+    FastAPI --> Claude
+    FastAPI --> Ext
+    Spring --> Ext
+```
+
+> 루트 생성 시퀀스와 설계 판단(ADR)은 [`docs/02-architecture.md`](./docs/02-architecture.md) 참고.
 
 ### 서비스 간 통신
 
