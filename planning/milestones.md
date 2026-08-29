@@ -289,7 +289,8 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
   - **시뮬레이터 검증에서 나온 후속 수정 2건**(같은 날): ①`origin="place"` 지시가 「X 근처」 표현만 덮어서 정작 이 기능의 출발점인 「X 가기 전에」에 되묻던 것을 `_origin_place_hint`로 해소 — 모델에게 `origin`+`insert_*` 두 인자를 일관되게 채우라고 요구하는 대신 **신호 하나로 두 판단을 서버가 유도**한다 ②`_generate_place_reasons`(Haiku 왕복) 제거 — 한 요청 LLM 왕복이 3회여서 Spring 15초 타임아웃을 자주 넘겨 카드가 아예 안 떴다. 4~15초 → **3.9~5.5초** 안정화. 2026-07-06 사용자 피드백으로 도입한 걸 되돌린 것이라 문구 단조로움을 `unimplemented.md`에 별건 기록
 - [x] **[DB] 빈 DB 초기화 복구 — V17 bookmarks 중복 생성** — V21 착수 전 스키마 점검에서 발견. V3가 이미 만든 `bookmarks`를 V17이 `IF NOT EXISTS` 없이 재생성해, 빈 DB에서 V1부터 돌리면 `relation "bookmarks" already exists`로 실패한다(기존 개발 DB는 V3 시점에 테이블이 있어 드러나지 않았다). 임시 컨테이너에서 원본 V17로 실패를 재현한 뒤 멱등화. 검증: 빈 DB → `init.sql` → **Spring 실기동으로 Flyway가 V1~V21 전부 적용**(`flyway_schema_history` 21행, `Started CloudmyApplication`, `ddl-auto: validate` 통과) — 2026-08-01
   - **함께 세웠다가 철회한 가설**: "PostGIS의 `spatial_ref_sys` 때문에 Flyway가 baseline을 잡아 V1을 스킵한다"고 판단해 `baseline-version: 0`을 넣었으나, **실기동해보니 Flyway는 `<< Empty Schema >>`로 판정해 baseline을 발동시키지 않았다.** 옛 기본값(=1)으로도 V1부터 정상 적용된다. `application-dev.yml`은 원복하고 `docker-compose.yml`의 `"0"`만 근거를 정정해 유지. **최초 "재현"은 V1을 손으로 빼고 psql로 돌린 것이라 Flyway 내부 판정의 증거가 아니었다** — 상세는 `unimplemented.md` 🔴 4번
-- [x] **[DB] `places` 운영정보 스키마(V21)** — 프로액티브 규칙 6종의 선행 조건. Friendly Score 5(`friendly_english_menu`/`friendly_foreign_card`/`friendly_english_kiosk`/`spice_level`/`dietary_tags`) + 시간함정 3(`break_time` JSONB·`last_order_minutes`·`last_entry_minutes`) + 진입함정 5(`reservation_required`·`walk_in_allowed`·`reservation_platform`·`cash_only`·`min_party_size`) + 찾기 3(`signboard_name_ko`·`nearest_station`·`station_exit`) + 휴관 2(`closed_weekdays`·`closed_on_holidays`) = **17컬럼**. **`NULL`=미조사 / `0`=조사했는데 없음**을 구분한 게 핵심 — 200곳만 채우므로 이 구분이 없으면 챗봇이 "영어메뉴 없어요"라고 단정한다(실제로는 안 알아본 것). 규칙 함수는 `IS NOT NULL` 가드 필수. Friendly Score를 별건으로 쪼개지 않고 한 마이그레이션에 합쳐 같은 테이블을 두 번 건드리는 걸 피함. 합산 `friendly_score` 컬럼은 만들지 않음(항목별로 쓰지 합산을 쓰는 화면이 없음). 검증: CHECK 제약(`spice_level=9` 거부)·JSONB·SMALLINT[] 저장·NULL 동작 실측 — 2026-08-01
+- [x] **[DB] `places` 운영정보 스키마(V21)** — 프로액티브 규칙 6종의 선행 조건. Friendly Score 5(`friendly_english_menu`/`friendly_foreign_card`/`friendly_english_kiosk`/`spice_level`/`dietary_tags`) + 시간함정 3(`break_time` JSONB·`last_order_minutes`·`last_entry_minutes`) + 진입함정 5(`reservation_required`·`walk_in_allowed`·`reservation_platform`·`cash_only`·`min_party_size`) + 찾기 3(`signboard_name_ko`·`nearest_station`·`station_exit`) + 휴관 2(`closed_weekdays`·`closed_on_holidays`) = **18컬럼**. **`NULL`=미조사 / `0`=조사했는데 없음**을 구분한 게 핵심 — 200곳만 채우므로 이 구분이 없으면 챗봇이 "영어메뉴 없어요"라고 단정한다(실제로는 안 알아본 것). 규칙 함수는 `IS NOT NULL` 가드 필수. Friendly Score를 별건으로 쪼개지 않고 한 마이그레이션에 합쳐 같은 테이블을 두 번 건드리는 걸 피함. 합산 `friendly_score` 컬럼은 만들지 않음(항목별로 쓰지 합산을 쓰는 화면이 없음). 검증: CHECK 제약(`spice_level=9` 거부)·JSONB·SMALLINT[] 저장·NULL 동작 실측 — 2026-08-01
+- [x] **[공통] 아키텍처 문서 4종을 코드 기준으로 재동기화** — `08-codebase-guide.md`가 `02`·`03`·`04`·`05`를 "믿을 수 없음"으로 판정해둔 걸 실제로 해소. **각 문서를 코드에서 다시 뽑아 대조**했다: `03`은 마이그레이션 V1~V21 전문을 읽어 재작성(문서에만 있던 `hidden_gems`/`payments`/`group_trips`/`group_members` 4개는 **미생성**임을 명시, 누락돼 있던 `accommodations`·`route_day_summaries`·`route_bookmarks` 3개 추가, `places` 다국어 8 + 운영정보 18컬럼 반영). `04`는 컨트롤러 11개를 전수 파싱해 **31개 → 실제 52개**로 교체(+ FastAPI 내부 6개, `ApiResponse` 봉투·`ErrorCode` 전체·레이트리밋 3경로). `02`는 **안 쓰는 것들을 걷어냄** — Spring Cloud Gateway·socket.io·Elasticsearch·Kafka·S3·FCM·`@Scheduled`는 전부 코드 흔적 0이었고, 모노레포로 간 실제 구조와 CI/CD(GHCR→EC2)로 교체. ADR 6개는 살리되 각각에 **실제 반영 상태**를 붙임(ADR-2의 QueryDSL은 의존성만 있고 `import` 0건 — 네이티브 SQL 13개로 처리 중). `05`는 라우터 2개 → 6개, "챗봇 미구현" → 구현됨(단 계획의 WebSocket이 아니라 POST), 리트리버 `sort` 모드와 언어별 캐시 키 반영. **동기화 중 결함 1건 발견** — 앱은 예산 5단계를 제시하는데 DB CHECK는 3종뿐이라 「초절약」·「특별하게」가 CHECK를 위반한다(`unimplemented.md` 🔴, 재현 확인 필요). 남은 미동기화는 `architecture.svg` 하나 — 2026-08-06
 - [ ] **(프로액티브 확장 · 2026-08-01 계획)** 운영정보 기반 규칙 6종 추가 — `CLOSED_DAY`/`BREAK_TIME`/`LAST_ENTRY`/`RESERVATION_WALL`/`LAST_TRANSIT`/`PAYMENT_WALL`. 엔진 구조는 그대로 두고 `proactive_service.py`에 **규칙 함수만 추가**하는 작업. 선행: `places` 운영정보 스키마(V21)·휴관 캘린더. 근거는 방한 외국인 불만 실측 1위가 **디지털 27.8%**(인증·가입 13.1%/결제 11.5%)인데 기존 규칙 9종이 전부 교통·일정 축이라 이 영역이 비어 있음
 - [ ] **(프로액티브 확장)** `LAST_TRANSIT` — **Tmap `searchDttm`(타임머신) 이분 탐색**으로 막차 계산. 신규 API 0개. 노선별 막차 시각(ODsay·서울교통공사)은 역 단위라 환승 성립 여부를 다시 계산해야 하지만, 미래 시각으로 경로를 직접 조회하면 **환승 연결까지 성립하는 마지막 경로**가 한 번에 나온다. 상세는 `unimplemented.md` 🔵 이동시간 후속
 - [ ] **(프로액티브 확장)** 사후 구제 규칙 — 막차 놓침/휴관 도착/브레이크타임 도착/결제 실패. 기존 규칙이 전부 "제때 알려서 막는" 성공 경로뿐이라, **사전 경고를 놓친 유저에게도 쓸모 있어야** 한다
@@ -383,7 +384,56 @@ Cloumy의 핵심 가치 — AI 루트 생성 완성 (앱 확인 중심 반복 �
 
 ---
 
-## Phase 3: 결제 + 그룹 모드 + 출시 준비 (~2026-09-01 ~)
+## 🚀 출시 최소범위 마무리 (2026-08-26 ~) — 범위 재조정
+
+> **모두의 창업 지원 탈락.** 자금을 전제한 기능을 전부 접고, 지금 상태에서 출시 가능한
+> 최소 범위로 앱을 마무리한다. 아래 항목까지가 끝이고, 그 밖은 전부 보류다.
+
+### Phase A — 출시 차단 요소 (서로 독립, 병렬 가능)
+
+- [x] A-1. `budget_level` CHECK 5종 확장(V22) + `RouteGenRequest` 값 검증 3종 — 2026-08-27
+  - 「초절약」·「특별하게」 선택 시 루트 생성이 500으로 죽던 문제. 재현 후 수정, `tight`로 루트 생성 HTTP 200 확인
+  - 검증을 Spring DTO(`@Pattern`)에 추가해 잘못된 값은 500이 아니라 422로 응답한다(`GlobalExceptionHandler` 기준)
+- [x] A-2. `apple` 로그인 분기 제거 — 2026-08-27
+  - 서명 미검증으로 위조 토큰 계정 탈취가 가능했다. 개발자 계정도 프론트 버튼도 없어 검증 구현이 아니라 제거로 처리
+- [x] A-3. JWT 블랙리스트 Redis 장애 fail-open — 2026-08-27
+  - `RateLimitFilter`의 기존 fail-open 패턴을 그대로 따랐다. Redis 장애 시 응답 60.14초 → 1.03초 실측
+- [ ] A-4. 구글 로그인 실구현 — 코드 완료(2026-08-27), **OAuth 클라이언트 ID 발급 대기**
+  - 릴리즈 빌드에서 동작하는 로그인이 `__DEV__` 개발자 로그인뿐이던 문제. 백엔드는 이미 완성이었고 프론트만 연결
+  - 키 미설정 시 로그인 화면 전체가 죽던 크래시도 함께 수정 — 키가 없어도 화면은 뜬다
+  - 남은 것: Google Cloud Console에서 iOS/Android/Web 클라이언트 ID 발급. **번들 ID 확정이 선행**(현재 Expo 기본값 `com.anonymous.cloumy`라 지금 발급하면 재발급해야 한다)
+
+### Phase B — 프로액티브 선행 (규칙보다 먼저)
+
+- [x] B-1. dismiss 구조 개편 — placeId + 서버 필터링 — 2026-08-27
+  - `_select`가 `min(priority)` 1개만 반환하는데 상태형 규칙은 하루 종일 참 → 그날 개입 전멸
+- [x] B-2. `V23__create_place_closures.sql` — 휴관 날짜 직접 적재 — 2026-08-27
+- [ ] B-3. 큐레이션 서울 30~50곳 시드 — 스크립트·CSV 양식 완료(2026-08-27), **데이터 입력 대기**
+
+### Phase C — 프로액티브 규칙 6종
+
+- [x] C-1. `transport_service.py` — Tmap `searchDttm` 이분 탐색 + `fare` 추출 — 2026-08-27
+- [x] C-2. 규칙 6종 — `LAST_TRANSIT`·`CLOSED_DAY`(P1) / `BREAK_TIME`·`RESERVATION_WALL`·`PAYMENT_WALL`(P2) / `LAST_ENTRY`(P3) — 2026-08-27
+- [x] C-3. 계약 확장 — AI 스키마 · `TYPE_PATTERN` · 프론트 타입/문구 · i18n 4개 언어 — 2026-08-27
+  - 신규 params의 `placeId`를 `UUID`로, `reservationPlatform`을 `Literal`로 좁혀 프롬프트 주입 통로를 닫았다(앱이 되돌려 보내는 값이라 DB CHECK가 안 지켜준다)
+
+### 확정된 축소 판단
+
+| 항목 | 결정 |
+|------|------|
+| CLOSED_DAY | `place_closures`만. holidays 테이블·특일정보 API·대체휴관 판정 로직 **전부 제외** — 대체휴관도 기관 공지의 실제 날짜로 직접 입력 |
+| 큐레이션 데이터 | 200곳 → **서울 30~50곳** |
+| Apple 취약점 | 서명 검증 구현이 아니라 **분기 제거** |
+| JSONB 형식 | `business_hours`에 `weekday_overrides`, `break_time`에 `except_weekdays` (둘 다 선택 필드) |
+
+### 범위 밖 (명시적 보류)
+
+사후 구제 규칙 · 일몰×야경 · 아침 다이제스트 · 홈 "지금 상황" 카드 · 콘서트 앵커 ·
+카메라 챗봇 · 배치 번역 21,525건 · 결제/PG · 그룹 모드 · 오프라인 저장 · Hidden Gems
+
+---
+
+## Phase 3: 결제 + 그룹 모드 + 출시 준비 (~2026-09-01 ~)  ⛔ 보류 (2026-08-26 — 자금 미확보)
 
 ### ~2026-09-01 ~ 2026-09-15: 결제 + 인증 완성
 

@@ -7,14 +7,17 @@
 - route_slots.start_time은 계획일 뿐 실제 진행 상황이 아니다. _estimate_current_slot()의
   confidence != "high"면 위치에 의존하는 규칙(T2·T6·T7)을 건너뛴다.
 """
+import json
 import logging
 from datetime import date, datetime, time, timedelta
 
 import asyncpg
+import httpx
 
 from app.config.city_centers import CITY_CENTERS
 from app.config.settings import settings
 from app.services.chat_service import _KST, _estimate_current_slot, _load_route
+from app.services.transport_service import find_last_departure
 from app.services.weather_service import _RAIN_THRESHOLD, _aggregate_blocks, _fetch_forecast_raw, _temps_by_date
 
 logger = logging.getLogger(__name__)
@@ -35,6 +38,11 @@ _AIRPORT_MINUTES = {"서울": 90, "부산": 60, "제주": 30}  # T1·RETURN
 _AIRPORT_MINUTES_DEFAULT = 90  # T1·RETURN — 표에 없는 도시
 _CHECKIN_BUFFER_MIN = 120  # T1·RETURN
 _FLIGHT_WINDOW_MIN = 60  # T1·RETURN — leave_by까지 남은 시간이 이 안이면 발동
+_DISMISS_TTL_HOURS = 48  # Spring ProactiveController와 맞춘 값(기록은 Spring이 한다)
+_ARRIVAL_WARN_WINDOW_MIN = 60  # 다음 슬롯 도착 N분 전부터 BREAK_TIME·LAST_ENTRY 평가
+_LAST_TRANSIT_WINDOW_MIN = 60  # 막차 출발 N분 전부터 LAST_TRANSIT 발동
+_LAST_TRANSIT_EVAL_FROM_HOUR = 18  # 이 시각 이후에만 막차를 계산한다(비용 방어)
+_LAST_TRANSIT_CACHE_TTL_S = 86_400  # 막차는 (출발지, 도착지, 날짜)에 하루 불변
 
 
 def _trip_phase(route: asyncpg.Record, now: datetime) -> str:
@@ -64,6 +72,38 @@ def _flight_leave_by(snap: dict, at_key: str) -> datetime | None:
         return None  # FFE #5 — 선택 입력이라 미입력이면 해당 규칙만 스킵
     airport_minutes = _AIRPORT_MINUTES.get(snap["route"]["destination"], _AIRPORT_MINUTES_DEFAULT)
     return at - timedelta(minutes=airport_minutes + _CHECKIN_BUFFER_MIN)
+
+
+def _hours_for(business_hours: dict | None, weekday: int) -> tuple[time, time] | None:
+    """{"open","close","weekday_overrides"} → 그 요일의 (open, close).
+
+    weekday는 ISO 1=월…7=일(V21 closed_weekdays 규약과 동일). 미조사(None)거나
+    형식이 깨졌으면 None — 수기 CSV라 깨진 값이 들어올 수 있다(FFE #4)."""
+    if business_hours is None:
+        return None
+    try:
+        overrides = business_hours.get("weekday_overrides") or {}
+        override = overrides.get(str(weekday))
+        if override is not None:
+            return time.fromisoformat(override["open"]), time.fromisoformat(override["close"])
+        return time.fromisoformat(business_hours["open"]), time.fromisoformat(business_hours["close"])
+    except (KeyError, ValueError, TypeError):
+        return None
+
+
+def _break_for(break_time: dict | None, weekday: int) -> tuple[time, time] | None:
+    """{"start","end","except_weekdays"} → 그 요일의 (start, end).
+
+    except_weekdays에 포함된 요일이면 None(그날은 브레이크타임 없음)."""
+    if break_time is None:
+        return None
+    try:
+        except_weekdays = break_time.get("except_weekdays") or []
+        if weekday in except_weekdays:
+            return None
+        return time.fromisoformat(break_time["start"]), time.fromisoformat(break_time["end"])
+    except (KeyError, ValueError, TypeError):
+        return None
 
 
 # ============================================================
@@ -310,20 +350,205 @@ def _rule_free_gap(snap: dict) -> dict | None:
     return {"type": "FREE_GAP", "priority": 7, "params": {"gapMinutes": round(gap_minutes)}}
 
 
+def _rule_last_transit(snap: dict) -> dict | None:
+    """막차. 오늘 마지막 슬롯 → 숙소 막차 출발이 임박하면 개입한다.
+
+    leave_by는 유저의 현재 위치가 아니라 '오늘 마지막 슬롯 → 숙소' 구간으로 계산되므로
+    위치 추정 confidence와 무관하다 — 위치 가드를 두지 않는다(상위 계획서 정정 2).
+    밤 시간대엔 confidence가 낮게 나오기 쉬운데, 가드를 두면 정확히 필요한 시간에
+    규칙이 죽는다."""
+    lt = snap.get("last_transit")
+    if lt is None:
+        return None
+    minutes_left = (lt["leaveBy"] - snap["now"]).total_seconds() / 60
+    if not (0 <= minutes_left <= _LAST_TRANSIT_WINDOW_MIN):
+        return None
+    return {
+        "type": "LAST_TRANSIT",
+        "priority": 1,
+        "params": {
+            "placeId": lt["placeId"],
+            "placeName": lt["placeName"],
+            "leaveByTime": lt["leaveBy"].isoformat(),
+            "minutes": lt["minutes"],
+            "fare": lt["fare"],
+        },
+    }
+
+
+def _rule_closed_day(snap: dict) -> dict | None:
+    """오늘 휴관 — 날짜 예외(place_closures)와 요일 규칙(closed_weekdays)을 OR로 판정한다.
+    오늘 슬롯을 순회해 첫 번째로 걸리는 휴관 장소 하나에만 발동한다."""
+    closures_today: set[str] = snap.get("closures_today") or set()
+    today_day_number = snap["today_day_number"]
+    weekday = snap["today_date"].isoweekday()
+
+    for slot in snap["today_slots"]:
+        place_id = str(slot["place_id"])
+        if place_id in closures_today:  # 날짜 예외 — 확정 증거
+            return {
+                "type": "CLOSED_DAY",
+                "priority": 1,
+                "params": {"placeId": place_id, "placeName": slot["place_name"], "day": today_day_number},
+            }
+        if slot["closed_weekdays"] is None:  # 미조사 — 이 슬롯은 판단 불가, 다음 슬롯 계속
+            continue
+        if weekday in slot["closed_weekdays"]:
+            return {
+                "type": "CLOSED_DAY",
+                "priority": 1,
+                "params": {"placeId": place_id, "placeName": slot["place_name"], "day": today_day_number},
+            }
+    return None
+
+
+def _rule_break_time(snap: dict) -> dict | None:
+    """브레이크타임 — 다음 슬롯 도착 시각이 브레이크타임 구간에 걸리면 개입.
+    도착 시각이 '다음 슬롯 도착 시각'이라 위치 추정에 의존한다 — 위치 가드가 본질적이다."""
+    if snap["estimated"]["confidence"] != "high":
+        return None
+    nxt = snap.get("next_slot")
+    if nxt is None or nxt["start_time"] is None:
+        return None
+    if nxt["break_time"] is None:  # 미조사
+        return None
+
+    arrival = _combine(snap["today_date"], nxt["start_time"])
+    minutes_left = (arrival - snap["now"]).total_seconds() / 60
+    if not (0 <= minutes_left <= _ARRIVAL_WARN_WINDOW_MIN):
+        return None
+
+    brk = _break_for(nxt["break_time"], arrival.isoweekday())
+    if brk is None:  # 그 요일은 브레이크타임 없음
+        return None
+    start, end = brk
+
+    # last_order_minutes는 컷오프 계산에만 쓴다 — 라스트오더가 있으면 실질 마감이 앞당겨진다.
+    cutoff = start
+    if nxt["last_order_minutes"] is not None:
+        cutoff = (
+            datetime.combine(arrival.date(), start) - timedelta(minutes=nxt["last_order_minutes"])
+        ).time()
+    if not (cutoff <= arrival.time() < end):
+        return None
+
+    return {
+        "type": "BREAK_TIME",
+        "priority": 2,
+        "params": {
+            "placeId": str(nxt["place_id"]),
+            "placeName": nxt["place_name"],
+            "breakStart": start.isoformat(),
+            "breakEnd": end.isoformat(),
+        },
+    }
+
+
+def _rule_reservation_wall(snap: dict) -> dict | None:
+    """예약 필수 — 오늘 슬롯을 순회해 예약 필수인데 워크인이 안 되는 첫 번째 장소에 발동."""
+    for slot in snap["today_slots"]:
+        if slot["reservation_required"] is None:  # 미조사
+            continue
+        if not slot["reservation_required"]:  # 조사했는데 예약 필수 아님
+            continue
+        if slot["walk_in_allowed"] is True:  # 예약 필수여도 워크인이 되면 벽이 아니다
+            continue
+        return {
+            "type": "RESERVATION_WALL",
+            "priority": 2,
+            "params": {
+                "placeId": str(slot["place_id"]),
+                "placeName": slot["place_name"],
+                "reservationPlatform": slot["reservation_platform"],
+            },
+        }
+    return None
+
+
+def _rule_payment_wall(snap: dict) -> dict | None:
+    """결제 수단 함정 — 현금전용 또는 해외카드 미대응인 첫 번째 장소에 발동.
+
+    friendly_foreign_card는 0(조사했는데 없음)과 None(미조사)이 둘 다 falsy라
+    가장 실수하기 쉬운 자리다. `== 0`으로 명시 비교해야 한다."""
+    for slot in snap["today_slots"]:
+        # 두 신호는 독립이다. cash_only가 미조사여도 friendly_foreign_card는 따로 본다 —
+        # 앞 조건에 묶으면 "해외카드만 조사된 장소"가 통째로 침묵한다(CSV에서 흔한 입력 패턴).
+        # 각 조건이 '양성 증거'일 때만 참이라 미조사(None)는 자연히 다음으로 넘어간다.
+        if slot["cash_only"] is True:  # 조사했는데 현금전용
+            kind = "cash_only"
+        elif slot["friendly_foreign_card"] == 0:  # 조사했는데 해외카드 안 됨(None과 구분)
+            kind = "no_foreign_card"
+        else:
+            kind = None
+
+        if kind is None:
+            continue
+        return {
+            "type": "PAYMENT_WALL",
+            "priority": 2,
+            "params": {"placeId": str(slot["place_id"]), "placeName": slot["place_name"], "kind": kind},
+        }
+    return None
+
+
+def _rule_last_entry(snap: dict) -> dict | None:
+    """마감 임박 입장 — 다음 슬롯 도착 시각이 라스트엔트리 이후면 개입.
+    도착 시각에 의존하므로 위치 가드가 본질적이다."""
+    if snap["estimated"]["confidence"] != "high":
+        return None
+    nxt = snap.get("next_slot")
+    if nxt is None or nxt["start_time"] is None:
+        return None
+    if nxt["last_entry_minutes"] is None or nxt["business_hours"] is None:
+        return None  # last_entry_minutes는 상대값이라 business_hours 없인 절대시각을 못 만든다
+
+    arrival = _combine(snap["today_date"], nxt["start_time"])
+    minutes_left = (arrival - snap["now"]).total_seconds() / 60
+    if not (0 <= minutes_left <= _ARRIVAL_WARN_WINDOW_MIN):
+        return None
+
+    hours = _hours_for(nxt["business_hours"], arrival.isoweekday())
+    if hours is None:
+        return None
+    _open, close = hours
+    last_entry = (
+        datetime.combine(arrival.date(), close) - timedelta(minutes=nxt["last_entry_minutes"])
+    ).time()
+    if arrival.time() < last_entry:  # 아직 여유 있음
+        return None
+
+    return {
+        "type": "LAST_ENTRY",
+        "priority": 3,
+        "params": {
+            "placeId": str(nxt["place_id"]),
+            "placeName": nxt["place_name"],
+            "lastEntryTime": last_entry.isoformat(),
+            "closeTime": close.isoformat(),
+        },
+    }
+
+
 # pre_trip에도 T1을 등록한다 — 새벽 항공편은 leave_by가 D-1로 넘어가버려 during 진입 전에
 # 이미 발동 창이 열려 있을 수 있다(리뷰 9번 회귀 방지). T1과 P1(_rule_pre_trip_briefing)은
 # 둘 다 priority=1로 동점인데, _select가 min()이라 동점이면 리스트에서 먼저 나온 쪽이 이긴다.
 # 그래서 T1을 앞에 둔다 — "지금 나가야 해요"가 "짐 싸세요" 브리핑보다 급하다(FFE #5).
 _RULES_PRE_TRIP = [_rule_flight_departure, _rule_pre_trip_briefing]
 _RULES_DURING = [
-    _rule_flight_departure,
-    _rule_return_departure,
-    _rule_departure_soon,
-    _rule_empty_day,
-    _rule_weather_alert,
-    _rule_budget_over,
-    _rule_bookmark_nearby,
-    _rule_free_gap,
+    _rule_flight_departure,    # 1
+    _rule_return_departure,    # 1
+    _rule_last_transit,        # 1 — 신규. 복구 불가라 같은 1 중에서도 앞
+    _rule_closed_day,          # 1 — 신규
+    _rule_departure_soon,      # 2
+    _rule_break_time,          # 2 — 신규
+    _rule_reservation_wall,    # 2 — 신규
+    _rule_payment_wall,        # 2 — 신규
+    _rule_empty_day,           # 3
+    _rule_last_entry,          # 3 — 신규
+    _rule_weather_alert,       # 4
+    _rule_budget_over,         # 5
+    _rule_bookmark_nearby,     # 6
+    _rule_free_gap,            # 7
 ]
 
 
@@ -334,6 +559,28 @@ def _select(candidates: list[dict]) -> dict | None:
     이 함수만 LLM 호출로 교체한다 — 규칙층·API·프론트는 그대로 둔다.
     """
     return min(candidates, key=lambda c: c["priority"]) if candidates else None
+
+
+# ============================================================
+# dismiss 필터링 — 기록은 Spring이 하고(ProactiveController), 여기서는 조회·판정만 한다.
+# 반드시 _select 호출 "전"에 candidates에서 걸러야 한다 — _select는 min(priority)로
+# 후보 1개만 반환하므로 뒤에서 거르면 그날 아무것도 안 뜨는 버그가 된다(FFE #4).
+# ============================================================
+
+async def _load_dismissed(redis, user_id: str, route_id: str, now: datetime) -> set[str]:
+    """오늘 유저가 닫은 개입 목록. Redis 장애 시 빈 set — 개입을 막지 않는다(FFE #3)."""
+    key = f"proactive:dismissed:{user_id}:{route_id}:{now.date().isoformat()}"
+    try:
+        return set(await redis.smembers(key))
+    except Exception as e:
+        logger.warning("[proactive] dismissed 조회 실패 — 빈 목록으로 진행: %s", e)
+        return set()
+
+
+def _dismiss_member(candidate: dict) -> str:
+    """Spring이 기록하는 멤버 형식과 1:1로 맞춘다 — 장소 무관 규칙은 '-'."""
+    place_id = candidate["params"].get("placeId")
+    return f"{candidate['type']}:{place_id or '-'}"
 
 
 # ============================================================
@@ -348,11 +595,88 @@ async def _load_slots(db: asyncpg.Pool, route_id: str) -> list[asyncpg.Record]:
     # 시각이 필요한 T2·T7은 _current_and_next와 각 규칙의 FFE #8 가드가 알아서 거른다.
     return await db.fetch(
         "SELECT rs.day_number, rs.order_index, rs.start_time, rs.duration_minutes, "
-        "rs.transport_to_next, rs.transport_minutes, p.name AS place_name, p.category_tags "
+        "rs.transport_to_next, rs.transport_minutes, p.id AS place_id, p.name AS place_name, "
+        "p.category_tags, "
+        "p.business_hours, p.break_time, p.last_order_minutes, p.last_entry_minutes, "
+        "p.reservation_required, p.walk_in_allowed, p.reservation_platform, "
+        "p.cash_only, p.friendly_foreign_card, p.closed_weekdays "
         "FROM route_slots rs JOIN places p ON p.id = rs.place_id "
         "WHERE rs.route_id = $1 ORDER BY rs.day_number, rs.order_index",
         route_id,
     )
+
+
+async def _load_closures(db: asyncpg.Pool, route_id: str, today: date) -> set[str]:
+    """오늘 휴관인 place_id 집합(str). closed_weekdays(요일 규칙)는 슬롯 행에 이미 실려
+    오므로 여기선 날짜 예외(place_closures)만 본다 — 규칙에서 둘을 OR로 합친다."""
+    rows = await db.fetch(
+        "SELECT DISTINCT pc.place_id FROM place_closures pc "
+        "JOIN route_slots rs ON rs.place_id = pc.place_id "
+        "WHERE rs.route_id = $1 AND pc.closed_date = $2",
+        route_id, today,
+    )
+    return {str(r["place_id"]) for r in rows}
+
+
+async def _load_last_transit(
+    db: asyncpg.Pool, redis, route: asyncpg.Record, today_slots: list[asyncpg.Record], now: datetime
+) -> dict | None:
+    """오늘 마지막 슬롯 → 그날 밤 숙소의 막차. 계산 안 할 조건이면 None.
+    반환: {"placeId": str, "placeName": str, "leaveBy": datetime, "minutes": int,
+           "fare": int | None}"""
+    if now.hour < _LAST_TRANSIT_EVAL_FROM_HOUR:
+        return None  # 비용 방어 — 이 시각 이전엔 계산 자체를 하지 않는다(FFE #7)
+    if not today_slots:
+        return None
+    if not settings.tmap_api_key:
+        return None
+
+    last_slot = today_slots[-1]
+    try:
+        stay = await db.fetchrow(
+            "SELECT ST_X(p.location::geometry) AS place_lng, ST_Y(p.location::geometry) AS place_lat, "
+            "ST_X(a.location::geometry) AS stay_lng, ST_Y(a.location::geometry) AS stay_lat "
+            "FROM places p, accommodations a "
+            "WHERE p.id = $1 AND a.route_id = $2 "
+            "AND a.check_in_date <= $3::date AND a.check_out_date > $3::date "
+            "LIMIT 1",
+            last_slot["place_id"], route["id"], now.date(),
+        )
+        if stay is None or stay["place_lat"] is None or stay["stay_lat"] is None:
+            return None  # 좌표를 못 구하면 계산 불가 — 오늘 숙소 미입력 등(FFE #7)
+
+        cache_key = (
+            f"transit:last:{last_slot['place_id']}:{stay['stay_lat']},{stay['stay_lng']}:"
+            f"{now.date().isoformat()}"
+        )
+        cached = await redis.get(cache_key)
+        if cached:
+            data = json.loads(cached)
+            data["leaveBy"] = datetime.fromisoformat(data["leaveBy"])
+            return data
+
+        async with httpx.AsyncClient() as client:
+            result = await find_last_departure(
+                client, stay["place_lat"], stay["place_lng"], stay["stay_lat"], stay["stay_lng"],
+                settings.tmap_api_key, now.date(),
+            )
+        if result is None:
+            return None
+
+        out = {
+            "placeId": str(last_slot["place_id"]),
+            "placeName": last_slot["place_name"],
+            "leaveBy": result["leave_by"],
+            "minutes": result["minutes"],
+            "fare": result["fare"],
+        }
+        await redis.setex(
+            cache_key, _LAST_TRANSIT_CACHE_TTL_S, json.dumps({**out, "leaveBy": out["leaveBy"].isoformat()})
+        )
+        return out
+    except Exception as e:
+        logger.warning("[proactive] 막차 조회 실패 — None으로 폴백: %s", e)
+        return None
 
 
 async def _load_stay_distances(db: asyncpg.Pool, route_id: str, start_date: date) -> dict[int, float]:
@@ -459,7 +783,15 @@ def _current_and_next(today_slots: list[asyncpg.Record], estimated: dict) -> tup
     if idx + 1 >= len(today_slots):
         return current_dict, None
     next_slot = today_slots[idx + 1]
-    next_dict = {"place_name": next_slot["place_name"], "start_time": next_slot["start_time"]}
+    next_dict = {
+        "place_id": next_slot["place_id"],
+        "place_name": next_slot["place_name"],
+        "start_time": next_slot["start_time"],
+        "business_hours": next_slot["business_hours"],
+        "break_time": next_slot["break_time"],
+        "last_order_minutes": next_slot["last_order_minutes"],
+        "last_entry_minutes": next_slot["last_entry_minutes"],
+    }
     return current_dict, next_dict
 
 
@@ -497,6 +829,9 @@ async def _build_snapshot(
     snap["estimated"] = estimated
     snap["current_slot"], snap["next_slot"] = _current_and_next(today_slots, estimated)
 
+    snap["closures_today"] = await _load_closures(db, route["id"], now.date())
+    snap["last_transit"] = await _load_last_transit(db, redis, route, today_slots, now)
+
     snap["budget"], snap["spent_today"] = await _load_budget_today(db, route["id"], now.date())
 
     snap["nearby_bookmarks"] = (
@@ -520,4 +855,6 @@ async def get_intervention(db: asyncpg.Pool, redis, user_id: str, route_id: str)
     snap = await _build_snapshot(db, redis, route, phase, now, user_id)
     rules = _RULES_PRE_TRIP if phase == "pre_trip" else _RULES_DURING
     candidates = [c for c in (rule(snap) for rule in rules) if c is not None]
+    dismissed = await _load_dismissed(redis, user_id, route_id, now)
+    candidates = [c for c in candidates if _dismiss_member(c) not in dismissed]  # ← _select 앞!
     return _select(candidates)

@@ -5,26 +5,69 @@
 
 ---
 
+> **[2026-08-26 범위 재조정]** 모두의 창업 탈락으로 출시 최소범위만 진행한다.
+> 아래 🔴 3건은 **전부 해결**했다 — 예산 CHECK 위반 · Apple 서명 미검증 · JWT 블랙리스트 Redis 장애.
+> 함께 처리하는 것: 배너 X 미소멸(🔵 프로액티브 후속), Tmap `searchDttm`·`fare` 미사용(🔵 이동시간 후속).
+> 그 밖의 항목은 계속 보류다. 진행 범위는 `planning/milestones.md`의 「🚀 출시 최소범위 마무리」 참고.
+
+---
+
 ## 🔴 프로덕션 전 필수
 
-### 1. Apple identity token 서명 검증 미구현
+### ~~(번호추가) 예산 5단계 중 2개가 DB CHECK 위반 — 「초절약」·「특별하게」로 루트 생성이 실패한다~~ — 해결됨 (2026-08-26)
+- **해결**: `V22__fix_routes_budget_level_check.sql`로 CHECK를 5종으로 확장 + `RouteGenRequest`의 `budgetLevel`·`groupType`·`density`에 `@Pattern` 검증 추가.
+  **실행으로 재현·확인함** — 수정 전 제약이 3종인 것을 확인하고, 수정 후 `tight`로 루트 생성이 HTTP 200(SSE `route_id` 수신, DB 행 생성)으로 통과. 잘못된 값은 500이 아니라 **422**(`GlobalExceptionHandler`가 검증 실패를 `UNPROCESSABLE_ENTITY`로 응답한다 — 400이 아니다).
+- **함께 대조한 결과**: CHECK 걸린 컬럼 12종을 3계층 대조했으나 **실제 위반은 `budget_level` 하나뿐**이었다. `routes.transport_mode`(엔티티 매핑 없는 데드 컬럼)와 `frontend/types/index.ts:182` `PassType`(DB와 어휘가 다른 데드 타입)은 체감 버그가 없어 남겨뒀다.
+- **발견 경위**: 2026-08-06 아키텍처 문서 동기화 중 `docs/03-data-model.md`를 스키마와 대조하다 발견. 실행으로 확인한 게 아니라 **정적 대조로 찾은 것이라 재현 확인이 필요하다.**
+- **어긋난 지점**:
+  | 계층 | 허용값 |
+  |---|---|
+  | 앱 `frontend/app/route/create/step-2.tsx:32` | `tight` `budget` `mid` `premium` `luxury` — **5종** |
+  | Spring `RouteGenRequest.java:21` | `@NotBlank String` — **검증 없이 통과** |
+  | DB `V3__create_routes.sql:24` | `CHECK (budget_level IN ('budget','mid','premium'))` — **3종** |
+- **증상 예상**: 「초절약」 또는 「특별하게」를 고르면 `routes` INSERT가 CHECK 제약 위반으로 실패 → 500. `budget_level`을 바꾼 마이그레이션은 V1~V21 통틀어 없다(grep 확인).
+- **왜 지금까지 안 드러났나(추정)**: 개발·테스트에서 기본값 근처(`mid`)만 골라온 것으로 보인다.
+- **해야 할 것**:
+  1. **먼저 재현** — `tight`로 루트 생성 요청을 보내 실제로 깨지는지 확인
+  2. 마이그레이션으로 CHECK를 5종으로 확장 (앱이 이미 5단계 UX로 나가 있으므로 DB를 맞추는 방향)
+  3. Spring에 값 검증 추가 — 3계층 중 **가운데가 아무 검증도 안 하는 게 근본 원인**이다. 여기서 걸렀으면 500이 아니라 400이 나갔다
+- **함께 볼 것**: `group_type` `density` `transport_mode` `expenses.category` 등 다른 CHECK 컬럼도 앱 선택지와 대조 필요 — 같은 구조의 결함이 더 있을 수 있다
+- **우선순위**: 높음 — 사용자가 고를 수 있는 선택지가 서비스를 깨뜨린다
+
+### ~~1. Apple identity token 서명 검증 미구현~~ — 해결됨 (2026-08-26, 분기 제거)
 - **파일**: `backend/src/main/java/com/cloumy/auth/oauth/AppleOAuthClient.java`
 - **현재 상태**: identity token(JWT)의 서명을 검증하지 않고 Base64 payload만 디코딩해서 사용
 - **위험**: 위조된 identity token으로 타인 계정 탈취 가능
 - **해야 할 것**: Apple 공개키 JWK endpoint(`https://appleid.apple.com/auth/keys`)에서 공개키를 가져와 RS256 서명 검증 추가
 - **참고**: JJWT 또는 `com.nimbusds:nimbus-jose-jwt` 라이브러리 사용 권장
+- **실제 해결(2026-08-26)**: 서명 검증을 구현하는 대신 **`apple` 분기를 통째로 제거**했다. 애플 개발자 계정이 없어 `APPLE_CLIENT_ID`가 빈 값이라 `aud` 검증을 끝까지 확인할 수 없고, 프론트에 애플 버튼도 없었다(`grep -i apple frontend/` 0건). **쓰지 않는 코드에 취약점이 있으면 지우는 게 고치는 것보다 낫다.**
+  `AuthService`의 `case "apple"` · `AppleOAuthClient` · `AppProperties.Apple` · `application.yml`의 `app.oauth.apple.*` · `.env.example`의 `APPLE_*` 4종을 모두 제거. 검증: `provider=apple` 직접 요청이 400으로 거부되고 위조 sub 계정이 **0건**, google 경로는 정상 도달(502 `OAUTH_USER_INFO_FAILED`).
 
-### 2. JWT 블랙리스트 조회가 Redis 장애 시 처리되지 않은 예외를 던짐
+### ~~2. JWT 블랙리스트 조회가 Redis 장애 시 처리되지 않은 예외를 던짐~~ — 해결됨 (2026-08-26)
 - **파일**: `backend/src/main/java/com/cloumy/auth/security/JwtTokenProvider.java` (validateToken, `redisTemplate.hasKey(BLACKLIST_KEY_PREFIX + ...)` 부분)
 - **관련 태스크**: Rate Limiting 튜닝(Spring, 2026-07-04) 검증 중 발견 — `RateLimitFilter`의 fail-open 동작을 확인하려고 Redis 컨테이너를 잠깐 내렸더니, 내 필터에 도달하기도 전에 `JwtAuthenticationFilter`가 블랙리스트 조회에서 `RedisException`을 던져 500으로 응답함(정상 토큰인데도)
 - **위험**: Redis 장애 시 인증이 필요한 모든 엔드포인트가 500을 반환 — 정상 사용자도 전부 막힘. 레이트리밋은 fail-open으로 설계했는데 그 앞단인 인증 자체가 fail-closed(사실상 의도치 않은 예외)라 전체 취지가 무색해짐
 - **해야 할 것(논의 필요)**: 블랙리스트 조회를 try-catch로 감싸고 Redis 장애 시 정책 결정 필요 — "차단된 토큰인지 확인 불가 시 통과시킬지(로그아웃 처리가 늦게 반영되는 정도의 리스크)" vs "명시적으로 503 반환할지"(현재처럼 이유 불명확한 500보다는 나음)
 - **우선순위**: 중간 — Redis 자체가 자주 죽는 컴포넌트는 아니지만, 장애 시 파급 범위가 이 기능 하나가 아니라 전체 인증이라 영향도가 큼
 
+- **해결(2026-08-26)**: 블랙리스트 조회를 try-catch로 감싸 **fail-open**. ⚠️ `catch (BusinessException e) { throw e; }`를 `catch (Exception e)`보다 **먼저** 둬야 한다 — `JWT_REVOKED` throw가 try 블록 안에 있어서 순서가 뒤바뀌면 블랙리스트가 통째로 무력화된다.
+- **try-catch만으론 부족했다**: 실측 결과 fail-open은 되는데 **60.14초** 걸렸다. Lettuce 기본 커맨드 타임아웃이 60초인데 `application.yml`에 타임아웃 설정이 없었다. 인증 요청이 1분씩 매달리는 건 500과 다를 바 없는 전면 장애다. `timeout: 1s` / `connect-timeout: 1s` 추가로 **60.14초 → 1.03초**. 이 설정은 `RateLimitFilter`·`AiServiceClient`의 fail-open에도 똑같이 적용된다 — 셋 다 같은 병을 앓고 있었다.
+- **검증**: Redis 정상 시 로그아웃 토큰 차단 유지(401 `TOKEN_REVOKED`), Redis 중지 시 HTTP 200 / 1.03초.
+
 ### ~~3. V17이 bookmarks 테이블을 중복 생성 — 빈 DB 초기화가 깨진다~~ — 해결됨 (2026-08-01)
 - **해결**: V17의 `CREATE TABLE`·`CREATE INDEX`에 `IF NOT EXISTS` 추가로 멱등화. 임시 컨테이너에서 빈 DB → `init.sql` → V1~V21 순차 적용으로 **재현 후 수정 확인**(원본은 `relation "bookmarks" already exists`로 실패, 수정본은 전체 통과).
 - **함께 발견된 더 큰 결함**: 아래 "Flyway baseline이 V1을 통째로 건너뛴다" 참조 — 사실 이쪽이 먼저 터진다.
-- 기존 DB는 checksum이 바뀌므로 `./gradlew flywayRepair` 필요.
+- 기존 DB는 checksum이 바뀌므로 repair 필요.
+  ⚠️ **[2026-08-26 정정] `./gradlew flywayRepair`는 존재하지 않는다** — `build.gradle:45-46`은 Flyway
+  런타임 라이브러리(`flyway-core`)만 넣고 **Gradle 플러그인은 적용하지 않았다**. 실제로 먹히는 명령:
+  ```bash
+  docker run --rm --network cloumy_cloumy-network \
+    -v "$PWD/backend/src/main/resources/db/migration:/flyway/sql" \
+    flyway/flyway:10.10.0 \
+    -url=jdbc:postgresql://postgres:5432/cloumy \
+    -user=$POSTGRES_USER -password=$POSTGRES_PASSWORD repair
+  ```
+  실측: repair 없이는 V21·V22가 `Migration checksum mismatch for migration version 17`로 **적용 자체가 막힌다**.
 
 <details>
 <summary>원본 기록</summary>
@@ -100,6 +143,16 @@
   - `.env` → `localhost:5433` → `localhost:5432`
   - `.env.example` → `localhost:5433` → `localhost:5432`
 - **복원 후**: `docker compose down && docker compose up -d` 실행
+
+### ~~(번호추가) `docs/architecture.svg`가 폐기된 결정을 그리고 있다~~ — 해결됨 (2026-08-27, 삭제 후 Mermaid로 대체)
+- **파일**: `docs/architecture.svg` (2026-06-09자, 이후 한 번도 안 고침)
+- **틀린 내용**: **Elasticsearch**·**socket.io**·**토스페이먼츠** — 셋 다 안 쓰기로 결론난 것들이다. Spring Cloud Gateway도 실제로는 없다
+- **왜 남았나**: 2026-08-06에 `02`·`03`·`04`·`05`를 코드 기준으로 재작성했지만 SVG는 텍스트 편집으로 고칠 수 없어 제외했다. `docs/08-codebase-guide.md`의 문서 판정표에서 **유일하게 남은 ❌**다
+- **선택지**:
+  1. 삭제하고 `02-architecture.md`의 ASCII 도해로 일원화 — 도해가 하나뿐이면 어긋날 일이 없다 **(권장)**
+  2. 현재 구조로 다시 그림
+- **해결(2026-08-27)**: SVG를 삭제하고 `docs/02-architecture.md`·`README.md`에 **Mermaid**로 다시 그렸다. 선택지 1(ASCII 일원화)이 아니라 Mermaid를 고른 이유는 GitHub이 바로 렌더하면서 **diff가 되기 때문**이다 — SVG가 6월 9일자로 굳어버린 근본 원인이 '고치려면 편집기를 열어야 한다'는 것이었다. 루트 생성 SSE 시퀀스 다이어그램도 함께 추가했다.
+- **우선순위**: 낮음 — 다만 **틀린 그림은 없는 그림보다 나쁘다.** 신규 합류자가 가장 먼저 여는 게 다이어그램이다
 
 ---
 
@@ -353,13 +406,12 @@
 
 사용자에게 보이는 4개 언어 문구는 여전히 앱 `proactiveText.ts`가 만든다("판단은 규칙이, 표현은 앱이" 유지).
 
-### (번호추가) 배너 X가 같은 화면에 머무는 동안 사라지지 않는다
+### ~~(번호추가) 배너 X가 같은 화면에 머무는 동안 사라지지 않는다~~ — 해결됨 (2026-08-27, Phase B P2)
 - **관련 태스크**: 2026-07-29 코드 리뷰
 - **파일**: `frontend/components/route/ProactiveBanner.tsx`
 - **현재 상태**: `handleDismiss`가 `dismissToday`(MMKV 쓰기)와 `sendProactiveFeedback`(fire-and-forget)만 호출한다. 둘 다 React 상태나 쿼리 캐시를 안 건드려 리렌더가 발생하지 않는데, `isDismissedToday` 검사는 렌더 시점에만 수행된다.
 - **증상**: X를 눌러도 배너가 남아 있고, 다시 탭하면 같은 말풍선이 챗봇에 중복으로 쌓인다. 화면을 벗어났다 오면(언마운트/리마운트) 정상 동작하므로 **재노출 방지 자체는 정상**이다(2026-07-27 실기기 검증 기록 참고).
-- **해야 할 것**: 로컬 `dismissed` 상태를 두거나 `queryClient.setQueryData(['proactive', routeId], null)`로 리렌더를 유발한다.
-- **우선순위**: 낮음 — 기능 손실이 아닌 UX 결함
+- **해결(2026-08-27)**: `handleDismiss`에 `queryClient.setQueryData(['proactive', routeId], null)` 추가. 배너와 챗봇이 같은 쿼리 키를 공유하므로 양쪽이 함께 정리된다. dismiss 구조 개편(placeId + 서버 필터링)과 같은 파일을 여는 김에 처리했다.
 
 ### (번호추가) 오는 편이 여행 종료일 다음날 새벽이면 RETURN_DEPARTURE가 안 뜬다
 - **관련 태스크**: 프로액티브 후속 수정 (2026-07-29)
@@ -521,6 +573,39 @@
 - **위험**: 클라이언트가 오타 난 API 경로를 호출해도 "서버 내부 오류"로 보여 디버깅에 혼선을 줌. 심각한 보안 이슈는 아님
 - **해야 할 것**: 전역 예외 핸들러에 `NoResourceFoundException` → 404 매핑 추가
 - **우선순위**: 낮음 — 기능 자체는 정상 동작, UX/디버깅 편의 이슈
+
+---
+
+## 🟡 운영정보 시드 — 계절별 관람시간을 평균값으로 넣었다 (2026-08-27)
+
+### (번호추가) `business_hours`가 월별 변동을 표현하지 못한다
+- **파일**: `ai/scripts/data/operational_info.csv`, `ai/app/services/proactive_service.py`(`_hours_for`)
+- **발견 경위**: 큐레이션 시드 첫 배치를 넣다가 발견. 궁궐 관람시간이 **계절별로 바뀐다**.
+  ```
+  창덕궁·종묘  2~5월·9~10월 09:00~18:00 / 6~8월 09:00~18:30 / 11~1월 09:00~17:30
+  경복궁       1~2월·11~12월 09:00~17:00 / 3~5월·9~10월 09:00~18:00 / 6~8월 09:00~18:30
+  ```
+  (출처: [궁능유적본부 관람시간](https://royal.khs.go.kr/ROYAL/contents/R702000000.do))
+- **확정한 형식**: `{"open","close","weekday_overrides"}` — **요일 변동만 담고 월별 변동은 못 담는다.**
+- **결정(2026-08-27)**: `month_overrides` 추가를 제안했으나 **스키마를 늘리지 않고 평균값으로 넣기로 함.**
+  창덕궁·종묘는 `18:00`(1년 12개월 중 6개월이 정확히 이 값이라 평균이자 최빈값).
+- **남는 오차**: `LAST_ENTRY`가 `close - last_entry_minutes`로 계산되므로
+  | 시기 | 실제 폐장 | 넣은 값 | 개입 시점 |
+  |---|---|---|---|
+  | 6~8월 | 18:30 | 18:00 | 30분 **일찍** 경고 — 무해(보수적) |
+  | 2~5월·9~10월 | 18:00 | 18:00 | 정확 |
+  | **11~1월** | **17:30** | 18:00 | **30분 늦게 경고** — 이미 입장 마감된 뒤에 뜰 수 있다 |
+- **해야 할 것(선택지)**:
+  1. `month_overrides` 추가 — 파서(`_hours_for`)·시드 스크립트·CSV 양식을 함께 고쳐야 한다
+  2. 계절 무관하게 **가장 이른 폐장 시각**(17:30)을 넣어 항상 보수적으로 경고 — 여름엔 1시간 일찍 뜬다
+  3. 현행 유지 — 겨울 3개월간 `LAST_ENTRY`가 늦게 뜨는 것을 감수
+- **우선순위**: 낮음 — 데이터가 3곳뿐이라 지금은 영향이 작다. **30~50곳으로 늘리기 전에 결정하는 게 싸다**(늘린 뒤 바꾸면 전부 재입력)
+
+### (번호추가) `경복궁`이 큐레이션 풀에 없다
+- **현재 상태**: `places`에 `경복궁`이라는 장소가 없다. `경복궁 별빛야행`(행사)·`건청궁`(경복궁 내 전각)만 있다.
+- **왜 문제인가**: 서울 최대 관광지가 루트 추천 후보에서 빠진다. TourAPI 수집 시 명칭 표기 차이로 누락된 것으로 보인다.
+- **함께 볼 것**: `덕수궁`도 궁 자체는 없고 `덕수궁 대한문`·`덕수궁 돌담길`만 있다. 다른 주요 관광지도 같은 누락이 있는지 전수 확인 필요
+- **우선순위**: 중간 — 데이터 커버리지 문제라 규칙 6종과 별개로 루트 품질에 직접 영향
 
 ---
 

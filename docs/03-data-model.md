@@ -1,347 +1,322 @@
 # 데이터 모델
 
-## ERD (핵심 엔티티)
-
-```
-users
-  ├── routes (1:N) — 사용자의 여행 루트
-  │     ├── route_slots (1:N) — 루트의 일정 슬롯
-  │     └── expenses (1:N) — 루트의 지출 내역
-  ├── payments (1:N) — 트립 패스 결제
-  ├── bookmarks (1:N) — 사용자가 저장한 장소
-  └── user_levels (1:1) — Hidden Gems 레벨
-
-places
-  ├── route_slots (N:M) — 슬롯에 배치된 장소
-  ├── bookmarks (1:N) — 장소를 저장한 북마크
-  └── hidden_gems (1:1, 선택) — Hidden Gem으로 등록된 장소
-
-group_trips
-  ├── group_members (1:N) — 그룹 참여자
-  └── routes (1:1) — 그룹의 공유 루트
-```
-
-## 엔티티 정의
-
-### users
-
-| 필드 | 타입 | 필수 | 설명 |
-|------|------|------|------|
-| id | UUID | ✅ | PK |
-| oauth_provider | VARCHAR | ✅ | 'google' \| 'apple' \| 'kakao'(보류, 국내 전용이라 외국인 타겟과 안 맞음 — 재검토 필요) |
-| oauth_id | VARCHAR | ✅ | 소셜 로그인 식별자 |
-| nickname | VARCHAR | ✅ | 표시 이름 |
-| profile_image_url | VARCHAR | - | 프로필 이미지 |
-| pass_type | VARCHAR | - | 'none' \| 'standard' \| 'extended' — ⚠️ 2026-07-06 타겟 전환으로 `domestic_*`/`overseas_*` 구분에서 변경(결제 미구현이라 실제 마이그레이션은 결제 기능 구현 시점에 반영) |
-| pass_expires_at | TIMESTAMP | - | 트립 패스 만료 시각 |
-| is_beta_tester | BOOLEAN | ✅ | 베타 테스터 여부 (레전드 배지) |
-| created_at | TIMESTAMP | ✅ | |
-
-### places
-
-| 필드 | 타입 | 필수 | 설명 |
-|------|------|------|------|
-| id | UUID | ✅ | PK |
-| name | VARCHAR | ✅ | 장소명 (⚠️ 한국어만 존재, 영문 컬럼 없음 — 외국인 타겟 전환 후 영문화 방식 논의 필요, `planning/priorities.md` P2 참고) |
-| location | GEOGRAPHY(POINT) | ✅ | PostGIS 좌표 |
-| address | VARCHAR | - | 도로명 주소 (영문 컬럼 없음, 위와 동일) |
-| category_tags | TEXT[] | ✅ | ['먹방', '한식', '전통시장'] — ⚠️ 여행자 취향 태그 시스템은 이 필드와 별개로 Notion 10종 영어 태그(K-pop Pilgrim 등)로 재설계 계획, `docs/01-prd.md` 참고 |
-| source | VARCHAR | ✅ | 'tourapi' \| 'kakao' \| 'hidden_gem' |
-| rarity_score | FLOAT | - | 희소성 점수 0~100 |
-| review_count | INTEGER | - | 카카오 플레이스 리뷰 수 |
-| is_hidden_gem | BOOLEAN | ✅ | Hidden Gem 배지 여부 |
-| is_active | BOOLEAN | ✅ | 활성 여부 (폐업 처리용, 기본값 true) |
-| avg_duration_minutes | INTEGER | - | 평균 체류 시간 (분) |
-| business_hours | JSONB | - | 요일별 영업시간 |
-| time_tags | TEXT[] | - | 시간 속성 태그 ['야간가능', '오전전용'] |
-| cost_tags | TEXT[] | - | 비용 속성 태그 ['1만원이하', '3~5만원'] |
-| companion_tags | TEXT[] | - | 동행 태그 ['2인추천', '단체가능'] |
-| access_tags | TEXT[] | - | 접근성 태그 ['주차가능', '대중교통접근'] |
-| trend_score | FLOAT | - | 트렌딩 가중치 (SNS/유튜브 기반, Phase 2) |
-| trend_updated_at | TIMESTAMP | - | 마지막 트렌드 갱신 시각 |
-| trend_source | TEXT[] | - | 트렌드 출처 ['naver_blog', 'youtube'] |
-| embedding | vector(1536) | - | pgvector 임베딩 |
-| created_at | TIMESTAMP | ✅ | |
-
-> 📌 **계획 — Foreigner Friendly Score 컬럼 (미구현)**: `friendly_score_english_menu`/`friendly_score_card_payment`/`friendly_score_english_kiosk`/`spice_level`/`dietary_tags` 등 5개 항목 추가 예정. 아직 스키마 설계 전이며 컬럼명은 가안. `docs/01-prd.md` P1 섹션 참고.
-
-### routes
-
-| 필드 | 타입 | 필수 | 설명 |
-|------|------|------|------|
-| id | UUID | ✅ | PK |
-| user_id | UUID | ✅ | FK → users |
-| group_trip_id | UUID | - | FK → group_trips (그룹 모드, Phase 2) |
-| title | VARCHAR | ✅ | 여행 제목 |
-| destination | VARCHAR | ✅ | 목적지 |
-| start_date | DATE | ✅ | 출발일 |
-| end_date | DATE | ✅ | 귀환일 |
-| nights | INTEGER | ✅ | 박 수 |
-| participant_count | INTEGER | - | 인원 수 (선택, 미래 N빵/초대 기능 대비) |
-| group_type | VARCHAR | ✅ | 'solo' \| 'couple' \| 'friends' \| 'family' |
-| budget_level | VARCHAR | ✅ | 'budget' \| 'mid' \| 'premium' (AI 장소 필터링용) |
-| total_budget | INTEGER | - | 총 예산 (원, 예산 관리 기능용) |
-| tags | TEXT[] | - | 여행 스타일 태그 |
-| density | VARCHAR | - | 'relaxed' \| 'normal' \| 'packed' |
-| transport_mode | VARCHAR | - | 'transit' \| 'car' \| 'walk' |
-| accommodation_area | VARCHAR | - | 숙소 위치 (동선 최적화 기준점) |
-| is_public | BOOLEAN | ✅ | 커뮤니티 공유 여부 |
-| save_count | INTEGER | ✅ | 저장 수 (기본값 0) |
-| display_order | INTEGER | ✅ | 목록 수동 드래그 정렬 순서 (V12). 신규 루트는 최솟값-1로 맨 앞 |
-| departure_at | TIMESTAMPTZ | - | 가는 편 출발 일시 (V19). 프로액티브 `FLIGHT_DEPARTURE` 규칙의 기준값, 선택 입력 |
-| return_at | TIMESTAMPTZ | - | 오는 편 출발 일시 (V20). 프로액티브 `RETURN_DEPARTURE` 규칙의 기준값, 선택 입력 |
-| created_at | TIMESTAMPTZ | ✅ | |
-| updated_at | TIMESTAMPTZ | ✅ | fn_set_updated_at() 트리거 자동 갱신 |
-
-> 📌 `departure_at` / `return_at`은 `TIMESTAMPTZ`이고 Java는 `OffsetDateTime`으로 매핑한다. 오프셋 없는 `LocalDateTime`으로 받으면 프론트가 보내는 UTC ISO와 KST 사이에서 값이 어긋난다(2026-07-29 수정).
-
-### route_slots
-
-| 필드 | 타입 | 필수 | 설명 |
-|------|------|------|------|
-| id | UUID | ✅ | PK |
-| route_id | UUID | ✅ | FK → routes |
-| place_id | UUID | ✅ | FK → places |
-| day_number | INTEGER | ✅ | 1일차, 2일차... |
-| order_index | INTEGER | ✅ | 해당 날의 방문 순서 |
-| start_time | TIME | - | 예상 방문 시각 |
-| duration_minutes | INTEGER | - | 예상 체류 시간 |
-| estimated_cost | INTEGER | - | 예상 비용 (원) |
-| is_pinned | BOOLEAN | ✅ | Pin & Reshuffle 고정 여부 (기본값 false) |
-| transport_to_next | VARCHAR | - | 'walk' \| 'transit' \| 'taxi' |
-| transport_minutes | INTEGER | - | 다음 장소까지 이동 시간 |
-| transit_summary | TEXT | - | 대중교통 노선+환승 요약 (예: "버스 143 → 지하철 2호선 (환승 1회)"), transit 모드일 때만 |
-| tips | TEXT | - | AI 생성 팁 |
-
-### expenses
-
-| 필드 | 타입 | 필수 | 설명 |
-|------|------|------|------|
-| id | UUID | ✅ | PK |
-| route_id | UUID | ✅ | FK → routes |
-| slot_id | UUID | - | FK → route_slots (NULL이면 비계획 지출) |
-| user_id | UUID | ✅ | FK → users |
-| expense_type | VARCHAR | ✅ | 'planned' \| 'unplanned' |
-| category | VARCHAR | ✅ | 'ACCOMMODATION' \| 'FOOD' \| 'TRANSPORT' \| 'ADMISSION' \| 'SOUVENIR' \| 'ETC' |
-| planned_amount | INTEGER | - | 계획 금액 |
-| actual_amount | INTEGER | ✅ | 실제 지출 금액 |
-| memo | TEXT | - | 메모 |
-| created_at | TIMESTAMP | ✅ | |
-
-### budget_settings
-
-| 필드 | 타입 | 필수 | 설명 |
-|------|------|------|------|
-| id | UUID | ✅ | PK |
-| route_id | UUID | ✅ | FK → routes |
-| total_budget | INTEGER | ✅ | 총 예산 |
-| accommodation_ratio | FLOAT | ✅ | 숙박 비율 (기본 0.35) |
-| food_ratio | FLOAT | ✅ | 식음료 비율 (기본 0.30) |
-| transport_ratio | FLOAT | ✅ | 교통 비율 (기본 0.20) |
-| activity_ratio | FLOAT | ✅ | 입장료 비율 (기본 0.10) |
-| etc_ratio | FLOAT | ✅ | 기타 비율 (기본 0.05) |
-
-### bookmarks
-
-| 필드 | 타입 | 필수 | 설명 |
-|------|------|------|------|
-| id | UUID | ✅ | PK |
-| user_id | UUID | ✅ | FK → users |
-| place_id | UUID | ✅ | FK → places |
-| created_at | TIMESTAMP | ✅ | |
-
-> **UNIQUE (user_id, place_id)** — 동일 장소 중복 북마크 방지
-
-**장소 피드 API** (Spring 구현은 별도 태스크):
-```
-GET    /v1/places?destination=부산&category=맛집  — 목적지별 장소 피드
-GET    /v1/places/{id}                            — 장소 상세 (이름·주소·영업시간·위치·카테고리)
-POST   /v1/places/{id}/bookmark                  — 북마크 추가
-DELETE /v1/places/{id}/bookmark                  — 북마크 해제
-GET    /v1/users/me/bookmarks                    — 내 북마크 목록
-```
-
-**초기 데이터 전략**: TourAPI seed (5개 도시) 완료 후 피드 활성화. seed 전에는 루트 생성 Step 3에서 카카오 실시간 검색으로 anchor 선택 → places 테이블 자동 upsert.
+> **진실의 출처는 이 문서가 아니라 `backend/src/main/resources/db/migration/` (V1~V21)이다.**
+> 이 문서는 그 21개 파일을 읽어 정리한 것이고, 어긋나면 마이그레이션이 맞다.
+> 기준일 **2026-08-06** · V21까지 반영
 
 ---
 
-### hidden_gems
+## ERD — 실제로 존재하는 테이블 10개
+
+```
+users
+  ├── routes (1:N)
+  │     ├── route_slots (1:N)          일정 슬롯
+  │     ├── route_day_summaries (1:N)  Day별 AI 요약 (day당 1건 UNIQUE)
+  │     ├── accommodations (1:N)       숙소 (체크인~체크아웃 범위 1건)
+  │     ├── expenses (1:N)             지출
+  │     └── budget_settings (1:1)      예산 배분 비율
+  ├── bookmarks (1:N)        ─┐
+  └── route_bookmarks (1:N)  ─┼─ 둘 다 로그성. UNIQUE로 중복 방지
+                              │
+places ─────────────────────────┤
+  ├── route_slots (1:N)         │  슬롯에 배치된 장소 (ON DELETE RESTRICT)
+  └── bookmarks (1:N)  ─────────┘
+```
+
+**FK 삭제 정책이 한 곳만 다르다** — `route_slots.place_id`만 `ON DELETE RESTRICT`이고 나머지는 전부 `CASCADE`다. 루트에 쓰이는 장소는 지울 수 없다는 뜻이고, 폐업 처리는 삭제가 아니라 `places.is_active = false`로 한다.
+
+### 아직 없는 테이블 — 문서에만 있던 것들
+
+이전 버전 문서가 아래 4개를 스키마인 것처럼 적어놨지만 **마이그레이션에 없다.** 계획이다.
+
+| 테이블 | 상태 |
+|---|---|
+| `hidden_gems` | 미생성. Hidden Gem은 `places.is_hidden_gem` 플래그 + `rarity_score`로만 존재 |
+| `payments` | 미생성. 결제 미연동 (`PassValidationService` 33줄이 전부, PG 미확정) |
+| `group_trips` · `group_members` | 미생성. `routes.group_trip_id` 컬럼만 FK 없이 자리를 잡아둔 상태 |
+
+`events`(콘서트 앵커)도 마찬가지로 없다.
+
+---
+
+## 엔티티 정의
+
+### users (V1, V15)
 
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | id | UUID | ✅ | PK |
-| place_id | UUID | ✅ | FK → places |
-| registered_by | UUID | ✅ | FK → users |
-| photo_url | VARCHAR | ✅ | 등록 사진 |
-| gps_verified | BOOLEAN | ✅ | GPS 방문 인증 완료 여부 |
-| verified_at | TIMESTAMP | - | 인증 시각 |
-| route_inclusion_count | INTEGER | ✅ | 루트 반영 횟수 (기본값 0) |
-| created_at | TIMESTAMP | ✅ | |
+| oauth_provider | VARCHAR(20) | ✅ | 'google' \| 'apple' \| 'kakao'(국내 전용이라 외국인 타겟과 안 맞음 — 재검토 대상) |
+| oauth_id | VARCHAR(255) | ✅ | 소셜 로그인 식별자 |
+| nickname | VARCHAR(100) | ✅ | 표시 이름 |
+| profile_image_url | TEXT | - | 프로필 이미지 |
+| pass_type | VARCHAR(10) | ✅ | **CHECK: 'none' \| 'day' \| '3night' \| '4night'** ⚠️ 아래 참고 |
+| pass_expires_at | TIMESTAMPTZ | - | 트립 패스 만료 시각 |
+| is_beta_tester | BOOLEAN | ✅ | 기본값 false |
+| persona_tags | TEXT[] | ✅ | V15. 페르소나 10종, 기본값 `{}` |
+| onboarding_completed_at | TIMESTAMP | - | V15. NULL이면 온보딩 미완료 |
+| created_at / updated_at | TIMESTAMPTZ | ✅ | `trg_users_updated_at` 자동 갱신 |
 
-### payments
+> ⚠️ **`pass_type` CHECK가 전략과 어긋나 있다.** DB는 `'day'`/`'3night'`/`'4night'`을 허용하는데, 2026-07-06 타겟 전환 후 상품은 **Standard / Extended** 2종이다. 결제 미구현이라 아직 드러나지 않았을 뿐, **결제를 붙이는 시점에 마이그레이션이 반드시 선행돼야 한다.**
 
-| 필드 | 타입 | 필수 | 설명 |
-|------|------|------|------|
-| id | UUID | ✅ | PK |
-| user_id | UUID | ✅ | FK → users |
-| pass_type | VARCHAR | ✅ | 'standard'($4.99) \| 'extended'($7.99) — Standard/Extended 가격 확정, `planning/strategy.md` 참고 |
-| amount | INTEGER | ✅ | 결제 금액 (통화 단위는 PG 확정 후 결정, 현재 USD 가정) |
-| payment_key | VARCHAR | ✅ | 결제 PG 거래 키 — ⚠️ PG 미확정(토스페이먼츠는 국내 전용이라 재검토 필요, Stripe 등 검토 중) |
-| status | VARCHAR | ✅ | 'pending' \| 'success' \| 'fail' |
-| pass_expires_at | TIMESTAMP | - | 패스 만료 시각 |
-| created_at | TIMESTAMP | ✅ | |
+- `UNIQUE (oauth_provider, oauth_id)` — 소셜 로그인 upsert 키
 
-### group_trips
+### places (V2, V10, V13, V14, V21)
+
+가장 넓은 테이블이다. 성격별로 나눠 적는다. **`updated_at`이 없다** — 트리거도 없는 유일한 주요 테이블이다.
+
+**기본**
 
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | id | UUID | ✅ | PK |
-| host_user_id | UUID | ✅ | FK → users (방장) |
-| invite_code | VARCHAR | ✅ | 초대 링크/QR 코드 |
-| route_id | UUID | ✅ | FK → routes |
-| created_at | TIMESTAMP | ✅ | |
+| name | VARCHAR(200) | ✅ | 원본 표기 (한국어) |
+| location | GEOGRAPHY(POINT, 4326) | ✅ | PostGIS. **`ST_DWithin` 단위가 미터** |
+| address | TEXT | - | 도로명 주소 |
+| source | VARCHAR(20) | ✅ | CHECK: `tourapi` \| `kakao` \| `naver`(V10) \| `hidden_gem` \| `manual`(V13) \| `event`(V13) |
+| is_curated | BOOLEAN | ✅ | V13. 기본값 true. **false는 유저가 직접 추가한 장소뿐** |
+| is_active | BOOLEAN | ✅ | 폐업 처리용. 기본값 true |
+| created_at | TIMESTAMPTZ | ✅ | |
 
-### group_members
+**태그 5종** — 전부 `TEXT[] NOT NULL DEFAULT '{}'`, 각각 GIN 인덱스
+
+`category_tags` · `time_tags` · `cost_tags` · `companion_tags` · `access_tags`
+
+**추천 신호**
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| avg_duration_minutes | INTEGER | 평균 체류 시간 |
+| review_count | INTEGER | 리뷰 수 |
+| is_hidden_gem | BOOLEAN | ✅ 기본값 false |
+| rarity_score | FLOAT | CHECK 0~100. Hidden Gem 정렬용 |
+| business_hours | JSONB | 요일별 영업시간 — ⚠️ **값을 넣는 코드가 없다** |
+| trend_score / trend_updated_at / trend_source | FLOAT / TIMESTAMPTZ / TEXT[] | ⚠️ **네이버 블로그 검색 API 미발급이라 전부 비어 있다** |
+| embedding | vector(1536) | text-embedding-3-small |
+
+**다국어 (V14) — 8컬럼**
+
+`name_en` `name_ja` `name_zh_hans` `name_zh_hant` / `address_en` `address_ja` `address_zh_hans` `address_zh_hant`
+
+> 채우는 방식은 미확정이다(노션 「장소 데이터 영문화 방식 결정」 진행 중). 마이그레이션 주석의 안은 *큐레이션 배치는 배치 LLM 번역, 신규 장소는 첫 조회 시 실시간 번역 후 write-through*.
+
+**운영정보 (V21) — 18컬럼**
+
+프로액티브 규칙 6종(`CLOSED_DAY` `BREAK_TIME` `LAST_ENTRY` `RESERVATION_WALL` `LAST_TRANSIT` `PAYMENT_WALL`)의 데이터 기반이다.
+
+| 묶음 | 컬럼 |
+|---|---|
+| Foreigner Friendly | `friendly_english_menu` `friendly_foreign_card` `friendly_english_kiosk` (SMALLINT 0~2) · `spice_level` (0~3) · `dietary_tags` TEXT[] |
+| 시간 함정 | `break_time` JSONB `{"start":"HH:MM","end":"HH:MM"}` · `last_order_minutes` · `last_entry_minutes` |
+| 진입 함정 | `reservation_required` · `walk_in_allowed` · `reservation_platform`(CHECK 6종) · `cash_only` · `min_party_size` |
+| 찾기 | `signboard_name_ko` · `nearest_station` · `station_exit` |
+| 휴관 | `closed_weekdays` SMALLINT[] (ISO-8601, 1=월) · `closed_on_holidays` |
+
+> 🔑 **`NULL` = 미조사, `0` = 조사했는데 없음.** 서울·부산 200곳만 채울 계획이라 이 구분이 없으면 챗봇이 안 알아본 가게를 두고 *"영어메뉴 없어요"* 라고 단정한다. **규칙 함수는 `IS NOT NULL` 가드가 필수다.**
+
+> **인덱스를 일부러 하나도 안 붙였다.** 아직 이 컬럼들을 쓰는 쿼리가 없어서, 규칙 구현 후 `EXPLAIN ANALYZE`로 실제 접근 패턴을 보고 붙인다. `WHERE is_curated = true` 부분 인덱스는 검토했다가 뺐다 — V13이 `DEFAULT true`로 넣어 21,543행이 전부 true라 선택도가 없다.
+
+### routes (V3, V12, V16, V19, V20)
 
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | id | UUID | ✅ | PK |
-| group_trip_id | UUID | ✅ | FK → group_trips |
-| user_id | UUID | ✅ | FK → users |
-| role | VARCHAR | ✅ | 'host' \| 'member' |
-| joined_at | TIMESTAMP | ✅ | |
+| user_id | UUID | ✅ | FK → users, CASCADE |
+| group_trip_id | UUID | - | **FK 없음.** 테이블이 아직 없어 컬럼만 자리를 잡아둔 상태 |
+| title | VARCHAR(200) | ✅ | |
+| destination | VARCHAR(200) | ✅ | |
+| start_date / end_date | DATE | ✅ | |
+| nights | INTEGER | ✅ | CHECK >= 0 |
+| group_type | VARCHAR(20) | ✅ | CHECK: solo \| couple \| friends \| family |
+| budget_level | VARCHAR(20) | ✅ | **CHECK: budget \| mid \| premium** ⚠️ 아래 참고 |
+| density | VARCHAR(20) | - | CHECK: relaxed \| normal \| packed |
+| transport_mode | VARCHAR(20) | - | CHECK: transit \| car \| walk |
+| total_budget | INTEGER | - | 숙박비 제외 현지 활동/식사 예산 |
+| participant_count | INTEGER | - | 수집 안 함. 초대 기능 대비 보관 |
+| accommodation_area | VARCHAR(200) | - | |
+| tags | TEXT[] | ✅ | 기본값 `{}`. V16에서 GIN 인덱스 |
+| is_public | BOOLEAN | ✅ | 커뮤니티 공개 |
+| save_count | INTEGER | ✅ | 기본값 0 |
+| display_order | INTEGER | ✅ | V12. 수동 드래그 정렬. 신규 루트는 최솟값-1로 맨 앞 |
+| departure_at | TIMESTAMPTZ | - | V19. 프로액티브 `FLIGHT_DEPARTURE` 기준값 |
+| return_at | TIMESTAMPTZ | - | V20. `RETURN_DEPARTURE` 기준값. `departure_at`과 대칭 |
+| created_at / updated_at | TIMESTAMPTZ | ✅ | `trg_routes_updated_at` |
 
-## 인덱스 전략
+> ⛔ **`budget_level` CHECK와 앱이 어긋나 있다 (미해결 결함).**
+> 앱 `step-2.tsx`는 **5단계**(`tight` `budget` `mid` `premium` `luxury`)를 제시하는데 DB CHECK는 가운데 3개만 허용한다. Spring은 `@NotBlank String`으로 그대로 통과시킨다(`RouteGenRequest.java:21`).
+> → **「초절약」·「특별하게」를 고르면 INSERT가 CHECK 위반으로 실패한다.** `planning/unimplemented.md` 참고.
+
+> 📌 `departure_at` / `return_at`은 `TIMESTAMPTZ`이고 Java는 `OffsetDateTime`으로 매핑한다. 오프셋 없는 `LocalDateTime`으로 받으면 프론트가 보내는 UTC ISO와 KST 사이에서 값이 어긋난다(2026-07-29 수정).
+
+### route_slots (V4, V8, V9)
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| id | UUID | ✅ | PK |
+| route_id | UUID | ✅ | FK → routes, CASCADE |
+| place_id | UUID | ✅ | FK → places, **RESTRICT** |
+| day_number | INTEGER | ✅ | CHECK >= 1 |
+| order_index | INTEGER | ✅ | CHECK >= 0 |
+| start_time | TIME | - | `recomputeStartTimesForDay`가 09:00부터 Day 전체 재계산 |
+| duration_minutes | INTEGER | - | CHECK > 0 |
+| estimated_cost | INTEGER | - | CHECK >= 0 |
+| is_pinned | BOOLEAN | ✅ | Pin & Reshuffle 고정. 기본값 false |
+| transport_to_next | VARCHAR(20) | - | CHECK: walk \| transit \| taxi |
+| transport_minutes | INTEGER | - | CHECK >= 0 |
+| transit_summary | TEXT | - | V8. 노선+환승 요약 |
+| transit_detail | TEXT | - | V9. 구간별 승하차 정류장 **JSON 문자열** (정적 정보, 실시간 도착 아님) |
+| tips | TEXT | - | AI 생성 팁 |
+
+> 🔑 **`UNIQUE (route_id, day_number, order_index)`가 재정렬 구현을 지배한다.**
+> 순서를 바꾸려면 **2패스**가 필요하다 — 큰 오프셋으로 대피시킨 뒤 최종값 반영. 그리고 뒤 슬롯을 밀 때는 **한 건씩 flush** 해야 한다. Hibernate JDBC batch가 순서를 안 지켜 이 유니크 위반이 **실측됐다** (`RouteSlotService.java:516`).
+
+- `created_at` 컬럼이 **없다** (`planning/unimplemented.md`에 기록된 미해결 항목)
+
+### route_day_summaries (V6)
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| id | UUID | ✅ | PK |
+| route_id | UUID | ✅ | FK → routes, CASCADE |
+| day_number | INTEGER | ✅ | CHECK >= 1 |
+| summary | TEXT | ✅ | AI 생성 Day 요약 |
+| created_at / updated_at | TIMESTAMPTZ | ✅ | 트리거 있음 |
+
+- `UNIQUE (route_id, day_number)` — SSE 재전송 시 upsert가 성립하는 근거
+
+### accommodations (V7)
+
+**연박은 체크인~체크아웃 범위 하나로 관리한다** — 밤마다 레코드를 만들지 않는다.
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| id | UUID | ✅ | PK |
+| route_id | UUID | ✅ | FK → routes, CASCADE |
+| name | VARCHAR(200) | ✅ | |
+| address | TEXT | - | |
+| location | GEOGRAPHY(POINT, 4326) | ✅ | **`places`를 거치지 않고 좌표를 직접 갖는다** |
+| check_in_date / check_out_date | DATE | ✅ | CHECK: out > in |
+| source | VARCHAR(20) | ✅ | CHECK: kakao \| manual |
+| created_at / updated_at | TIMESTAMPTZ | ✅ | 트리거 있음 |
+
+> 🔑 **이 테이블이 「미지의 장소」 처리의 선례다.** 숙소는 큐레이션 대상이 아니라서 `places`에 넣지 않고 좌표를 직접 들고 있다. 콘서트장·유저 검색 장소도 같은 패턴을 재사용하기로 합의됐다 — `places`는 큐레이션 전용으로 남긴다.
+
+### expenses (V4, V11)
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| id | UUID | ✅ | PK |
+| route_id | UUID | ✅ | FK → routes, CASCADE |
+| slot_id | UUID | - | FK → route_slots, **SET NULL**. NULL이면 비계획 지출 |
+| user_id | UUID | ✅ | FK → users, CASCADE |
+| expense_type | VARCHAR(20) | ✅ | CHECK: planned \| unplanned |
+| category | VARCHAR(20) | ✅ | CHECK: ACCOMMODATION \| FOOD \| TRANSPORT \| ADMISSION \| SOUVENIR \| ETC |
+| planned_amount | INTEGER | - | CHECK >= 0 |
+| actual_amount | INTEGER | ✅ | CHECK >= 0 |
+| memo | TEXT | - | |
+| created_at | TIMESTAMPTZ | ✅ | |
+
+> V11에서 한글 리터럴(`'숙박'`)을 언어중립 코드값으로 바꿨다. 4개국어 지원에서 DB에 한국어를 두면 언어를 바꿀 때마다 데이터를 건드려야 한다.
+> 앱 `ExpenseCategory` 타입은 `ACCOMMODATION`을 빼고 5종만 쓴다 — 숙박비는 `total_budget` 산정에서 제외하기로 한 결정과 맞는다.
+
+### budget_settings (V4)
+
+| 필드 | 타입 | 필수 | 기본값 |
+|------|------|------|------|
+| id | UUID | ✅ | PK |
+| route_id | UUID | ✅ | FK → routes, CASCADE · **UNIQUE** |
+| total_budget | INTEGER | ✅ | CHECK > 0 |
+| accommodation_ratio | FLOAT | ✅ | 0.35 |
+| food_ratio | FLOAT | ✅ | 0.30 |
+| transport_ratio | FLOAT | ✅ | 0.20 |
+| activity_ratio | FLOAT | ✅ | 0.10 |
+| etc_ratio | FLOAT | ✅ | 0.05 |
+
+> 비율 합계 검증은 **DB가 아니라 애플리케이션 레이어**에 있다. 부동소수 합계를 CHECK로 걸면 0.9999999에 걸린다.
+
+### bookmarks (V3, V17) / route_bookmarks (V18)
+
+둘 다 구조가 같은 로그성 테이블이다 — 생성/삭제만 하므로 `updated_at`과 트리거가 없다.
+
+| 필드 | bookmarks | route_bookmarks |
+|---|---|---|
+| id | UUID PK | UUID PK |
+| user_id | FK → users, CASCADE | FK → users, CASCADE |
+| 대상 | `place_id` FK → places | `route_id` FK → routes |
+| created_at | TIMESTAMPTZ | TIMESTAMPTZ |
+| UNIQUE | (user_id, place_id) | (user_id, route_id) |
+
+> ⚠️ **`bookmarks`는 V3와 V17 두 곳에서 생성된다.** V17이 "누락"으로 오판해 추가된 중복이었고, 기존 DB는 V3 시점에 이미 있어 문제가 안 드러났다. **빈 DB에서 V1부터 돌리면 여기서 실패**해서 2026-08-01에 `IF NOT EXISTS`로 멱등화했다.
+> → 이미 적용된 DB는 checksum이 바뀌므로 **`./gradlew flywayRepair`가 필요하다.**
+
+---
+
+## 인덱스 — 마이그레이션에 실재하는 것 전부
 
 ```sql
--- 위치 기반 검색 (PostGIS, ST_DWithin 단위 = 미터)
-CREATE INDEX idx_places_location ON places USING GIST(location);
+-- users
+CREATE INDEX idx_users_provider_id   ON users (oauth_provider, oauth_id);          -- V1
+CREATE INDEX idx_users_persona_tags  ON users USING GIN (persona_tags);            -- V15
 
--- 태그 필터 검색 (@> 연산자, GIN)
-CREATE INDEX idx_places_category_tags  ON places USING GIN(category_tags);
+-- places : 위치 + 태그 5종 + 정렬 2종 + 임베딩
+CREATE INDEX idx_places_location       ON places USING GIST(location);             -- V2
+CREATE INDEX idx_places_category_tags  ON places USING GIN(category_tags);         -- V2
 CREATE INDEX idx_places_time_tags      ON places USING GIN(time_tags);
 CREATE INDEX idx_places_cost_tags      ON places USING GIN(cost_tags);
 CREATE INDEX idx_places_companion_tags ON places USING GIN(companion_tags);
 CREATE INDEX idx_places_access_tags    ON places USING GIN(access_tags);
-
--- Hidden Gems 희소성 정렬 (부분 인덱스)
 CREATE INDEX idx_places_rarity ON places(rarity_score DESC) WHERE is_hidden_gem = true;
+CREATE INDEX idx_places_trend  ON places(trend_score DESC NULLS LAST) WHERE is_active = true;
+CREATE INDEX idx_places_embedding                                                  -- V5
+    ON places USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
--- 트렌딩 정렬 (활성 장소만, 부분 인덱스)
-CREATE INDEX idx_places_trend ON places(trend_score DESC NULLS LAST) WHERE is_active = true;
+-- routes
+CREATE INDEX idx_routes_user            ON routes(user_id, created_at DESC);       -- V3
+CREATE INDEX idx_routes_public          ON routes(created_at DESC) WHERE is_public = true;
+CREATE INDEX idx_routes_tags            ON routes USING GIN (tags);                -- V16
+CREATE INDEX idx_routes_user_start_date ON routes (user_id, start_date);           -- V20
 
--- pgvector 코사인 유사도 검색 (시드 데이터 적재 후 생성, lists=100 기준 26만건)
-CREATE INDEX idx_places_embedding ON places USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+-- route_slots / route_day_summaries / accommodations
+CREATE INDEX idx_route_slots_route        ON route_slots(route_id, day_number, order_index);
+CREATE INDEX idx_route_slots_place        ON route_slots(place_id);
+CREATE INDEX idx_route_day_summaries_route ON route_day_summaries(route_id, day_number);
+CREATE INDEX idx_accommodations_route      ON accommodations(route_id, check_in_date);
 
--- 루트 조회
-CREATE INDEX idx_routes_user   ON routes(user_id, created_at DESC);
-CREATE INDEX idx_routes_public ON routes(created_at DESC) WHERE is_public = true;
-
--- 루트 슬롯 조회 (day별 정렬)
-CREATE INDEX idx_route_slots_route ON route_slots(route_id, day_number, order_index);
-CREATE INDEX idx_route_slots_place ON route_slots(place_id);
-
--- 북마크 조회
-CREATE INDEX idx_bookmarks_user  ON bookmarks(user_id, created_at DESC);
-CREATE INDEX idx_bookmarks_place ON bookmarks(place_id);
-
--- 지출 조회
-CREATE INDEX idx_expenses_route ON expenses(route_id, created_at DESC);
-CREATE INDEX idx_expenses_user  ON expenses(user_id, created_at DESC);
-
--- 결제 상태
-CREATE INDEX idx_payments_user_status ON payments(user_id, status);
+-- 지출 / 북마크
+CREATE INDEX idx_expenses_route        ON expenses(route_id, created_at DESC);
+CREATE INDEX idx_expenses_user         ON expenses(user_id, created_at DESC);
+CREATE INDEX idx_bookmarks_user        ON bookmarks(user_id, created_at DESC);
+CREATE INDEX idx_bookmarks_place       ON bookmarks(place_id);
+CREATE INDEX idx_route_bookmarks_user  ON route_bookmarks(user_id, created_at DESC); -- V18
+CREATE INDEX idx_route_bookmarks_route ON route_bookmarks(route_id);
 ```
 
-## TypeScript 타입 정의 (프론트엔드 핵심)
+**설계 판단 3가지**
 
-```typescript
-// 장소
-interface Place {
-  id: string;
-  name: string;
-  location: { lat: number; lng: number };
-  address?: string;
-  categoryTags: string[];
-  timeTags: string[];
-  costTags: string[];
-  companionTags: string[];
-  accessTags: string[];
-  source: 'tourapi' | 'kakao' | 'hidden_gem';
-  avgDurationMinutes?: number;
-  businessHours?: Record<string, string>;
-  reviewCount?: number;
-  isActive: boolean;
-  isHiddenGem: boolean;
-  rarityScore?: number;
-  trendScore?: number;
-  trendUpdatedAt?: string;
-  trendSource: string[];
-  createdAt: string;
-}
+1. **`idx_routes_user_start_date`가 V20에 딸려 왔다** (V19가 아니라). 활성 루트 조회(`GET /v1/routes/active`)가 `user_id` + 날짜 범위로 필터하는데 기존 `idx_routes_user`는 `(user_id, created_at DESC)`라 `start_date` 범위 검색을 못 탄다.
+2. **`idx_places_embedding`(ivfflat)은 데이터 적재 후에 만들어야 한다.** `lists = 100`은 26만 행 기준값이고, 현재 21,543행이라 과대설정이다. 100만 행을 넘으면 HNSW 전환을 검토한다.
+3. **V21 운영정보 18컬럼에는 인덱스가 하나도 없다** — 위 places 절 참고.
 
-// 루트 슬롯
-interface RouteSlot {
-  id: string;
-  place: Place;
-  dayNumber: number;
-  orderIndex: number;
-  startTime?: string; // "HH:mm"
-  durationMinutes?: number;
-  estimatedCost?: number;
-  isPinned: boolean;
-  transportToNext?: 'walk' | 'transit' | 'taxi';
-  transportMinutes?: number;
-  transitSummary?: string; // 대중교통 노선+환승 요약, transit 모드일 때만
-  tips?: string;
-}
+---
 
-// 루트
-interface Route {
-  id: string;
-  title: string;
-  destination: string;
-  startDate: string; // "YYYY-MM-DD"
-  endDate: string;
-  nights: number;
-  participantCount?: number; // 미래 N빵/초대 기능 대비, 입력 폼에서는 수집 안 함
-  groupType: 'solo' | 'couple' | 'friends' | 'family';
-  budgetLevel: 'budget' | 'mid' | 'premium';
-  totalBudget?: number; // 예산 관리 기능용 (원)
-  tags: string[];
-  density: 'relaxed' | 'normal' | 'packed';
-  transportMode?: 'transit' | 'car' | 'walk';
-  accommodationArea?: string;
-  days: { dayNumber: number; slots: RouteSlot[] }[];
-  isPublic: boolean;
-  saveCount: number;
-}
+## 앱 타입 정의
 
-// 지출
-interface Expense {
-  id: string;
-  routeId: string;
-  slotId?: string;
-  expenseType: 'planned' | 'unplanned';
-  category: 'ACCOMMODATION' | 'FOOD' | 'TRANSPORT' | 'ADMISSION' | 'SOUVENIR' | 'ETC';
-  plannedAmount?: number;
-  actualAmount: number;
-  memo?: string;
-  createdAt: string;
-}
+**여기에 중복해서 적지 않는다.** 프론트 타입의 진실은 `frontend/types/index.ts`(348줄) 한 곳이고, DB 컬럼과 1:1이 아니다 — 앱은 화면이 쓰는 형태(`SlotWithCoords`, `RouteListItem` 등)로 평탄화해서 받는다.
 
-// 트립 패스 (Standard $4.99 / Extended $7.99, 2026-07-06 타겟 전환으로 domestic/overseas 구분 폐기)
-type PassType = 'none' | 'standard' | 'extended';
+DB → API → 앱 사이 변환에서 알아둘 것 2가지:
 
-// 챗봇 메시지
-interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  createdAt: string;
-  metadata?: {
-    expenseParsed?: Partial<Expense>;
-    placeSuggestions?: Place[];
-  };
-}
-```
+- **`transit_detail`은 DB에 JSON 문자열로 들어 있다.** 앱은 `JSON.parse` 후 `TransitHop[]`로 다룬다.
+- **프로액티브 응답에는 한국어가 없다.** 서버는 `{type, params}`(숫자·열거·시각)만 주고 문장은 앱 i18n이 조립한다 — 4개국어를 서버가 만들면 언어마다 프롬프트가 필요하고, 자유 문자열을 왕복시키면 프롬프트 주입 통로가 된다.
+
+---
+
+## 다음에 볼 것
+
+| 알고 싶은 것 | 어디로 |
+|---|---|
+| 스키마 원문 | `backend/src/main/resources/db/migration/` V1~V21 |
+| API 계약 | `docs/04-api-spec.md` |
+| 코드가 실제로 어떻게 도는가 | `docs/08-codebase-guide.md` |
+| 왜 이 설계인가 | `docs/superpowers/specs/` |
+| 미해결 결함 | `planning/unimplemented.md` |

@@ -3,7 +3,8 @@
   "compilerOptions": {
     "strict": true,
     "noUncheckedSideEffectImports": false,
-    "baseUrl": ".",
+    // baseUrl은 TS 6.0에서 deprecated(TS5101). paths는 tsconfig 위치 기준으로 해석되므로
+    // "@/*" 별칭은 그대로 동작한다 (Expo metro 리졸버도 baseUrl 없으면 projectRoot 기준).
     "paths": {
       "@/*": ["./*"]
     }

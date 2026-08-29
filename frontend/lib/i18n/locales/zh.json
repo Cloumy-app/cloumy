@@ -47,14 +47,21 @@
     },
     "BUDGET_OVER": "今日支出已超过每日预算（{{dailyBudget}}韩元），今天已花费{{spentToday}}韩元。",
     "BOOKMARK_NEARBY": "附近有您收藏的{{placeName}}！距离{{distanceM}}米。",
-    "FREE_GAP": "距离下一个行程还有{{gapMinutes}}分钟空闲时间，要不要去附近的咖啡馆看看？"
+    "FREE_GAP": "距离下一个行程还有{{gapMinutes}}分钟空闲时间，要不要去附近的咖啡馆看看？",
+    "LAST_TRANSIT": "回住宿地的末班车快到时间了！{{leaveByTime}}前从{{placeName}}出发，大约需要{{minutes}}分钟。",
+    "CLOSED_DAY": "第{{day}}天的{{placeName}}今天休息。要不要看看附近其他地方？",
+    "BREAK_TIME": "{{placeName}}现在是休息时间（{{breakStart}}~{{breakEnd}}）。",
+    "RESERVATION_WALL": "{{placeName}}需要预约，建议提前预订。",
+    "LAST_ENTRY": "{{placeName}}可能快到最后入场时间了（最后入场{{lastEntryTime}}，营业至{{closeTime}}）。",
+    "PAYMENT_WALL": {
+      "cash_only": "{{placeName}}只能现金支付，请准备好现金。",
+      "no_foreign_card": "{{placeName}}可能无法使用境外发卡的银行卡，建议准备一些现金。"
+    }
   },
   "login": {
     "subtitle": "AI 为你规划专属旅行路线",
     "googleButton": "使用 Google 登录",
     "devLoginButton": "开发者登录",
-    "comingSoonTitle": "即将上线",
-    "googleComingSoonBody": "Google 登录即将上线。",
     "connectFailedTitle": "连接失败",
     "devProfileHint": "请使用 --spring.profiles.active=dev 运行 Spring。",
     "serverErrorTitle": "服务器错误",

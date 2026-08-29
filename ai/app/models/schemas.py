@@ -1,5 +1,6 @@
 from datetime import date, datetime, time
 from typing import Annotated, Literal, Union
+from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -108,7 +109,7 @@ ProactiveFlag = Annotated[
 ]
 
 
-# ---- 개입 9종의 params — proactive_service.py 각 규칙 함수의 반환값과 1:1 대응 ----
+# ---- 개입 15종의 params — proactive_service.py 각 규칙 함수의 반환값과 1:1 대응 ----
 class PreTripBriefingParams(BaseModel):
     nights: int
     destination: str  # 자유 문자열 — 서술 조립 시 제외
@@ -154,6 +155,51 @@ class BookmarkNearbyParams(BaseModel):
 
 class FreeGapParams(BaseModel):
     gapMinutes: int
+
+
+class LastTransitParams(BaseModel):
+    placeId: UUID  # 자유 텍스트가 들어갈 수 없도록 UUID 타입으로 강제(first_slot.time과 같은 방어)
+    placeName: str  # 자유 문자열 — 서술 조립 시 제외
+    leaveByTime: datetime
+    minutes: int
+    fare: int | None = None
+
+
+class ClosedDayParams(BaseModel):
+    placeId: UUID  # 자유 텍스트가 들어갈 수 없도록 UUID 타입으로 강제(first_slot.time과 같은 방어)
+    placeName: str  # 자유 문자열 — 서술 조립 시 제외
+    day: int
+
+
+class BreakTimeParams(BaseModel):
+    placeId: UUID  # 자유 텍스트가 들어갈 수 없도록 UUID 타입으로 강제(first_slot.time과 같은 방어)
+    placeName: str  # 자유 문자열 — 서술 조립 시 제외
+    breakStart: time
+    breakEnd: time
+
+
+class ReservationWallParams(BaseModel):
+    placeId: UUID  # 자유 텍스트가 들어갈 수 없도록 UUID 타입으로 강제(first_slot.time과 같은 방어)
+    placeName: str  # 자유 문자열 — 서술 조립 시 제외
+    # V21의 CHECK 제약과 같은 열거값으로 좁힌다. DB CHECK는 서버가 "내보내는" 경로만 지키고,
+    # 이 스키마는 앱이 "되돌려 보내는" 경로라 str로 두면 임의 문자열이 서술에 실려
+    # 시스템 프롬프트로 새어든다(결함 4의 재발).
+    reservationPlatform: Literal[
+        "catchtable_global", "catchtable", "naver", "tabling", "phone", "none"
+    ] | None = None
+
+
+class PaymentWallParams(BaseModel):
+    placeId: UUID  # 자유 텍스트가 들어갈 수 없도록 UUID 타입으로 강제(first_slot.time과 같은 방어)
+    placeName: str  # 자유 문자열 — 서술 조립 시 제외
+    kind: Literal["cash_only", "no_foreign_card"]
+
+
+class LastEntryParams(BaseModel):
+    placeId: UUID  # 자유 텍스트가 들어갈 수 없도록 UUID 타입으로 강제(first_slot.time과 같은 방어)
+    placeName: str  # 자유 문자열 — 서술 조립 시 제외
+    lastEntryTime: time
+    closeTime: time
 
 
 # ---- type이 어떤 params 모델인지 판별하는 태그드 유니온 ----
@@ -202,6 +248,36 @@ class FreeGapContext(BaseModel):
     params: FreeGapParams
 
 
+class LastTransitContext(BaseModel):
+    type: Literal["LAST_TRANSIT"]
+    params: LastTransitParams
+
+
+class ClosedDayContext(BaseModel):
+    type: Literal["CLOSED_DAY"]
+    params: ClosedDayParams
+
+
+class BreakTimeContext(BaseModel):
+    type: Literal["BREAK_TIME"]
+    params: BreakTimeParams
+
+
+class ReservationWallContext(BaseModel):
+    type: Literal["RESERVATION_WALL"]
+    params: ReservationWallParams
+
+
+class PaymentWallContext(BaseModel):
+    type: Literal["PAYMENT_WALL"]
+    params: PaymentWallParams
+
+
+class LastEntryContext(BaseModel):
+    type: Literal["LAST_ENTRY"]
+    params: LastEntryParams
+
+
 # type으로 params 모델을 판별한다 — type과 params가 어긋나면 422(FFE #6).
 ProactiveContext = Annotated[
     Union[
@@ -214,6 +290,12 @@ ProactiveContext = Annotated[
         BudgetOverContext,
         BookmarkNearbyContext,
         FreeGapContext,
+        LastTransitContext,
+        ClosedDayContext,
+        BreakTimeContext,
+        ReservationWallContext,
+        PaymentWallContext,
+        LastEntryContext,
     ],
     Field(discriminator="type"),
 ]

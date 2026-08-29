@@ -56,3 +56,9 @@ redis_data/
 
 # git worktree 격리 작업공간
 .worktrees/
+
+# Claude Code 로컬 설정
+.claude/
+
+# 리포에 올리지 않는 로컬 자료 (사업계획서·랜딩 시안 등)
+_local/

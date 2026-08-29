@@ -1,6 +1,8 @@
 # AI 서비스 구조·흐름 (실제 구현 기준)
 
-> **이 문서는 `ai/spec.md`(구현 전 계획 문서)와 다릅니다.** 2026-07-01 기준 실제 코드를 직접 읽고 검증한 "as-built" 문서이며, spec.md에 있지만 아직 구현 안 된 기능은 [9장](#9-specmd와의-차이-계획-대비-진행-상황)에 정리했습니다.
+> **이 문서는 `ai/spec.md`(구현 전 계획 문서)와 다릅니다.** 실제 코드를 직접 읽고 검증한 "as-built" 문서이며, spec.md에 있지만 아직 구현 안 된 기능은 [9장](#9-specmd와의-차이-계획-대비-진행-상황)에 정리했습니다.
+>
+> 기준일 **2026-08-06**. 2~8장의 상세 흐름은 **루트 생성**을 기준으로 쓰였다 — 이후에 붙은 챗봇·프로액티브는 각각 `docs/06-ai-chatbot.md`와 `docs/08-codebase-guide.md`「흐름 C」가 다룬다.
 
 ## 한눈에 보기
 
@@ -53,21 +55,31 @@ ai/
 │   │   └── city_centers.py         # 지원 도시 → (lon, lat) 상수
 │   ├── models/
 │   │   └── schemas.py              # RouteGenRequest (요청 스키마 + validator)
-│   ├── routes/
-│   │   ├── route_gen.py            # POST /ai/routes/generate — NDJSON 스트리밍
-│   │   └── slot_alternatives.py    # POST /ai/routes/slots/alternatives — Haiku 단발 호출
+│   ├── routes/                     # 엔드포인트 6개 — 전부 X-Internal-Key 인증
+│   │   ├── route_gen.py            # POST /ai/routes/generate           NDJSON 스트리밍
+│   │   ├── slot_alternatives.py    # POST /ai/routes/slots/alternatives Haiku 단발
+│   │   ├── slot_transport.py       # POST /ai/routes/slots/transport    이동수단·소요시간
+│   │   ├── chat.py                 # POST /ai/chat                      여행 중 챗봇
+│   │   ├── proactive.py            # GET  /ai/proactive                 규칙 9종 평가
+│   │   └── place_translate.py      # POST /ai/places/translate          장소명 다국어
 │   └── services/
-│       ├── route_service.py        # stream_route — 핵심 오케스트레이션
-│       ├── retrievers.py           # PostgisTagRetriever, PgvectorRetriever
-│       ├── tsp_service.py          # OR-Tools 기반 day별 동선 재정렬
-│       ├── place_validator.py      # place_id 환각 검증/치환
-│       └── weather_service.py      # OpenWeatherMap 기반 Day별 강수확률 텍스트 생성
+│       ├── chat_service.py     847 # 도구 3종 루프 + 삽입 자리 결정 → docs/06
+│       ├── proactive_service.py 523 # 규칙 9종 · 스냅샷 · _select → docs/08 흐름 C
+│       ├── route_service.py    491 # stream_route — 루트 생성 오케스트레이션
+│       ├── retrievers.py       232 # PostgisTagRetriever, PgvectorRetriever
+│       ├── geo_clustering.py   191 # Day별 지리 클러스터링
+│       ├── tsp_service.py      161 # OR-Tools 기반 day별 동선 재정렬
+│       ├── weather_service.py  150 # OpenWeatherMap Day별 강수확률 텍스트
+│       ├── transport_service.py 136 # Tmap 대중교통 (ODsay 아님 — 2026-07-04 배제)
+│       └── place_validator.py   66 # place_id 환각 검증/치환
 ├── scripts/                        # 앱 서버와 독립 실행되는 배치 파이프라인
 │   ├── collect_tourapi.py          # 시드 데이터 수집 (TourAPI, 1회성)
 │   ├── collect_kakao.py            # 보충 수집 + 좌표 교정 (Kakao Local API)
 │   └── generate_embeddings.py      # OpenAI Batch API로 pgvector embedding 컬럼 채움
-└── tests/                          # route_service / tsp_service / place_validator 단위 테스트
+└── tests/                          # 12파일 2,703줄 — 레포에서 가장 정확한 명세
 ```
+
+> **`chat_service.py`(847줄)와 `proactive_service.py`(523줄)가 `route_service.py`(491줄)보다 크다.** 이 문서가 루트 생성 중심으로 쓰인 뒤에 붙은 것들이라, 무게중심이 이미 옮겨갔다.
 
 **설계 패턴**: `app/services/`는 클래스 없이 **순수 함수**로 작성됩니다. FastAPI `Depends` 대신 `request.app.state.db` / `request.app.state.redis`로 리소스에 직접 접근합니다(`app/main.py:21-22`).
 
@@ -103,11 +115,11 @@ ai/
 | 7 | TSP 재정렬 | `:193-195` | 스트리밍이 끝난 뒤 `reorder_slots()`로 day별 재배열 |
 | 8 | 캐시 저장 | `:198-203` | TSP 재정렬된 결과를 `setex(key, 86400, ...)`로 저장 (TTL 24h) |
 
-**캐시 키 형식** (`_cache_key()`, `:64-67`):
+**캐시 키 형식** (`_cache_key()`):
 ```
-route:{city}:{nights}:{group_type}:{budget_level}:{themes 정렬join}:{ratio:.1f}
+route:{city}:{nights}:{group_type}:{budget_level}:{themes 정렬join}:{ratio:.1f}:{density}:{language}
 ```
-테마 순서를 `sorted()`로 정규화해, 조건이 같으면 항상 같은 키가 되도록 합니다.
+테마 순서를 `sorted()`로 정규화해, 조건이 같으면 항상 같은 키가 되도록 합니다. `density`와 `language`는 나중에 추가됐다 — **`language`가 빠져 있으면 다른 언어로 생성된 tip·day_summary가 그대로 재사용된다.**
 
 > ⚠️ **비대칭성 주의**
 > 최초 요청(cache miss)에서 클라이언트가 실시간으로 받는 스트림은 **LLM 원본 순서**이고, TSP 재정렬은 스트림이 끝난 뒤에만 수행되어 **Redis 캐시에만** 반영됩니다. 즉 같은 조건이라도 최초 응답과 캐시 히트 응답의 슬롯 `order` 값이 다를 수 있습니다.
@@ -138,11 +150,16 @@ route:{city}:{nights}:{group_type}:{budget_level}:{themes 정렬join}:{ratio:.1f
 app/main.py
  ├─ lifespan: create_pool() → app.state.db / create_redis() → app.state.redis
  ├─ internal_key_middleware (X-Internal-Key, /health 제외)
- ├─ route_gen.router
- └─ slot_alternatives.router
+ └─ include_router × 6
+      route_gen · slot_alternatives · slot_transport · chat · place_translate · proactive
 
-route_gen.py ──▶ route_service.stream_route(req, db, redis)
+route_gen.py         ──▶ route_service.stream_route(req, db, redis)
 slot_alternatives.py ──▶ route_service._anthropic (싱글턴 재사용, Haiku)
+                     └─▶ retrievers.PostgisTagRetriever(sort="distance")
+slot_transport.py    ──▶ transport_service (Tmap)
+chat.py              ──▶ chat_service (도구 3종 루프, 최대 3왕복)
+proactive.py         ──▶ proactive_service (규칙 9종, LLM 호출 없음)
+place_translate.py   ──▶ Haiku 단발 번역
 
 route_service.py (오케스트레이터)
  ├─ 모듈 싱글턴: _anthropic(AsyncAnthropic), _openai(AsyncOpenAI)
@@ -199,9 +216,19 @@ scripts/ (오프라인 배치)
 ### PostgreSQL / PostGIS / pgvector
 
 - **커넥션 풀** (`config/database.py:12-19`): `min_size=2, max_size=10, command_timeout=5`. 모든 새 커넥션마다 `register_vector(conn)`을 호출(`_init_connection`)하지 않으면 `embedding <=> $1` 쿼리에서 타입 에러가 난다고 주석에 명시.
-- **PostgisTagRetriever** (`retrievers.py:13-98`): `ST_DWithin` 반경 검색 + `category_tags &&` 배열 교집합 필터, `ORDER BY RANDOM() LIMIT 50`.
-  - 후보 0건 → 반경 30km→50km 확장(`:71-73`)
-  - 그래도 0건 → 태그 필터 제거 후 재시도(`:76-78`) — **3단계 완화 폴백**
+- **PostgisTagRetriever** (`retrievers.py`): `ST_DWithin` 반경 검색(기본 30km) + `category_tags &&` 배열 교집합 필터, `LIMIT 80`.
+  - 후보 3건 미만 → 반경 50km 확장 → 그래도 부족하면 태그 필터 제거 — **3단계 완화 폴백**
+  - **정렬 모드가 두 가지다** — `sort="random"`(기본) / `sort="distance"`
+- **정렬 기본값이 `random`인 게 의도적이다.** 루트 생성 폴백은 도시 중심 30km에서 **다양하게** 뽑아야 해서 거리순으로 바꾸면 매번 도심 근처만 올라와 루트가 단조로워진다. 반대로 「근처」를 묻는 호출부는 거리순이어야 한다.
+
+  | 호출부 | sort |
+  |---|---|
+  | `route_service.py` 루트 생성 폴백 | `random` (기본값) |
+  | `chat_service.py` 챗봇 근처 검색 | **`distance`** |
+  | `slot_alternatives.py` Pin & Reshuffle | **`distance`** |
+
+  > 📝 **왜 바꿨나 (2026-07-30)** — 「숙소 근처 카페」에 인천(23.8km)·홍천(49.4km)이 섞여 나왔다. 원인은 반경 확장이 아니라 `ORDER BY RANDOM()`이었다. 거리순으로 바꾼 뒤 5.1/5.2/5.8/23.8/27.3km → 2.4/2.5/2.6/2.8/2.8km가 됐고, **쿼리도 849ms → 28ms로 30배 빨라졌다**(정렬 대상이 반경 안 전체가 아니라 인덱스 순서를 타서).
+  > `sort`는 SQL 구문 위치라 파라미터 바인딩이 안 돼 문자열로 조립하는데, `Literal` 화이트리스트라 열거된 두 값 밖은 들어올 수 없다.
 - **PgvectorRetriever** (`retrievers.py:118-143`): 트랜잭션 내 `SET LOCAL ivfflat.probes = 10`(기본값 1보다 recall 우선) 후 `ORDER BY embedding <=> $1::vector`로 유사도 검색. 반경 확장 폴백만 있고 태그 폴백은 없음(벡터 검색엔 태그 개념이 없으므로).
 
 ### Redis
@@ -267,16 +294,17 @@ scripts/ (오프라인 배치)
 
 | spec.md 항목 | 상태 |
 |---|---|
-| `routes/chatbot.py` (WebSocket `/ai/chat`) | 미구현 |
-| `routes/embedding.py` (내부용 임베딩 API) | 미구현 — 임베딩은 `scripts/generate_embeddings.py` 배치로만 생성 |
-| `routes/scoring.py` (희소성 점수 API) | 미구현 |
-| `services/model_router.py` | 미구현 — 현재는 각 라우트가 모델명을 직접 하드코딩 |
-| `services/fallback_service.py` (Redis 1차 → DB 유사 루트 2차 폴백) | 미구현 — 현재는 캐시 미스 시 곧바로 LLM 재생성 |
-| `services/expense_parser.py` (자연어 지출 파싱) | 미구현 |
-| `services/rarity_scorer.py` (희소성 점수 계산) | 미구현 |
-| `prompts/*.txt` (프롬프트 외부 파일 분리) | 미구현 — 현재는 코드에 문자열로 인라인 |
-| `services/rag_service.py` | 실제로는 `retrievers.py`로 이름·구조가 다르게 구현됨 |
+| `routes/chatbot.py` (**WebSocket** `/ai/chat`) | ✅ **구현됨 — 단 WebSocket이 아니다.** `chat.py`의 일반 POST. 스트리밍이 필요 없어 왕복 1회로 끝난다 |
+| `services/fallback_service.py` (Redis 1차 → DB 유사 루트 2차 폴백) | ✅ **구현됨 — 단 FastAPI가 아니라 Spring 쪽이다.** `FallbackRouteService.java`. SSE 첫 이벤트 이후엔 HTTP 에러를 못 내서 중계 계층에 있어야 했다 |
+| `routes/embedding.py` (내부용 임베딩 API) | ❌ 미구현 — 임베딩은 `scripts/generate_embeddings.py` 배치로만 생성 |
+| `routes/scoring.py` · `services/rarity_scorer.py` (희소성 점수) | ❌ 미구현 |
+| `services/model_router.py` | ❌ 미구현 — 각 라우트가 모델명을 직접 하드코딩 |
+| `services/expense_parser.py` (자연어 지출 파싱) | ❌ 미구현 — 지출은 앱 폼 입력만 |
+| `prompts/*.txt` (프롬프트 외부 파일 분리) | ❌ 미구현 — 코드에 문자열로 인라인 |
+| `services/rag_service.py` | `retrievers.py`로 이름·구조가 다르게 구현됨 |
 
-> **현재 실제로 도는 것**: 루트 생성(`route_gen.py`)과 슬롯 대안 추천(`slot_alternatives.py`) 두 엔드포인트, 그리고 이를 지탱하는 RAG 검색 / 날씨 가중치 / TSP 재정렬 / 환각 검증. 챗봇, 예산 자연어 파싱, 희소성 점수는 아직 계획 단계입니다.
+**spec.md에 없었지만 나중에 생긴 것** — `proactive_service.py`(규칙 9종) · `transport_service.py`(Tmap) · `geo_clustering.py` · `place_translate.py`. 계획 문서보다 실제 구현이 더 넓어진 영역이다.
 
-> ⚠️ **다국어 미반영 (2026-07-06 타겟 전환 관련)**: 챗봇(`docs/06-ai-chatbot.md`)은 사용자 메시지 언어로 응답하도록 이미 수정됐지만, `ROUTE_GEN_SYSTEM_PROMPT`(`route_service.py`)는 여전히 한국어 고정 — 하루 요약·장소 설명 등 루트 생성 결과물이 한국어로만 나옵니다. `planning/milestones.md` Phase 2.5 "다음 단계"에 등록된 후속 작업.
+> **현재 실제로 도는 것**: 엔드포인트 6개 전부. 루트 생성 / 슬롯 대안 / 이동수단 / 챗봇 / 프로액티브 / 장소 번역, 그리고 이를 지탱하는 RAG 검색·날씨·TSP·환각 검증. **미구현으로 남은 건 임베딩 API, 희소성 점수, 자연어 지출 파싱 3가지다.**
+
+> ✅ **루트 생성 다국어는 해결됐다.** `ROUTE_GEN_SYSTEM_PROMPT`에 `_language_rule(language)`이 붙어 tip·day_summary가 앱 설정 언어로 나온다(장소명은 원본 유지). **캐시 키에도 `language`가 들어가 있다** — 없으면 다른 언어로 생성된 요약이 그대로 재사용된다.

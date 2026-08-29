@@ -140,6 +140,12 @@ _INTERVENTION_GLOSS: dict[str, str] = {
     "BUDGET_OVER": "오늘 예산 초과 안내",
     "BOOKMARK_NEARBY": "근처 북마크 장소 안내",
     "FREE_GAP": "다음 일정까지 여유 시간 안내",
+    "LAST_TRANSIT": "숙소행 막차 임박 안내",
+    "CLOSED_DAY": "오늘 휴관 안내",
+    "BREAK_TIME": "브레이크타임 임박 안내",
+    "RESERVATION_WALL": "예약 필수 안내",
+    "PAYMENT_WALL": "결제 수단 제약 안내",
+    "LAST_ENTRY": "마감 임박 입장 안내",
 }
 
 # 자유 문자열은 서술에서 뺀다 — 시스템 프롬프트에 들어갈 수 있는 유일한 주입 통로다(결함 4).

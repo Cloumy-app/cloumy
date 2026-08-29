@@ -1,0 +1,4 @@
+name,address,open,close,weekday_overrides,break_start,break_end,break_except_weekdays,last_order_minutes,last_entry_minutes,reservation_required,walk_in_allowed,reservation_platform,cash_only,friendly_foreign_card,closed_weekdays,closures
+창경궁,서울특별시 종로구 창경궁로 185 (와룡동),09:00,21:00,,,,,,60,FALSE,TRUE,none,,,1,2026-08-18:궁궐 전체 휴무(광복절 대체휴일 정상운영에 따른 이동)
+창덕궁과 후원 [유네스코 세계유산],서울특별시 종로구 율곡로 99 (와룡동),09:00,18:00,,,,,,60,FALSE,TRUE,none,,,1,2026-08-18:궁궐 전체 휴무(광복절 대체휴일 정상운영에 따른 이동)
+종묘 [유네스코 세계유산],서울특별시 종로구 종로 157 (훈정동),09:00,18:00,,,,,,60,FALSE,TRUE,none,,,2,2026-08-18:궁궐 전체 휴무(광복절 대체휴일 정상운영에 따른 이동)

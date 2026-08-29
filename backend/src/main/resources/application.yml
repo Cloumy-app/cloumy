@@ -33,6 +33,12 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      # Lettuce 기본 커맨드 타임아웃은 60초다. Redis가 죽으면 JwtTokenProvider·RateLimitFilter의
+      # fail-open이 그 60초를 다 기다린 뒤에야 통과해서, 결국 모든 인증 요청이 1분씩 매달린다
+      # (2026-08-26 실측: 60.14초). fail-open을 fail-open답게 만들려면 이 값이 필요하다.
+      # Redis는 같은 네트워크에 있어 정상 응답은 수 ms다 — 1초면 충분히 여유롭다.
+      timeout: 1s
+      connect-timeout: 1s
   jackson:
     default-property-inclusion: non_null
     time-zone: Asia/Seoul
@@ -62,11 +68,6 @@ app:
       client-id: ${GOOGLE_CLIENT_ID:}
       client-secret: ${GOOGLE_CLIENT_SECRET:}
       redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/auth/callback/google}
-    apple:
-      client-id: ${APPLE_CLIENT_ID:}
-      team-id: ${APPLE_TEAM_ID:}
-      key-id: ${APPLE_KEY_ID:}
-      private-key: ${APPLE_PRIVATE_KEY:}
     naver:
       client-id: ${NAVER_CLIENT_ID:}
       client-secret: ${NAVER_CLIENT_SECRET:}

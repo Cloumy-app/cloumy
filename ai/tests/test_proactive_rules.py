@@ -3,14 +3,23 @@ from datetime import date, datetime, time, timedelta
 from app.services.chat_service import _KST
 from app.services.proactive_service import (
     _RULES_PRE_TRIP,
+    _break_for,
     _current_and_next,
+    _dismiss_member,
+    _hours_for,
     _rule_bookmark_nearby,
+    _rule_break_time,
     _rule_budget_over,
+    _rule_closed_day,
     _rule_departure_soon,
     _rule_empty_day,
     _rule_flight_departure,
     _rule_free_gap,
+    _rule_last_entry,
+    _rule_last_transit,
+    _rule_payment_wall,
     _rule_pre_trip_briefing,
+    _rule_reservation_wall,
     _rule_return_departure,
     _rule_weather_alert,
     _select,
@@ -457,11 +466,16 @@ def _slot(order_index: int, start_time: time | None, place_name: str = "장소")
     """_current_and_next는 키 서브스크립트만 쓰므로 asyncpg.Record 대신 dict로 충분하다."""
     return {
         "order_index": order_index,
+        "place_id": f"place-{order_index}",
         "start_time": start_time,
         "place_name": place_name,
         "duration_minutes": 60,
         "transport_to_next": "transit",
         "transport_minutes": 10,
+        "business_hours": None,
+        "break_time": None,
+        "last_order_minutes": None,
+        "last_entry_minutes": None,
     }
 
 
@@ -495,3 +509,431 @@ def test_current_and_next_none_for_last_slot():
 
     assert current["start_time"] == time(14, 0)
     assert next_slot is None
+
+
+# ============================================================
+# _dismiss_member — Spring ProactiveController가 Redis에 기록하는 멤버 형식과
+# 1:1로 맞춰야 한다. 문자열 "None"/"null"이 새어들어가면 필터링이 깨진다(고정 계약 위반).
+# ============================================================
+
+def test_dismiss_member_with_place_id():
+    candidate = {"type": "CLOSED_DAY", "params": {"placeId": "11111111-1111-1111-1111-111111111111"}}
+    assert _dismiss_member(candidate) == "CLOSED_DAY:11111111-1111-1111-1111-111111111111"
+
+
+def test_dismiss_member_without_place_id_key():
+    # params에 placeId 키 자체가 없는 경우 — 장소 무관 규칙(기존 9종)
+    candidate = {"type": "WEATHER_ALERT", "params": {"day": 1, "kind": "rain"}}
+    assert _dismiss_member(candidate) == "WEATHER_ALERT:-"
+
+
+def test_dismiss_member_with_place_id_none():
+    # params에 placeId: None이 명시돼도 문자열 "None"이 아니라 "-"여야 한다
+    candidate = {"type": "PAYMENT_WALL", "params": {"placeId": None}}
+    assert _dismiss_member(candidate) == "PAYMENT_WALL:-"
+
+
+# ============================================================
+# _hours_for / _break_for — 영업시간·브레이크타임 파서(순수 함수, 단독 테스트)
+# ============================================================
+
+def test_hours_for_returns_open_close_for_weekday():
+    business_hours = {"open": "10:00", "close": "22:00"}
+    assert _hours_for(business_hours, 3) == (time(10, 0), time(22, 0))
+
+
+def test_hours_for_applies_weekday_override():
+    business_hours = {
+        "open": "10:00", "close": "22:00",
+        "weekday_overrides": {"7": {"open": "11:00", "close": "18:00"}},
+    }
+    assert _hours_for(business_hours, 7) == (time(11, 0), time(18, 0))
+
+
+def test_hours_for_none_when_not_investigated():
+    assert _hours_for(None, 3) is None  # 미조사
+
+
+def test_hours_for_none_when_malformed():
+    # 수기 CSV라 깨진 값이 들어올 수 있다(FFE #4) — 예외를 삼키고 None
+    assert _hours_for({"open": "not-a-time", "close": "22:00"}, 3) is None
+
+
+def test_break_for_returns_start_end():
+    break_time = {"start": "15:00", "end": "17:00"}
+    assert _break_for(break_time, 3) == (time(15, 0), time(17, 0))
+
+
+def test_break_for_none_on_except_weekday():
+    break_time = {"start": "15:00", "end": "17:00", "except_weekdays": [6, 7]}
+    assert _break_for(break_time, 7) is None  # 그 요일은 브레이크타임 없음
+
+
+def test_break_for_none_when_not_investigated():
+    assert _break_for(None, 3) is None
+
+
+def test_break_for_none_when_malformed():
+    assert _break_for({"start": "oops", "end": "17:00"}, 3) is None
+
+
+# ============================================================
+# LAST_TRANSIT — 오늘 마지막 슬롯 → 숙소 막차. 위치 가드 없음(상위 계획서 정정 2).
+# leave_by가 '유저 현재 위치'가 아니라 '마지막 슬롯 → 숙소' 구간으로 계산되기 때문이다.
+# ============================================================
+
+def test_last_transit_fires_within_window():
+    now = datetime(2026, 7, 29, 22, 30, tzinfo=_KST)
+    leave_by = now + timedelta(minutes=30)
+    snap = {
+        "now": now,
+        "last_transit": {
+            "placeId": "11111111-1111-1111-1111-111111111111",
+            "placeName": "숙소행 정류장",
+            "leaveBy": leave_by,
+            "minutes": 25,
+            "fare": 1500,
+        },
+    }
+    result = _rule_last_transit(snap)
+    assert result is not None
+    assert result["type"] == "LAST_TRANSIT"
+    assert result["params"]["leaveByTime"] == leave_by.isoformat()
+    assert result["params"]["fare"] == 1500
+
+
+def test_last_transit_none_when_not_calculated():
+    # 비용 방어(18시 이전)·숙소 미입력·Tmap 실패 등으로 loader가 이미 None을 준 경우
+    snap = {"now": datetime(2026, 7, 29, 22, 30, tzinfo=_KST), "last_transit": None}
+    assert _rule_last_transit(snap) is None
+
+
+def test_last_transit_none_when_window_not_yet_open():
+    now = datetime(2026, 7, 29, 20, 0, tzinfo=_KST)
+    snap = {
+        "now": now,
+        "last_transit": {
+            "placeId": "p", "placeName": "정류장",
+            "leaveBy": now + timedelta(minutes=90),  # 아직 window(60분) 밖
+            "minutes": 20, "fare": None,
+        },
+    }
+    assert _rule_last_transit(snap) is None
+
+
+def test_last_transit_none_when_already_passed():
+    now = datetime(2026, 7, 29, 23, 0, tzinfo=_KST)
+    snap = {
+        "now": now,
+        "last_transit": {
+            "placeId": "p", "placeName": "정류장",
+            "leaveBy": now - timedelta(minutes=5),  # 이미 지남
+            "minutes": 20, "fare": None,
+        },
+    }
+    assert _rule_last_transit(snap) is None
+
+
+def test_last_transit_fires_even_when_confidence_low():
+    # 상위 계획서 정정 2 — LAST_TRANSIT엔 위치 가드가 없다. 밤 시간대엔 confidence가
+    # 낮게 나오기 쉬운데, 가드를 붙이면 정확히 필요한 시간에 규칙이 죽어버린다.
+    now = datetime(2026, 7, 29, 23, 0, tzinfo=_KST)
+    snap = {
+        "now": now,
+        "estimated": {"confidence": "low"},
+        "last_transit": {
+            "placeId": "p", "placeName": "정류장",
+            "leaveBy": now + timedelta(minutes=10),
+            "minutes": 15, "fare": None,
+        },
+    }
+    assert _rule_last_transit(snap) is not None
+
+
+# ============================================================
+# CLOSED_DAY — 날짜 예외(place_closures)와 요일 규칙(closed_weekdays)을 OR로 판정.
+# 위치 가드 없음.
+# ============================================================
+
+def _closed_day_slot(place_id: str, place_name: str, closed_weekdays: list[int] | None) -> dict:
+    return {"place_id": place_id, "place_name": place_name, "closed_weekdays": closed_weekdays}
+
+
+def test_closed_day_fires_on_date_exception():
+    snap = {
+        "closures_today": {"11111111-1111-1111-1111-111111111111"},
+        "today_day_number": 2,
+        "today_date": date(2026, 7, 29),
+        "today_slots": [_closed_day_slot("11111111-1111-1111-1111-111111111111", "국립중앙박물관", None)],
+    }
+    result = _rule_closed_day(snap)
+    assert result is not None
+    assert result["params"] == {
+        "placeId": "11111111-1111-1111-1111-111111111111", "placeName": "국립중앙박물관", "day": 2,
+    }
+
+
+def test_closed_day_fires_on_weekday_rule():
+    today = date(2026, 8, 3)
+    snap = {
+        "closures_today": set(),
+        "today_day_number": 1,
+        "today_date": today,
+        "today_slots": [_closed_day_slot("p1", "경복궁", [today.isoweekday()])],
+    }
+    result = _rule_closed_day(snap)
+    assert result is not None
+    assert result["params"]["placeId"] == "p1"
+
+
+def test_closed_day_none_when_not_investigated():
+    # closed_weekdays가 NULL(미조사)이고 날짜 예외도 없으면 판단 불가 — 스킵(FFE #1)
+    snap = {
+        "closures_today": set(),
+        "today_day_number": 1,
+        "today_date": date(2026, 7, 29),
+        "today_slots": [_closed_day_slot("p1", "장소", None)],
+    }
+    assert _rule_closed_day(snap) is None
+
+
+def test_closed_day_none_when_investigated_and_open():
+    today = date(2026, 7, 28)
+    other_weekday = (today.isoweekday() % 7) + 1  # 오늘과 다른 요일
+    snap = {
+        "closures_today": set(),
+        "today_day_number": 1,
+        "today_date": today,
+        "today_slots": [_closed_day_slot("p1", "장소", [other_weekday])],
+    }
+    assert _rule_closed_day(snap) is None
+
+
+# ============================================================
+# BREAK_TIME — 다음 슬롯 도착 시각이 브레이크타임 구간에 걸리면 개입. 위치 가드 있음.
+# ============================================================
+
+def _next_slot_for_hours(
+    place_id: str = "p1", place_name: str = "장소", start_time: time = time(15, 30),
+    business_hours: dict | None = None, break_time: dict | None = None,
+    last_order_minutes: int | None = None, last_entry_minutes: int | None = None,
+) -> dict:
+    return {
+        "place_id": place_id, "place_name": place_name, "start_time": start_time,
+        "business_hours": business_hours, "break_time": break_time,
+        "last_order_minutes": last_order_minutes, "last_entry_minutes": last_entry_minutes,
+    }
+
+
+def test_break_time_fires_when_arrival_within_break():
+    today = date(2026, 7, 29)
+    now = datetime(2026, 7, 29, 15, 0, tzinfo=_KST)
+    nxt = _next_slot_for_hours(start_time=time(15, 30), break_time={"start": "15:00", "end": "17:00"})
+    snap = {"estimated": {"confidence": "high"}, "today_date": today, "now": now, "next_slot": nxt}
+    result = _rule_break_time(snap)
+    assert result is not None
+    assert result["params"] == {
+        "placeId": "p1", "placeName": "장소", "breakStart": "15:00:00", "breakEnd": "17:00:00",
+    }
+
+
+def test_break_time_none_when_not_investigated():
+    today = date(2026, 7, 29)
+    now = datetime(2026, 7, 29, 15, 0, tzinfo=_KST)
+    nxt = _next_slot_for_hours(start_time=time(15, 30), break_time=None)
+    snap = {"estimated": {"confidence": "high"}, "today_date": today, "now": now, "next_slot": nxt}
+    assert _rule_break_time(snap) is None  # FFE #1 — 미조사
+
+
+def test_break_time_none_when_arrival_outside_break():
+    today = date(2026, 7, 29)
+    now = datetime(2026, 7, 29, 12, 0, tzinfo=_KST)
+    nxt = _next_slot_for_hours(start_time=time(12, 30), break_time={"start": "15:00", "end": "17:00"})
+    snap = {"estimated": {"confidence": "high"}, "today_date": today, "now": now, "next_slot": nxt}
+    assert _rule_break_time(snap) is None
+
+
+def test_break_time_none_when_confidence_low():
+    today = date(2026, 7, 29)
+    now = datetime(2026, 7, 29, 15, 0, tzinfo=_KST)
+    nxt = _next_slot_for_hours(start_time=time(15, 30), break_time={"start": "15:00", "end": "17:00"})
+    snap = {"estimated": {"confidence": "low"}, "today_date": today, "now": now, "next_slot": nxt}
+    assert _rule_break_time(snap) is None
+
+
+def test_break_time_last_order_moves_cutoff_earlier():
+    # 브레이크 시작 16:00, 라스트오더 10분 전(15:50)이면 15:55 도착도 컷오프 이후라 발동해야 한다
+    today = date(2026, 7, 29)
+    now = datetime(2026, 7, 29, 15, 55, tzinfo=_KST)
+    nxt = _next_slot_for_hours(
+        start_time=time(15, 55),
+        break_time={"start": "16:00", "end": "17:00"},
+        last_order_minutes=10,
+    )
+    snap = {"estimated": {"confidence": "high"}, "today_date": today, "now": now, "next_slot": nxt}
+    assert _rule_break_time(snap) is not None
+
+
+# ============================================================
+# RESERVATION_WALL — 예약 필수인데 워크인이 안 되는 장소. 위치 가드 없음.
+# ============================================================
+
+def _reservation_slot(
+    place_id: str = "p1", place_name: str = "파인다이닝",
+    reservation_required: bool | None = None, walk_in_allowed: bool | None = None,
+    reservation_platform: str | None = None,
+) -> dict:
+    return {
+        "place_id": place_id, "place_name": place_name,
+        "reservation_required": reservation_required, "walk_in_allowed": walk_in_allowed,
+        "reservation_platform": reservation_platform,
+    }
+
+
+def test_reservation_wall_fires_when_required_and_no_walk_in():
+    snap = {"today_slots": [_reservation_slot(
+        reservation_required=True, walk_in_allowed=False, reservation_platform="catchtable",
+    )]}
+    result = _rule_reservation_wall(snap)
+    assert result is not None
+    assert result["params"] == {"placeId": "p1", "placeName": "파인다이닝", "reservationPlatform": "catchtable"}
+
+
+def test_reservation_wall_platform_is_nullable():
+    # 예약 필수인 건 알지만 어느 플랫폼인지 미조사일 수 있다
+    snap = {"today_slots": [_reservation_slot(reservation_required=True, walk_in_allowed=False)]}
+    result = _rule_reservation_wall(snap)
+    assert result is not None
+    assert result["params"]["reservationPlatform"] is None
+
+
+def test_reservation_wall_none_when_not_investigated():
+    snap = {"today_slots": [_reservation_slot(reservation_required=None)]}
+    assert _rule_reservation_wall(snap) is None  # FFE #1 — 미조사
+
+
+def test_reservation_wall_none_when_not_required():
+    snap = {"today_slots": [_reservation_slot(reservation_required=False)]}
+    assert _rule_reservation_wall(snap) is None
+
+
+def test_reservation_wall_none_when_walk_in_allowed():
+    snap = {"today_slots": [_reservation_slot(reservation_required=True, walk_in_allowed=True)]}
+    assert _rule_reservation_wall(snap) is None
+
+
+# ============================================================
+# PAYMENT_WALL — 현금전용 또는 해외카드 미대응. 위치 가드 없음.
+# friendly_foreign_card의 0(조사했는데 없음)과 None(미조사)이 둘 다 falsy라 가장
+# 실수하기 쉬운 자리다 — 반드시 다르게 동작해야 한다.
+# ============================================================
+
+def _payment_slot(
+    place_id: str = "p1", place_name: str = "노포",
+    cash_only: bool | None = None, friendly_foreign_card: int | None = None,
+) -> dict:
+    return {
+        "place_id": place_id, "place_name": place_name,
+        "cash_only": cash_only, "friendly_foreign_card": friendly_foreign_card,
+    }
+
+
+def test_payment_wall_fires_cash_only():
+    snap = {"today_slots": [_payment_slot(cash_only=True)]}
+    result = _rule_payment_wall(snap)
+    assert result is not None
+    assert result["params"]["kind"] == "cash_only"
+
+
+def test_payment_wall_fires_no_foreign_card_when_zero():
+    snap = {"today_slots": [_payment_slot(cash_only=False, friendly_foreign_card=0)]}
+    result = _rule_payment_wall(snap)
+    assert result is not None
+    assert result["params"]["kind"] == "no_foreign_card"
+
+
+def test_payment_wall_none_when_not_investigated():
+    snap = {"today_slots": [_payment_slot(cash_only=None, friendly_foreign_card=None)]}
+    assert _rule_payment_wall(snap) is None  # FFE #1
+
+
+def test_payment_wall_none_when_investigated_and_fine():
+    snap = {"today_slots": [_payment_slot(cash_only=False, friendly_foreign_card=2)]}
+    assert _rule_payment_wall(snap) is None
+
+
+def test_payment_wall_foreign_card_zero_vs_none_behave_differently():
+    """가장 실수하기 쉬운 자리 — 0(조사했는데 없음)이면 발동해야 하고 None(미조사)이면
+    발동하면 안 된다. `is None`과 falsy를 분리하지 않으면 이 테스트가 깨진다."""
+    zero_snap = {"today_slots": [_payment_slot(cash_only=False, friendly_foreign_card=0)]}
+    none_snap = {"today_slots": [_payment_slot(cash_only=False, friendly_foreign_card=None)]}
+    assert _rule_payment_wall(zero_snap) is not None
+    assert _rule_payment_wall(none_snap) is None
+
+
+def test_payment_wall_foreign_card_checked_even_when_cash_only_unknown():
+    """두 신호는 독립이다. cash_only가 미조사(None)여도 friendly_foreign_card가 0이면
+    발동해야 한다 — 앞 조건에 묶으면 '해외카드만 조사된 장소'가 통째로 침묵한다.
+    CSV에서 현금전용 정책은 못 알아내고 해외카드만 확인되는 경우가 흔하다."""
+    snap = {"today_slots": [_payment_slot(cash_only=None, friendly_foreign_card=0)]}
+    result = _rule_payment_wall(snap)
+    assert result is not None
+    assert result["params"]["kind"] == "no_foreign_card"
+
+
+def test_payment_wall_none_when_both_unknown():
+    """둘 다 미조사면 아무 결론도 내지 않는다(FFE #1)."""
+    snap = {"today_slots": [_payment_slot(cash_only=None, friendly_foreign_card=None)]}
+    assert _rule_payment_wall(snap) is None
+
+
+# ============================================================
+# LAST_ENTRY — 다음 슬롯 도착 시각이 라스트엔트리 이후. 위치 가드 있음.
+# ============================================================
+
+def test_last_entry_fires_when_past_cutoff():
+    today = date(2026, 7, 29)
+    now = datetime(2026, 7, 29, 17, 40, tzinfo=_KST)
+    nxt = _next_slot_for_hours(
+        start_time=time(17, 40),
+        business_hours={"open": "09:00", "close": "18:00"},
+        last_entry_minutes=30,  # last_entry = 17:30
+    )
+    snap = {"estimated": {"confidence": "high"}, "today_date": today, "now": now, "next_slot": nxt}
+    result = _rule_last_entry(snap)
+    assert result is not None
+    assert result["params"] == {
+        "placeId": "p1", "placeName": "장소", "lastEntryTime": "17:30:00", "closeTime": "18:00:00",
+    }
+
+
+def test_last_entry_none_when_not_investigated():
+    today = date(2026, 7, 29)
+    now = datetime(2026, 7, 29, 17, 40, tzinfo=_KST)
+    nxt = _next_slot_for_hours(start_time=time(17, 40), business_hours=None, last_entry_minutes=None)
+    snap = {"estimated": {"confidence": "high"}, "today_date": today, "now": now, "next_slot": nxt}
+    assert _rule_last_entry(snap) is None  # FFE #1
+
+
+def test_last_entry_none_when_still_time():
+    today = date(2026, 7, 29)
+    now = datetime(2026, 7, 29, 16, 0, tzinfo=_KST)
+    nxt = _next_slot_for_hours(
+        start_time=time(16, 0),
+        business_hours={"open": "09:00", "close": "18:00"},
+        last_entry_minutes=30,  # last_entry = 17:30, 16:00 도착은 아직 여유
+    )
+    snap = {"estimated": {"confidence": "high"}, "today_date": today, "now": now, "next_slot": nxt}
+    assert _rule_last_entry(snap) is None
+
+
+def test_last_entry_none_when_confidence_low():
+    today = date(2026, 7, 29)
+    now = datetime(2026, 7, 29, 17, 40, tzinfo=_KST)
+    nxt = _next_slot_for_hours(
+        start_time=time(17, 40),
+        business_hours={"open": "09:00", "close": "18:00"},
+        last_entry_minutes=30,
+    )
+    snap = {"estimated": {"confidence": "low"}, "today_date": today, "now": now, "next_slot": nxt}
+    assert _rule_last_entry(snap) is None

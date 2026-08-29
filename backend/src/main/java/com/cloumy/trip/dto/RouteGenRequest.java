@@ -7,6 +7,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -17,10 +18,16 @@ public record RouteGenRequest(
         @NotBlank String destination,
         @NotNull LocalDate startDate,
         @NotNull LocalDate endDate,
-        @NotBlank String groupType,
-        @NotBlank String budgetLevel,
+        @NotBlank
+        @Pattern(regexp = "(?i)(solo|couple|friends|family)", message = "지원하지 않는 동행 유형입니다")
+        String groupType,
+        @NotBlank
+        @Pattern(regexp = "(?i)(tight|budget|mid|premium|luxury)", message = "지원하지 않는 예산 단계입니다")
+        String budgetLevel,
         List<String> tags,
         @DecimalMin("0.0") @DecimalMax("1.0") Double hiddenGemRatio,
+        // null이면 RouteService가 "normal"로 채운다 — @Pattern은 null을 통과시키므로 그대로 둔다
+        @Pattern(regexp = "(?i)(relaxed|normal|packed)", message = "지원하지 않는 일정 밀도입니다")
         String density,
         List<@Valid AccommodationCreateRequest> accommodations,
         // 숙박비 제외 현지 활동/식사 예산 — 선택 사항(숙소 선택과 동일 UX, null이면 예산 기능 자체를 건너뜀)

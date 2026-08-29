@@ -80,9 +80,17 @@ public class JwtTokenProvider {
             throw new BusinessException(ErrorCode.JWT_INVALID);
         }
 
-        // 로그아웃 처리된 토큰 차단
-        if (Boolean.TRUE.equals(redisTemplate.hasKey(BLACKLIST_KEY_PREFIX + claims.getId()))) {
-            throw new BusinessException(ErrorCode.JWT_REVOKED);
+        // 로그아웃 처리된 토큰 차단 — Redis 장애 시 fail-open.
+        // RateLimitFilter와 같은 정책이다: 부가 기능(블랙리스트) 때문에 인증 전체가
+        // 막히면 안 된다. 로그아웃된 토큰이 만료 전까지 살아남는 위험보다 전면 장애가 크다.
+        try {
+            if (Boolean.TRUE.equals(redisTemplate.hasKey(BLACKLIST_KEY_PREFIX + claims.getId()))) {
+                throw new BusinessException(ErrorCode.JWT_REVOKED);
+            }
+        } catch (BusinessException e) {
+            throw e;                                  // JWT_REVOKED는 그대로 올려보낸다
+        } catch (Exception e) {
+            log.warn("JWT 블랙리스트 조회 실패 — 통과 처리: {}", e.getMessage());
         }
 
         return claims;
